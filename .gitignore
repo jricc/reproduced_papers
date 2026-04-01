@@ -1,0 +1,37 @@
+# IDE and editor artifacts
+.idea/
+.vscode/
+*.vscode%
+
+# Data artifacts (keep shared caches ignored, but track specific packaged datasets)
+data/*
+!data/.gitkeep
+# Keep committed datasets for reproducibility
+!data/photonic_QCNN/
+!data/photonic_QCNN/**
+!data/QLSTM/
+!data/QLSTM/**
+models/
+!models/.gitkeep
+outdir/
+!outdir/.gitkeep
+.smoke_logs/
+.smoke_envs/
+# Temporary files
+tmp_*/
+
+# Common OS/editor noise
+.DS_Store
+*.swp
+*.swo
+*__pycache__*
+
+# Python ignores
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local env & sandbox helpers
+.venv
+.home/
