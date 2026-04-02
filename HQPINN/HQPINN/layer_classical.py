@@ -68,3 +68,107 @@ class BranchPyTorch(nn.Module):
 
     # def forward(self, x: torch.Tensor) -> torch.Tensor:
     #     return self.net(x)
+
+
+class HistoricalDHOBranchPyTorch(nn.Module):
+    """
+    Archived DHO classical branch kept for checkpoint compatibility.
+    """
+
+    def __init__(
+        self,
+        in_features: int = 1,
+        out_features: int = 3,
+        num_hidden_layers: int = DHO_NUM_HIDDEN_LAYERS,
+        hidden_width: int = DHO_HIDDEN_WIDTH,
+    ) -> None:
+        super().__init__()
+
+        if num_hidden_layers < 1:
+            raise ValueError("num_hidden_layers must be >= 1")
+        layers = [
+            nn.Linear(in_features, 1, dtype=DTYPE),
+            nn.Tanh(),
+            nn.Linear(1, hidden_width, dtype=DTYPE),
+            nn.Tanh(),
+        ]
+        for _ in range(num_hidden_layers - 1):
+            layers.extend(
+                [
+                    nn.Linear(hidden_width, hidden_width, dtype=DTYPE),
+                    nn.Tanh(),
+                ]
+            )
+        layers.append(nn.Linear(hidden_width, out_features, dtype=DTYPE))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, xt: torch.Tensor) -> torch.Tensor:
+        return self.net(xt)
+
+
+class DHOBranchPyTorch(nn.Module):
+    """
+    DHO classical branch: scalar input, two hidden layers of width 16, scalar output.
+    """
+
+    def __init__(
+        self,
+        in_features: int = 1,
+        out_features: int = 1,
+        num_hidden_layers: int = DHO_NUM_HIDDEN_LAYERS,
+        hidden_width: int = DHO_HIDDEN_WIDTH,
+    ) -> None:
+        super().__init__()
+
+        if num_hidden_layers < 1:
+            raise ValueError("num_hidden_layers must be >= 1")
+
+        layers = [nn.Linear(in_features, hidden_width, dtype=DTYPE), nn.Tanh()]
+        for _ in range(num_hidden_layers - 1):
+            layers.extend(
+                [
+                    nn.Linear(hidden_width, hidden_width, dtype=DTYPE),
+                    nn.Tanh(),
+                ]
+            )
+        layers.append(nn.Linear(hidden_width, out_features, dtype=DTYPE))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, xt: torch.Tensor) -> torch.Tensor:
+        return self.net(xt)
+
+
+class LearnedScalarFusion(nn.Module):
+    """
+    Learned linear fusion over two scalar branch outputs.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.linear = nn.Linear(2, 1, dtype=DTYPE)
+
+    def forward(self, out1: torch.Tensor, out2: torch.Tensor) -> torch.Tensor:
+        return self.linear(torch.cat([out1, out2], dim=1))
+
+
+def make_dho_classical_branch(
+    *,
+    state_dict: dict[str, torch.Tensor] | None = None,
+    prefix: str | None = None,
+) -> nn.Module:
+    """
+    Pick the DHO classical branch variant that matches the checkpoint on disk.
+    """
+
+    if state_dict is not None and prefix is not None:
+        first_weight = state_dict.get(f"{prefix}.net.0.weight")
+        if first_weight is not None:
+            shape = tuple(first_weight.shape)
+            if shape == (16, 1):
+                return DHOBranchPyTorch()
+            if shape == (3, 1):
+                return BranchPyTorch()
+            if shape == (1, 1):
+                return HistoricalDHOBranchPyTorch()
+
+    return DHOBranchPyTorch()

@@ -14,20 +14,25 @@ from ..config import DHO_LR, DHO_N_EPOCHS, DHO_PLOT_EVERY, DTYPE
 from ..utils import make_time_grid, make_optimizer
 from .core_a2_dho import train_oscillator_pinn, u_exact
 from ..run_common import run_series_inference_mode
-from ..layer_classical import BranchPyTorch
+from ..layer_classical import HistoricalDHOBranchPyTorch, make_dho_classical_branch
 
 
 class CC_PINN(nn.Module):
     """
-    Classical–Classical PINN with two parallel MLP branches
-    and a linear fusion readout to a scalar u(t).
+    Classical–Classical PINN using the historical DHO architecture that matched
+    the best March 9 reproduction.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, state_dict=None) -> None:
         super().__init__()
-        self.branch1 = BranchPyTorch()
-        self.branch2 = BranchPyTorch()
-        self.fusion = nn.Linear(6, 1, dtype=DTYPE)
+        if state_dict is None:
+            self.branch1 = HistoricalDHOBranchPyTorch()
+            self.branch2 = HistoricalDHOBranchPyTorch()
+            self.fusion = nn.Linear(6, 1, dtype=DTYPE)
+        else:
+            self.branch1 = make_dho_classical_branch(state_dict=state_dict, prefix="branch1")
+            self.branch2 = make_dho_classical_branch(state_dict=state_dict, prefix="branch2")
+            self.fusion = nn.Linear(state_dict["fusion.weight"].shape[1], 1, dtype=DTYPE)
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
         out1 = self.branch1(t)
@@ -51,6 +56,11 @@ def plot_model_prediction(u_pred, u_ex, t, save_path="HQPINN/DHO/results/dho_cc/
     plt.savefig(png_path, bbox_inches="tight")
     plt.close()
     print(f"Plot saved to: {png_path}")
+
+
+def _build_cc_model(processor=None, state_dict=None) -> CC_PINN:
+    del processor
+    return CC_PINN(state_dict=state_dict)
 
 
 def run(mode="train", backend="sim:ascella"):
@@ -83,7 +93,7 @@ def run(mode="train", backend="sim:ascella"):
             backend="local",
             ckpt_dir=ckpt_dir,
             case_prefix=case_prefix,
-            model_factory=lambda processor=None: CC_PINN(),
+            model_factory=_build_cc_model,
             make_time_grid=make_time_grid,
             exact_fn=u_exact,
             plot_fn=plot_model_prediction,
@@ -96,7 +106,7 @@ def run(mode="train", backend="sim:ascella"):
             backend="local",
             ckpt_dir=ckpt_dir,
             case_prefix=case_prefix,
-            model_factory=lambda processor=None: CC_PINN(),
+            model_factory=_build_cc_model,
             make_time_grid=make_time_grid,
             exact_fn=u_exact,
             plot_fn=plot_model_prediction,

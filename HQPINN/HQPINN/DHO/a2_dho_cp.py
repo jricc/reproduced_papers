@@ -14,15 +14,15 @@ from ..utils import make_time_grid, make_optimizer
 from .core_a2_dho import train_oscillator_pinn, u_exact
 from ..run_common import run_series_inference_mode
 from ..layer_pennylane import make_quantum_block, dho_feature_map, BranchPennylane
-from ..layer_classical import BranchPyTorch
+from ..layer_classical import LearnedScalarFusion, make_dho_classical_branch
 
 
 class CQ_PINN(nn.Module):
     """
-    Hybrid Classical–Quantum PINN with linear fusion to scalar output.
+    Hybrid Classical–Quantum PINN with learned scalar fusion coefficients.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, state_dict=None) -> None:
         super().__init__()
 
         qblock = make_quantum_block()
@@ -33,13 +33,21 @@ class CQ_PINN(nn.Module):
             output_as_column=True,
             n_layers=N_LAYERS,
         )
-        self.branch_c = BranchPyTorch()
-        self.fusion = nn.Linear(4, 1, dtype=DTYPE)
+        self.branch_c = make_dho_classical_branch(
+            state_dict=state_dict, prefix="branch_c"
+        )
+        self.use_legacy_fusion = state_dict is not None and "fusion.weight" in state_dict
+        if self.use_legacy_fusion:
+            self.fusion = nn.Linear(state_dict["fusion.weight"].shape[1], 1, dtype=DTYPE)
+        else:
+            self.fusion = LearnedScalarFusion()
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
         out_q = self.branch_q(t)
         out_c = self.branch_c(t)
-        return self.fusion(torch.cat([out_q, out_c], dim=1))
+        if self.use_legacy_fusion:
+            return self.fusion(torch.cat([out_q, out_c], dim=1))
+        return self.fusion(out_q, out_c)
 
 
 def plot_model_prediction(u_pred, u_ex, t, save_path="HQPINN/DHO/results/dho_cp/"):
@@ -58,6 +66,11 @@ def plot_model_prediction(u_pred, u_ex, t, save_path="HQPINN/DHO/results/dho_cp/
     plt.savefig(png_path, bbox_inches="tight")
     plt.close()
     print(f"Plot saved to: {png_path}")
+
+
+def _build_cp_model(processor=None, state_dict=None) -> CQ_PINN:
+    del processor
+    return CQ_PINN(state_dict=state_dict)
 
 
 def run(mode="train", backend="sim:ascella") -> None:
@@ -90,7 +103,7 @@ def run(mode="train", backend="sim:ascella") -> None:
             backend="local",
             ckpt_dir=ckpt_dir,
             case_prefix=case_prefix,
-            model_factory=lambda processor=None: CQ_PINN(),
+            model_factory=_build_cp_model,
             make_time_grid=make_time_grid,
             exact_fn=u_exact,
             plot_fn=plot_model_prediction,
@@ -103,7 +116,7 @@ def run(mode="train", backend="sim:ascella") -> None:
             backend="local",
             ckpt_dir=ckpt_dir,
             case_prefix=case_prefix,
-            model_factory=lambda processor=None: CQ_PINN(),
+            model_factory=_build_cp_model,
             make_time_grid=make_time_grid,
             exact_fn=u_exact,
             plot_fn=plot_model_prediction,

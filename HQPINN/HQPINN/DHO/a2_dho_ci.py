@@ -13,7 +13,7 @@ from ..utils import make_time_grid, make_optimizer
 from .core_a2_dho import train_oscillator_pinn, u_exact
 from ..run_common import run_series_inference_mode
 from ..layer_merlin import make_interf_qlayer, BranchMerlin
-from ..layer_classical import BranchPyTorch
+from ..layer_classical import LearnedScalarFusion, make_dho_classical_branch
 
 
 # ============================================================
@@ -23,10 +23,10 @@ from ..layer_classical import BranchPyTorch
 
 class CI_PINN(nn.Module):
     """
-    Classical–Interferometer PINN with linear fusion to scalar output.
+    Classical–Interferometer PINN with learned scalar fusion coefficients.
     """
 
-    def __init__(self, processor=None) -> None:
+    def __init__(self, processor=None, state_dict=None) -> None:
         super().__init__()
 
         # One MerLin quantum branch
@@ -36,13 +36,19 @@ class CI_PINN(nn.Module):
             feature_map_kind="dho",
         )
         # One classical MLP branch
-        self.branch2 = BranchPyTorch()
-        self.fusion = nn.Linear(4, 1, dtype=DTYPE)
+        self.branch2 = make_dho_classical_branch(state_dict=state_dict, prefix="branch2")
+        self.use_legacy_fusion = state_dict is not None and "fusion.weight" in state_dict
+        if self.use_legacy_fusion:
+            self.fusion = nn.Linear(state_dict["fusion.weight"].shape[1], 1, dtype=DTYPE)
+        else:
+            self.fusion = LearnedScalarFusion()
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
         out_q = self.branch1(t)
         out_c = self.branch2(t)
-        return self.fusion(torch.cat([out_q, out_c], dim=1))
+        if self.use_legacy_fusion:
+            return self.fusion(torch.cat([out_q, out_c], dim=1))
+        return self.fusion(out_q, out_c)
 
 
 def plot_model_prediction(u_pred, u_ex, t, save_path="HQPINN/DHO/results/dho_ci/"):
@@ -61,6 +67,10 @@ def plot_model_prediction(u_pred, u_ex, t, save_path="HQPINN/DHO/results/dho_ci/
     plt.savefig(png_path, bbox_inches="tight")
     plt.close()
     print(f"Plot saved to: {png_path}")
+
+
+def _build_ci_model(processor=None, state_dict=None) -> CI_PINN:
+    return CI_PINN(processor=processor, state_dict=state_dict)
 
 
 def run(mode="train", backend="sim:ascella") -> None:
@@ -93,7 +103,7 @@ def run(mode="train", backend="sim:ascella") -> None:
             backend="local",
             ckpt_dir=ckpt_dir,
             case_prefix=case_prefix,
-            model_factory=CI_PINN,
+            model_factory=_build_ci_model,
             make_time_grid=make_time_grid,
             exact_fn=u_exact,
             plot_fn=plot_model_prediction,
@@ -105,7 +115,7 @@ def run(mode="train", backend="sim:ascella") -> None:
             backend=backend,
             ckpt_dir=ckpt_dir,
             case_prefix=case_prefix,
-            model_factory=CI_PINN,
+            model_factory=_build_ci_model,
             make_time_grid=make_time_grid,
             exact_fn=u_exact,
             plot_fn=plot_model_prediction,

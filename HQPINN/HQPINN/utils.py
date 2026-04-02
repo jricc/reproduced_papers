@@ -1,5 +1,6 @@
 # utils.py
 
+import inspect
 import os
 from typing import Callable, Optional
 
@@ -144,8 +145,14 @@ def log_training_info(n_epochs, elapsed, final_loss, loss_ic, loss_bc, loss_f, r
 def load_model(
     ckpt_path: str, model_ctor: Callable[..., nn.Module], processor=None
 ) -> nn.Module:
-    model = model_ctor(processor=processor)  # use_remote implicite = False (local SLOS)
     state = torch.load(ckpt_path, map_location="cpu")
+    ctor_kwargs = {}
+    ctor_params = inspect.signature(model_ctor).parameters
+    if "processor" in ctor_params:
+        ctor_kwargs["processor"] = processor
+    if "state_dict" in ctor_params:
+        ctor_kwargs["state_dict"] = state
+    model = model_ctor(**ctor_kwargs)  # use_remote implicite = False (local SLOS)
     model.load_state_dict(state)
     model.eval()
     print(f"Loaded model from: {ckpt_path} remote={processor is not None}")

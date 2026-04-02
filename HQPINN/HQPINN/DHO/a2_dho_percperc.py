@@ -14,6 +14,7 @@ from ..utils import make_time_grid, make_optimizer
 from .core_a2_dho import train_oscillator_pinn, u_exact
 from ..run_common import run_series_inference_mode
 from ..layer_merlin import make_perceval_qlayer, BranchMerlin
+from ..layer_classical import LearnedScalarFusion
 
 
 # ============================================================
@@ -23,10 +24,10 @@ from ..layer_merlin import make_perceval_qlayer, BranchMerlin
 
 class MM_PINN(nn.Module):
     """
-    Perceval–Perceval PINN with linear fusion to scalar output.
+    Perceval–Perceval PINN with learned scalar fusion coefficients.
     """
 
-    def __init__(self, processor=None) -> None:
+    def __init__(self, processor=None, state_dict=None) -> None:
         super().__init__()
 
         # Two distinct quantum branches with independent parameters
@@ -40,12 +41,18 @@ class MM_PINN(nn.Module):
             processor=processor,
             feature_map_kind="dho",
         )
-        self.fusion = nn.Linear(2, 1, dtype=DTYPE)
+        self.use_legacy_fusion = state_dict is not None and "fusion.weight" in state_dict
+        if self.use_legacy_fusion:
+            self.fusion = nn.Linear(2, 1, dtype=DTYPE)
+        else:
+            self.fusion = LearnedScalarFusion()
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
         out1 = self.branch1(t)
         out2 = self.branch2(t)
-        return self.fusion(torch.cat([out1, out2], dim=1))
+        if self.use_legacy_fusion:
+            return self.fusion(torch.cat([out1, out2], dim=1))
+        return self.fusion(out1, out2)
 
 
 def plot_model_prediction(
@@ -66,6 +73,10 @@ def plot_model_prediction(
     plt.savefig(png_path, bbox_inches="tight")
     plt.close()
     print(f"Plot saved to: {png_path}")
+
+
+def _build_percperc_model(processor=None, state_dict=None) -> MM_PINN:
+    return MM_PINN(processor=processor, state_dict=state_dict)
 
 
 def run(mode="train", backend="sim:ascella") -> None:
@@ -98,7 +109,7 @@ def run(mode="train", backend="sim:ascella") -> None:
             backend="local",
             ckpt_dir=ckpt_dir,
             case_prefix=case_prefix,
-            model_factory=MM_PINN,
+            model_factory=_build_percperc_model,
             make_time_grid=make_time_grid,
             exact_fn=u_exact,
             plot_fn=plot_model_prediction,
@@ -110,7 +121,7 @@ def run(mode="train", backend="sim:ascella") -> None:
             backend=backend,
             ckpt_dir=ckpt_dir,
             case_prefix=case_prefix,
-            model_factory=MM_PINN,
+            model_factory=_build_percperc_model,
             make_time_grid=make_time_grid,
             exact_fn=u_exact,
             plot_fn=plot_model_prediction,
