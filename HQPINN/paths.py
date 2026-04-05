@@ -23,3 +23,13 @@ def results_dir_for_model_dir(model_dir: str | Path) -> str:
     if benchmark not in KNOWN_BENCHMARKS:
         raise ValueError(f"Cannot infer benchmark from model directory '{model_path}'")
     return str(RESULTS_ROOT / benchmark)
+
+
+def results_case_dir_for_model_dir(model_dir: str | Path, case_prefix: str) -> str:
+    """
+    Return the benchmark results directory for one specific model configuration.
+
+    Example:
+      models/DEE + dee_cc_10-4 -> results/DEE/dee_cc_10-4
+    """
+    return str(Path(results_dir_for_model_dir(model_dir)) / case_prefix)

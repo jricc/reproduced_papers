@@ -17,6 +17,7 @@ import matplotlib
 import numpy as np
 import torch
 import torch.nn as nn
+from matplotlib.path import Path as MplPath
 
 from ...config import (
     DEVICE,
@@ -38,7 +39,7 @@ from ...config import (
     TAF_Y_MAX,
     TAF_Y_MIN,
 )
-from ...paths import results_dir_for_model_dir
+from ...paths import results_case_dir_for_model_dir
 from ...utils import count_trainable_params
 
 
@@ -54,6 +55,33 @@ TAF_FIELD_LABELS = (
     ("v", "y-velocity"),
     ("T", "temperature"),
 )
+
+TAF_PAPER_FIELD_SPECS = {
+    "rho": {
+        "title": r"$\rho$",
+        "vmin": 0.5,
+        "vmax": 2.0,
+        "ticks": [0.5, 0.875, 1.25, 1.625, 2.0],
+    },
+    "u": {
+        "title": r"$u$",
+        "vmin": 100.0,
+        "vmax": 500.0,
+        "ticks": [100.0, 200.0, 300.0, 400.0, 500.0],
+    },
+    "v": {
+        "title": r"$v$",
+        "vmin": -75.0,
+        "vmax": 75.0,
+        "ticks": [-75.0, -37.5, 0.0, 37.5, 75.0],
+    },
+    "T": {
+        "title": r"$T$",
+        "vmin": 200.0,
+        "vmax": 350.0,
+        "ticks": [200.0, 237.5, 275.0, 312.5, 350.0],
+    },
+}
 
 TAF_SUMMARY_COLUMNS = [
     "run_id",
@@ -673,8 +701,17 @@ def train_taf(
         )
         writer.writerows(rows)
 
+    saved_plot_paths = _save_primitive_field_plots(
+        model=model,
+        data=data,
+        output_dir=out_dir,
+        filename_prefix=f"taf-{model_label}_{run_id}",
+    )
+
     n_params = count_trainable_params(model)
     print(f"CSV saved to: {csv_path}")
+    for path in saved_plot_paths:
+        print(f"PNG saved to: {path}")
 
     return (
         float(L_total.item()),
@@ -682,6 +719,143 @@ def train_taf(
         float(L_f.item()),
         n_params,
     )
+
+
+def _save_primitive_field_plots(
+    *,
+    model: nn.Module,
+    data: dict[str, torch.Tensor],
+    output_dir: str,
+    filename_prefix: str,
+    backend: str = "local",
+) -> list[str]:
+    """
+    Save Figure-7-style TAF prediction plots.
+
+    The repository does not bundle CFD reference fields, so this helper renders
+    the prediction row of Figure 7: contour maps for (rho, u, v, T) with the
+    airfoil outline and training-point overlays.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    grid_nx = 240
+    grid_ny = 180
+    if backend.lower() != "local":
+        grid_nx = 120
+        grid_ny = 90
+
+    wall = data["X_wall"].detach().cpu().numpy()
+    wall_closed = np.vstack([wall, wall[:1]])
+
+    x_axis = np.linspace(TAF_X_MIN, TAF_X_MAX, grid_nx)
+    y_axis = np.linspace(TAF_Y_MIN, TAF_Y_MAX, grid_ny)
+    X_grid, Y_grid = np.meshgrid(x_axis, y_axis)
+    xy_grid = np.column_stack([X_grid.ravel(), Y_grid.ravel()])
+
+    with torch.no_grad():
+        xy_t = torch.tensor(xy_grid, dtype=DTYPE, device=DEVICE)
+        pred_grid = model(xy_t).detach().cpu().numpy().reshape(grid_ny, grid_nx, -1)
+
+    airfoil_mask = MplPath(wall).contains_points(xy_grid).reshape(grid_ny, grid_nx)
+
+    interior_points = data["X_data_int"].detach().cpu().numpy()
+    boundary_points = np.vstack(
+        [
+            data["X_in"].detach().cpu().numpy(),
+            data["X_out"].detach().cpu().numpy(),
+            data["X_top"].detach().cpu().numpy(),
+            data["X_bot"].detach().cpu().numpy(),
+            wall[::4],
+        ]
+    )
+
+    def _draw_field(ax: plt.Axes, field_idx: int, field_key: str):
+        spec = TAF_PAPER_FIELD_SPECS[field_key]
+        field = np.ma.array(pred_grid[:, :, field_idx], mask=airfoil_mask)
+        levels = np.linspace(spec["vmin"], spec["vmax"], 13)
+        cf = ax.contourf(
+            X_grid,
+            Y_grid,
+            field,
+            levels=levels,
+            cmap="jet",
+            extend="both",
+        )
+        ax.contour(
+            X_grid,
+            Y_grid,
+            field,
+            levels=levels,
+            colors="k",
+            linewidths=0.45,
+            alpha=0.7,
+        )
+        ax.plot(wall_closed[:, 0], wall_closed[:, 1], color="k", lw=1.0, zorder=4)
+        ax.scatter(
+            interior_points[:, 0],
+            interior_points[:, 1],
+            s=10,
+            facecolors="none",
+            edgecolors="k",
+            linewidths=0.45,
+            alpha=0.85,
+            zorder=5,
+        )
+        ax.scatter(
+            boundary_points[:, 0],
+            boundary_points[:, 1],
+            s=11,
+            marker="s",
+            facecolors="none",
+            edgecolors="k",
+            linewidths=0.45,
+            alpha=0.85,
+            zorder=5,
+        )
+        ax.set_xlim(TAF_X_MIN, TAF_X_MAX)
+        ax.set_ylim(TAF_Y_MIN, TAF_Y_MAX)
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_title(spec["title"], fontsize=18)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        return cf
+
+    saved_paths: list[str] = []
+
+    montage_path = os.path.join(output_dir, f"{filename_prefix}_figure7_pred.png")
+    fig, axes = plt.subplots(1, 4, figsize=(16, 5.2))
+    for idx, (field_key, _) in enumerate(TAF_FIELD_LABELS):
+        cf = _draw_field(axes[idx], idx, field_key)
+        fig.colorbar(
+            cf,
+            ax=axes[idx],
+            orientation="horizontal",
+            pad=0.12,
+            fraction=0.06,
+            ticks=TAF_PAPER_FIELD_SPECS[field_key]["ticks"],
+        )
+    fig.tight_layout()
+    fig.savefig(montage_path, dpi=300)
+    plt.close(fig)
+    saved_paths.append(montage_path)
+
+    for idx, (field_key, _) in enumerate(TAF_FIELD_LABELS):
+        png_path = os.path.join(output_dir, f"{filename_prefix}_{field_key}_pred.png")
+        fig, ax = plt.subplots(figsize=(5.0, 5.6))
+        cf = _draw_field(ax, idx, field_key)
+        fig.colorbar(
+            cf,
+            ax=ax,
+            orientation="horizontal",
+            pad=0.12,
+            fraction=0.08,
+            ticks=TAF_PAPER_FIELD_SPECS[field_key]["ticks"],
+        )
+        fig.tight_layout()
+        fig.savefig(png_path, dpi=300)
+        plt.close(fig)
+        saved_paths.append(png_path)
+
+    return saved_paths
 
 
 def save_density_plot(
@@ -693,73 +867,25 @@ def save_density_plot(
     backend: str,
 ) -> str:
     """
-    Save TAF primitive-field scatter plots for inference.
+    Save TAF Figure-7-style prediction plots for inference.
 
-    Only sparse interior points are visualized because no dense CFD reference
-    field is shipped with the repository.
+    The repo only contains the geometry/training-point clouds, not the CFD
+    reference fields from the paper's bottom row.
     """
     del plot_label  # TAF plots do not currently display a model-variant label.
     model.eval()
 
     data = load_training_sets()
-    X_data = data["X_data_int"]
 
-    with torch.no_grad():
-        if backend.lower() != "local":
-            # Remote photonic execution is pointwise and therefore much more
-            # expensive than local evaluation on a full point cloud.
-            max_points = 400
-            if X_data.shape[0] > max_points:
-                step = max(1, X_data.shape[0] // max_points)
-                X_plot = X_data[::step]
-            else:
-                X_plot = X_data
-        else:
-            X_plot = X_data
-
-        pred = model(X_plot)
-        x = X_plot[:, 0].detach().cpu().numpy()
-        y = X_plot[:, 1].detach().cpu().numpy()
-        pred_np = pred.detach().cpu().numpy()
-
-    results_dir = results_dir_for_model_dir(ckpt_dir)
+    results_dir = results_case_dir_for_model_dir(ckpt_dir, case_prefix)
     os.makedirs(results_dir, exist_ok=True)
-    saved_paths: list[str] = []
-
-    def _save_scalar_scatter_plot(
-        *,
-        values: np.ndarray,
-        field_key: str,
-        field_name: str,
-        kind: str,
-        kind_label: str,
-    ) -> str:
-        """Render one primitive variable on the available interior samples."""
-        png_path = os.path.join(
-            results_dir,
-            f"{case_prefix}_{backend}_{run_id}_{field_key}_{kind}.png",
-        )
-        fig, ax = plt.subplots(figsize=(8, 4))
-        sc = ax.scatter(x, y, c=values, s=8, cmap="viridis")
-        fig.colorbar(sc, ax=ax, label=f"{field_key}_{kind}")
-        ax.set_title(f"{kind_label} {field_name} {field_key}(x,y), backend: {backend}")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        fig.tight_layout()
-        fig.savefig(png_path, dpi=300)
-        plt.close(fig)
-        return png_path
-
-    for idx, (field_key, field_name) in enumerate(TAF_FIELD_LABELS):
-        saved_paths.append(
-            _save_scalar_scatter_plot(
-                values=pred_np[:, idx],
-                field_key=field_key,
-                field_name=field_name,
-                kind="pred",
-                kind_label="Predicted",
-            )
-        )
+    saved_paths = _save_primitive_field_plots(
+        model=model,
+        data=data,
+        output_dir=results_dir,
+        filename_prefix=f"{case_prefix}_{backend}_{run_id}",
+        backend=backend,
+    )
 
     for path in saved_paths[1:]:
         print(f"Additional figure saved to: {path}")
@@ -790,7 +916,7 @@ def save_rho_slice_plot(
         xy_t = torch.tensor(xy, dtype=DTYPE, device=DEVICE)
         rho_pred = model(xy_t)[:, 0].detach().cpu().numpy()
 
-    results_dir = results_dir_for_model_dir(ckpt_dir)
+    results_dir = results_case_dir_for_model_dir(ckpt_dir, case_prefix)
     os.makedirs(results_dir, exist_ok=True)
     y_tag = str(y_slice).replace(".", "p")
     png_path = os.path.join(

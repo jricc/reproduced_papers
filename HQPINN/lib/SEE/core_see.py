@@ -23,7 +23,7 @@ if "ipykernel" not in sys.modules:
 import matplotlib.pyplot as plt
 
 from ...config import *
-from ...paths import results_dir_for_model_dir
+from ...paths import results_case_dir_for_model_dir
 from ...utils import (
     sample_ic_points,
     sample_bc_points,
@@ -493,7 +493,7 @@ def save_density_plot(
         T_np = T.cpu().numpy()
         rho_pred_np = rho_pred.cpu().numpy()
 
-        results_dir = results_dir_for_model_dir(ckpt_dir)
+        results_dir = results_case_dir_for_model_dir(ckpt_dir, case_prefix)
         os.makedirs(results_dir, exist_ok=True)
 
         png_path = os.path.join(results_dir, f"{case_prefix}_{backend}_{run_id}.png")
