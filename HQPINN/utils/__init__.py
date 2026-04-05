@@ -1,3 +1,12 @@
+"""
+Shared training utilities for HQPINN benchmarks.
+
+These helpers cover three recurring pieces of the reproduction:
+- deterministic time grids for DHO,
+- random collocation/boundary sampling for SEE,
+- checkpoint and logging utilities reused across all benchmark wrappers.
+"""
+
 import os
 from typing import Callable, Optional
 
@@ -19,28 +28,29 @@ from ..config import (
 
 
 def make_time_grid():
-    """Return the time grid t ∈ [0,1] as a torch tensor."""
+    """
+    Return the DHO training grid on t in (0, 1].
+
+    The first grid point at t=0 is excluded because the initial conditions are
+    enforced analytically through dedicated loss terms in `core_dho.py`.
+    """
     return torch.linspace(0.0, 1.0, DHO_N_SAMPLES, dtype=DTYPE, device=DEVICE)[
         1:
     ].reshape(-1, 1)
 
 
 def make_optimizer(model, lr):
-    """Create an Adam optimizer for the given model."""
+    """Create the Adam optimizer used by the benchmark training loops."""
     return torch.optim.Adam(model.parameters(), lr=lr)
 
 
 def sample_ic_points():
     """
-    Generate Initial Condition (IC) points for the Smooth Euler Equation.
+    Sample SEE initial-condition points on the line t=0.
 
-    In a PDE setting, the unknown is a function of TWO variables: U(x, t).
-    Initial conditions are therefore not a single value like f(0) (ODE case),
-    but a condition defined along the ENTIRE line t = 0:
-        U(x, 0) = U0(x), for x in (SEE_X_MIN, SEE_X_MAX).
-
-    We approximate this continuous constraint by sampling SEE_N_IC random x-points
-    in the spatial domain, and pairing them with t = 0.
+    For the Sec. 3.1 smooth Euler problem, the initial state is a function of x,
+    not a single scalar constraint. The code therefore samples points along the
+    full initial line and uses them in the boundary/data term of the PINN loss.
     """
     x_ic = torch.rand(SEE_N_IC, 1, dtype=DTYPE, device=DEVICE)
     x_ic = SEE_X_MIN + (SEE_X_MAX - SEE_X_MIN) * x_ic
@@ -50,20 +60,11 @@ def sample_ic_points():
 
 def sample_bc_points():
     """
-    Generate Boundary Condition (BC) points for periodic boundaries in x.
+    Sample paired periodic-boundary points for SEE.
 
-    For the Smooth Euler case, the paper uses periodic boundary conditions in x.
-    "Periodic in x" means the left and right boundaries are IDENTIFIED:
-        U(SEE_X_MIN, t) = U(SEE_X_MAX, t) for all t.
-
-    Numerically, we cannot enforce "for all t" exactly, so we enforce it on
-    a set of sampled times {t_bc_i}. For each sampled time t_bc_i, we create
-    a PAIR of boundary points:
-        (x_left = SEE_X_MIN,  t_bc_i)  and  (x_right = SEE_X_MAX, t_bc_i)
-
-    During training, the BC loss typically penalizes the mismatch:
-        ||U(x_left, t_bc) - U(x_right, t_bc)||^2
-    which encourages periodicity across the domain boundaries.
+    The Sec. 3.1 benchmark imposes periodicity in x. Each sampled time is
+    therefore turned into one left/right pair so the loss can penalize the
+    mismatch U(x_min, t) - U(x_max, t).
     """
     t_bc = torch.rand(SEE_N_BC, 1, dtype=DTYPE, device=DEVICE)
     t_bc = SEE_T_MIN + (SEE_T_MAX - SEE_T_MIN) * t_bc
@@ -74,15 +75,11 @@ def sample_bc_points():
 
 def sample_collocation_points():
     """
-    Generate interior collocation points (x_f, t_f) for the PDE residual term.
+    Sample interior collocation points for the SEE physics residual.
 
-    This is where the PINN uses the governing equation (the "physics"):
-    we sample points throughout the space-time domain and evaluate the PDE
-    residual F(x, t) computed via automatic differentiation.
-
-    The HQPINN/PINN framework forms a physics loss (often MSE) by enforcing:
-        F(x_f, t_f) ≈ 0
-    at many interior points (collocation points).
+    These are the points where the code evaluates the Euler residual through
+    automatic differentiation, exactly in the PINN sense of the paper's
+    physics term.
     """
     x_f = torch.rand(SEE_N_F, 1, dtype=DTYPE, device=DEVICE)
     x_f = SEE_X_MIN + (SEE_X_MAX - SEE_X_MIN) * x_f
@@ -92,12 +89,12 @@ def sample_collocation_points():
 
 
 def count_trainable_params(model: nn.Module) -> int:
-    """Count number of trainable parameters in the model."""
+    """Count trainable parameters for the benchmark summary tables."""
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
 def log_training_info(n_epochs, elapsed, final_loss, loss_ic, loss_bc, loss_f, rows):
-    """Log training information for debugging and monitoring."""
+    """Append one training snapshot to the in-memory CSV buffer and console."""
     print(
         f"Epoch {n_epochs:5d} | elapsed={elapsed:.2f}s  "
         f"L={final_loss:.3e} | "
@@ -121,6 +118,11 @@ def log_training_info(n_epochs, elapsed, final_loss, loss_ic, loss_bc, loss_f, r
 def load_model(
     ckpt_path: str, model_ctor: Callable[..., nn.Module], processor=None
 ) -> nn.Module:
+    """
+    Rebuild a model architecture, load a checkpoint, and return it in eval mode.
+
+    The optional `processor` is only used for Merlin-based remote inference.
+    """
     state = torch.load(ckpt_path, map_location="cpu")
     model = model_ctor(processor=processor)
     model.load_state_dict(state)
@@ -130,6 +132,7 @@ def load_model(
 
 
 def get_latest_checkpoint(ckpt_dir: str, case_prefix: str) -> Optional[str]:
+    """Return the lexicographically latest checkpoint for one experiment case."""
     if not os.path.isdir(ckpt_dir):
         print(f"No checkpoint directory found at {ckpt_dir}")
         return None
@@ -155,6 +158,7 @@ def load_latest_model_local(
     case_prefix: str,
     model_ctor: Callable[[], nn.Module],
 ) -> Optional[nn.Module]:
+    """Convenience wrapper for local checkpoint loading in interactive use."""
     ckpt_path = get_latest_checkpoint(ckpt_dir, case_prefix)
     if ckpt_path is None:
         return None

@@ -1,5 +1,9 @@
-# taf_hy_pl.py
-# Classical–PennyLane PINN for TAF (Sec. 3.3)
+"""
+TAF hybrid classical-PennyLane wrapper (paper Sec. 3.3).
+
+One branch is classical and one is a gate-model quantum circuit. Their outputs
+are fused into the primitive variables (rho, u, v, T) of the aerofoil flow.
+"""
 
 import os
 from datetime import datetime
@@ -44,7 +48,7 @@ from .core_taf import (
 
 
 class CP_PINN(nn.Module):
-    """Classical-PennyLane TAF PINN with independent branch parameters."""
+    """Hybrid TAF model with one PennyLane branch and one classical branch."""
 
     def __init__(
         self,
@@ -63,6 +67,8 @@ class CP_PINN(nn.Module):
             n_layers=q_layers, n_qubits=TAF_N_OUTPUTS
         )
 
+        # The classical branch resolves the spatial coordinates directly, while
+        # the quantum branch uses the normalized TAF feature map.
         self.branch1 = BranchPyTorch(
             in_features=2,
             out_features=TAF_N_OUTPUTS,
@@ -77,7 +83,8 @@ class CP_PINN(nn.Module):
             n_qubits=TAF_N_OUTPUTS,
         )
 
-        # BranchPyTorch and BranchPennylane both output TAF_N_OUTPUTS channels.
+        # Fusion is linear so the benchmark comparison isolates the branch type
+        # rather than a different downstream head.
         self.fusion = nn.Linear(2 * TAF_N_OUTPUTS, TAF_N_OUTPUTS, dtype=DTYPE)
         self.size_label = f"{q_layers}"
 
@@ -87,6 +94,7 @@ class CP_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))  # [N, TAF_N_OUTPUTS]
 
 
+# Configurations reproduced for the Sec. 3.3 comparison tables.
 MODELS = [
     ("40-4-2", 40, 4, 2),
     ("40-7-2", 40, 7, 2),
@@ -102,8 +110,12 @@ def _get_model_config(model_size: str) -> tuple[str, int, int, int]:
     raise ValueError(f"Unknown model_size='{model_size}'. Valid values: {valid}")
 
 
-def run(mode="train", backend="sim:ascella", model_size="40-4-2") -> None:
-    """Run TAF Classical-PennyLane models and write summary CSV."""
+def run(
+    mode="train",
+    backend="sim:ascella",
+    model_size: str | None = None,
+) -> None:
+    """Train or evaluate the Sec. 3.3 hybrid PennyLane models."""
     seed_everything(0)
 
     data = load_training_sets()
@@ -115,8 +127,9 @@ def run(mode="train", backend="sim:ascella", model_size="40-4-2") -> None:
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
     if mode == "train":
         summary_csv = "HQPINN/results/TAF/taf_summary.csv"
+        models = [_get_model_config(model_size)] if model_size is not None else MODELS
 
-        for label, width, layers, q_layers in MODELS:
+        for label, width, layers, q_layers in models:
             seed_everything(0)
             print(
                 f"\nTraining TAF-HY-PL model: {label} "
@@ -260,7 +273,7 @@ def run(mode="train", backend="sim:ascella", model_size="40-4-2") -> None:
             print()
 
     elif mode == "run":
-        label, width, layers, q_layers = _get_model_config(model_size)
+        label, width, layers, q_layers = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"taf_hy_pl_{label}"
         run_density_inference_mode(
             mode="run",
@@ -281,7 +294,7 @@ def run(mode="train", backend="sim:ascella", model_size="40-4-2") -> None:
         print(
             "Remote mode is not available for TAF-HY-PL. Falling back to local run mode."
         )
-        label, width, layers, q_layers = _get_model_config(model_size)
+        label, width, layers, q_layers = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"taf_hy_pl_{label}"
         run_density_inference_mode(
             mode="run",

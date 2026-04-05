@@ -1,5 +1,9 @@
-# see_qq_pl.py
-# PennyLane–PennyLane PINN
+"""
+SEE PennyLane-PennyLane wrapper (paper Sec. 3.1 quantum-quantum baseline).
+
+Both branches are independent gate-model quantum circuits, and the learned
+fusion layer maps their combined output to (rho, u, p).
+"""
 
 import os
 from datetime import datetime
@@ -34,10 +38,7 @@ from ..layer_pennylane import (
 
 class PP_PINN(nn.Module):
     """
-    PennyLane–PennyLane PINN with two parallel quantum branches.
-
-    Each quantum branch maps (x, t) -> R^3 via a multi-output PQC and
-    a SEE-specific feature map.
+    Quantum-quantum SEE baseline with two independent PennyLane branches.
     """
 
     def __init__(self, q_layers: int = N_LAYERS) -> None:
@@ -46,7 +47,8 @@ class PP_PINN(nn.Module):
         qblock_multi_1 = make_quantum_block_multiout(n_layers=q_layers)
         qblock_multi_2 = make_quantum_block_multiout(n_layers=q_layers)
 
-        # Two parallel PennyLane branches: each (x,t) -> (rho_like, u_like, p_like)
+        # Both branches use the same physics-aware input encoding but maintain
+        # separate trainable quantum parameters.
         self.branch1 = BranchPennylane(
             qblock_multi_1,
             feature_map=see_feature_map,
@@ -59,6 +61,8 @@ class PP_PINN(nn.Module):
             output_as_column=False,
             n_layers=q_layers,
         )
+        # Fusion is deliberately linear so the comparison focuses on branch type
+        # rather than on a more expressive downstream head.
         self.fusion = nn.Linear(6, 3, dtype=DTYPE)
 
         # Human-readable quantum-depth label (e.g. "2", "3", "4")
@@ -71,6 +75,7 @@ class PP_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))  # [N, 3]
 
 
+# Configurations reproduced for the Sec. 3.1 comparison tables.
 MODELS = [
     ("2", 2),
     ("3", 3),
@@ -105,7 +110,7 @@ def run(
     *,
     q_layers: int | None = None,
 ):
-    """Run all SEE PennyLane–PennyLane models and write summary CSV."""
+    """Train or evaluate the Sec. 3.1 quantum-quantum PennyLane models."""
     seed_everything(0)
 
     ckpt_dir = "HQPINN/models/SEE"

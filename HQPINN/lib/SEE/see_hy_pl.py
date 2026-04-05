@@ -1,5 +1,9 @@
-# see_hy_pl.py
-# Classical–PennyLane PINN
+"""
+SEE hybrid classical-PennyLane wrapper (paper Sec. 3.1).
+
+One branch is classical and one branch is a gate-model quantum circuit. Their
+outputs are linearly fused into the primitive variables (rho, u, p).
+"""
 
 import os
 from datetime import datetime
@@ -42,7 +46,7 @@ from ..layer_classical import BranchPyTorch
 
 class CP_PINN(nn.Module):
     """
-    Classical–PennyLane PINN with one quantum branch and one classical MLP branch.
+    Hybrid SEE model with one PennyLane branch and one classical MLP branch.
     """
 
     def __init__(
@@ -55,6 +59,8 @@ class CP_PINN(nn.Module):
 
         qblock_multi_1 = make_quantum_block_multiout(n_layers=q_layers)
 
+        # The quantum branch uses the SEE feature map from the paper-oriented
+        # space-time encoding, while the MLP branch supplies the classical path.
         self.branch1 = BranchPennylane(
             qblock_multi_1,
             feature_map=see_feature_map,
@@ -67,6 +73,8 @@ class CP_PINN(nn.Module):
             num_hidden_layers=num_hidden_layers,
             hidden_width=hidden_width,
         )
+        # Learned fusion keeps the readout identical across CC, HY, and QQ
+        # variants, which simplifies benchmark comparisons.
         self.fusion = nn.Linear(6, 3, dtype=DTYPE)
 
         # Human-readable quantum-depth label (e.g. "2", "3", "4")
@@ -79,6 +87,7 @@ class CP_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))  # [N, 3]
 
 
+# Configurations reproduced for the Sec. 3.1 comparison tables.
 MODELS = [
     ("10-4-2", 10, 4, 2),
     ("10-7-2", 10, 7, 2),
@@ -119,7 +128,7 @@ def run(
     n_layers: int | None = None,
     q_layers: int | None = None,
 ):
-    """Run all SEE Classical models and write summary CSV."""
+    """Train or evaluate the Sec. 3.1 hybrid PennyLane models."""
     seed_everything(0)
 
     ckpt_dir = "HQPINN/models/SEE"

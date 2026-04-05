@@ -1,5 +1,9 @@
-# dee_qq_pl.py
-# PennyLane–PennyLane PINN
+"""
+DEE PennyLane-PennyLane wrapper (paper Sec. 3.2 quantum-quantum baseline).
+
+Both branches are independent quantum circuits, and their outputs are linearly
+fused into the primitive variables required by the DEE loss.
+"""
 
 import os
 from datetime import datetime
@@ -34,10 +38,7 @@ from ..layer_pennylane import (
 
 class PP_PINN(nn.Module):
     """
-    PennyLane–PennyLane PINN with two parallel quantum branches.
-
-    Each quantum branch maps (x, t) -> R^3 via a multi-output PQC and
-    a DEE-compatible feature map.
+    Quantum-quantum DEE baseline with two independent PennyLane branches.
     """
 
     def __init__(
@@ -54,6 +55,8 @@ class PP_PINN(nn.Module):
         qblock_multi_1 = make_quantum_block_multiout(n_layers=q_layers)
         qblock_multi_2 = make_quantum_block_multiout(n_layers=q_layers)
 
+        # Both branches use the moving-front-aware DEE feature map but keep
+        # independent trainable quantum parameters.
         self.branch1 = BranchPennylane(
             qblock_multi_1,
             feature_map=dee_feature_map,
@@ -66,6 +69,7 @@ class PP_PINN(nn.Module):
             output_as_column=False,
             n_layers=q_layers,
         )
+        # Linear fusion keeps the readout identical to the other Sec. 3.2 models.
         self.fusion = nn.Linear(6, 3, dtype=DTYPE)
 
         self.size_label = f"{q_layers}"
@@ -77,6 +81,7 @@ class PP_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))  # [N, 3]
 
 
+# Configurations reproduced for the Sec. 3.2 comparison tables.
 MODELS = [
     ("2", 2),
     ("3", 3),
@@ -92,16 +97,21 @@ def _get_model_config(model_size: str) -> tuple[str, int]:
     raise ValueError(f"Unknown model_size='{model_size}'. Valid values: {valid}")
 
 
-def run(mode="train", backend="sim:ascella", model_size="2"):
-    """Run all DEE PennyLane–PennyLane models and write summary CSV."""
+def run(
+    mode="train",
+    backend="sim:ascella",
+    model_size: str | None = None,
+):
+    """Train or evaluate the Sec. 3.2 quantum-quantum PennyLane models."""
     seed_everything(0)
 
     ckpt_dir = "HQPINN/models/DEE"
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
     if mode == "train":
         summary_csv = "HQPINN/results/DEE/dee_summary.csv"
+        models = [_get_model_config(model_size)] if model_size is not None else MODELS
 
-        for label, q_layers in MODELS:
+        for label, q_layers in models:
             seed_everything(0)
             print(f"\nTraining DEE-QQ-PL model: {label} q_layers={q_layers}")
 
@@ -230,7 +240,7 @@ def run(mode="train", backend="sim:ascella", model_size="2"):
             print()
 
     elif mode == "run":
-        label, q_layers = _get_model_config(model_size)
+        label, q_layers = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"dee_qq_pl_{label}"
         run_density_inference_mode(
             mode="run",
@@ -247,7 +257,7 @@ def run(mode="train", backend="sim:ascella", model_size="2"):
         print(
             "Remote mode is not available for DEE-QQ-PL. Falling back to local run mode."
         )
-        label, q_layers = _get_model_config(model_size)
+        label, q_layers = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"dee_qq_pl_{label}"
         run_density_inference_mode(
             mode="run",

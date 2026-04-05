@@ -1,4 +1,10 @@
-# core_dho.py
+"""
+Core training and evaluation utilities for the DHO benchmark.
+
+This module implements the Appendix A.2 damped harmonic oscillator setting used
+as the simplest HQPINN validation problem. Unlike the Euler cases, DHO uses a
+scalar ODE, a scalar target u(t), and full-batch training on a small 1D grid.
+"""
 
 import os
 import csv
@@ -49,10 +55,12 @@ DHO_SUMMARY_COLUMNS = [
 
 
 def omega(mu: float = MU, k: float = K) -> float:
+    """Return the underdamped angular frequency appearing in the closed form."""
     return np.sqrt(k - (mu / 2.0) ** 2)
 
 
 def u_exact(t_array: np.ndarray, mu: float = MU, k: float = K) -> np.ndarray:
+    """Exact DHO solution used for quantitative evaluation and plots."""
     w = omega(mu, k)
     return np.exp(-mu * t_array / 2.0) * (
         np.cos(w * t_array) + (mu / (2.0 * w)) * np.sin(w * t_array)
@@ -93,11 +101,11 @@ def oscillator_loss(
     k: float = K,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Compute the three components of the PINN loss:
+    Compute the three components of the DHO PINN loss:
 
       1. Initial condition on u(0):  (u(0) - 1)^2
       2. Initial condition on u'(0): (u'(0))^2
-      3. PDE residual: mean( (m u'' + μ u' + k u)^2 )
+      3. ODE residual: mean((m u'' + mu u' + k u)^2)
 
     Returns
     -------
@@ -108,18 +116,20 @@ def oscillator_loss(
     loss_f : torch.Tensor
         PDE residual loss.
     """
-    # Fresh differentiable copy of t
+    # Work on a fresh differentiable copy so autograd can build the temporal
+    # derivatives required by the physics term at every optimization step.
     t = t.clone().detach().requires_grad_(True)
 
-    # Forward pass
+    # Evaluate the trial solution and its first/second time derivatives.
     u = model(t)
     du = derivative(u, t)
     d2u = second_derivative(u, t)
 
-    # PDE residual: m u'' + μ u' + k u
+    # Physics residual of the damped oscillator equation.
     f = m * d2u + mu * du + k * u
 
-    # Initial conditions at t = 0
+    # Initial conditions are enforced explicitly at t=0 instead of relying on
+    # the sampled training grid, which excludes the endpoint.
     t0 = torch.zeros((1, 1), dtype=DTYPE, device=DEVICE).requires_grad_(True)
     u0 = model(t0)
     du0 = derivative(u0, t0)
@@ -150,6 +160,12 @@ def train_oscillator_pinn(
         [nn.Module, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     ] = oscillator_loss,
 ) -> None:
+    """
+    Train one DHO model and persist the loss trace plus diagnostic plots.
+
+    DHO is cheap enough that this implementation keeps the optimization fully
+    deterministic and full-batch: every epoch uses the same time grid.
+    """
 
     os.makedirs(out_dir, exist_ok=True)
 
@@ -158,6 +174,8 @@ def train_oscillator_pinn(
 
     start = datetime.now()
     rows = []
+    # Intermediate plots are saved at fixed milestones so training trajectories
+    # can be compared across branch types with the same optimizer settings.
     snapshot_epochs = {600, 1200}
 
     def save_prediction_png(epoch: int, elapsed_s: float) -> str:
@@ -182,9 +200,7 @@ def train_oscillator_pinn(
         plt.close(fig)
         return epoch_png_path
 
-    # -------------------------------------------------------
-    # Training loop
-    # -------------------------------------------------------
+    # Full-batch training loop for the Appendix A.2 oscillator.
     for epoch in range(n_epochs):
         optimizer.zero_grad()
         lic_u, lic_du, lf = loss_fn(model, t_train)
@@ -201,11 +217,8 @@ def train_oscillator_pinn(
                 f"IC_u={lic_u:.4e} | IC_du={lic_du:.4e} | PDE={lf:.4e}"
             )
 
-            # -------------------------------------------------------
-            # Append this epoch to CSV
-            # -------------------------------------------------------
-
-            # for ti, ui, dui, d2ui in zip(t_np, u_np, du_np, d2u_np):
+            # Persist the decomposed loss so the summary tables can report how
+            # much error comes from the IC terms versus the physics residual.
             rows.append(
                 [
                     epoch,
@@ -238,9 +251,7 @@ def train_oscillator_pinn(
     stop = datetime.now()
     elapsed = (stop - start).total_seconds()
 
-    # -------------------------------------------------------
-    # Final PNG (only the prediction vs exact plot)
-    # -------------------------------------------------------
+    # Save the final prediction profile using the same helper as the snapshots.
     final_png_path = save_prediction_png(epoch=n_epochs - 1, elapsed_s=elapsed)
     if final_png_path != png_path:
         os.replace(final_png_path, png_path)

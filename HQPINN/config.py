@@ -1,25 +1,33 @@
-# config.py
+"""
+Global constants for the HQPINN reproduction.
+
+The values in this module define the benchmark domains, optimization settings,
+and default architecture sizes used throughout the codebase. Comments reference
+the four case studies of the paper:
+- Appendix A.2: DHO
+- Sec. 3.1: SEE
+- Sec. 3.2: DEE
+- Sec. 3.3: TAF
+"""
 
 import torch
 
-# Default dtype and device
+# Numerical defaults shared by all experiments.
 DTYPE = torch.float64
 DEVICE = torch.device("cpu")
 N_LAYERS = 3
 DEFAULT_N_OUTPUTS = 3
-# NOTE:
-# - For SEE/DEE/TAF in this paper setup, the quantum branch uses one measured
-#   qubit per physical output channel.
-# - DHO is the exception: it predicts a scalar output even though the circuit
-#   can still use multiple qubits.
+# In the paper-style Euler settings, the quantum branch exposes one measured
+# output channel per physical variable. DHO is the exception: the target is the
+# scalar displacement u(t), even if the circuit internally uses several modes.
 
 GAMMA = 1.4
 
 
-# ==========================
-#  Problem: 1D damped harmonic oscillator
-#  ODE:     m u''(t) + μ u'(t) + k u(t) = 0,   t ∈ (0, 1]
-# ==========================
+# ============================================================
+# Appendix A.2: damped harmonic oscillator
+#   m u''(t) + mu u'(t) + k u(t) = 0,  t in (0, 1]
+# ============================================================
 
 DHO_LR = 0.002
 DHO_N_EPOCHS = 1801
@@ -30,7 +38,8 @@ M = 1.0
 MU = 4.0
 K = 400.0
 
-# Loss weights
+# The DHO loss combines the two initial-condition constraints and the ODE
+# residual. These coefficients reproduce the weighting used in this codebase.
 LAMBDA1 = 1e-1
 LAMBDA2 = 1e-4
 
@@ -39,11 +48,10 @@ DHO_NUM_HIDDEN_LAYERS = 2
 DHO_HIDDEN_WIDTH = 16
 
 
-# ==========================
-#  SEE – Smooth Euler Equation (Sec. 3.1)
-#  1D Euler, solution lisse:
-#  x ∈ (-1, 1), t ∈ (0, 2)
-# ==========================
+# ============================================================
+# Sec. 3.1: smooth Euler equation
+#   1D compressible Euler on x in (-1, 1), t in (0, 2)
+# ============================================================
 
 SEE_LR = 5e-4
 SEE_N_EPOCHS = 20000
@@ -63,11 +71,10 @@ SEE_CC_NUM_HIDDEN_LAYERS = 4
 SEE_CC_HIDDEN_WIDTH = 10
 
 
-# ==========================
-#  DEE – Discontinue Euler Equation (Sec. 3.2)
-#  1D Euler, solution lisse:
-#  x ∈ (0, 1), t ∈ (0, 2)
-# ==========================
+# ============================================================
+# Sec. 3.2: discontinuous Euler equation
+#   1D compressible Euler on x in (0, 1), t in (0, 2)
+# ============================================================
 
 DEE_LR = 5e-4
 DEE_N_EPOCHS = 20000
@@ -92,11 +99,11 @@ DEE_CC_NUM_HIDDEN_LAYERS = 4
 DEE_CC_HIDDEN_WIDTH = 10
 
 
-# ==========================
-#  TAF – 2D Transonic Aerofoil Flow (Sec. 3.3)
-# ==========================
+# ============================================================
+# Sec. 3.3: 2D transonic aerofoil flow
+# ============================================================
 
-# TAF has 4 primitive outputs: (rho, u, v, T).
+# TAF predicts the primitive variables (rho, u, v, T).
 TAF_N_OUTPUTS = 4
 
 #           TAF_Y_MAX   →  X_top
@@ -115,7 +122,7 @@ TAF_X_MAX = 3.5
 TAF_Y_MIN = -2.25
 TAF_Y_MAX = 2.25
 
-# Uin = (ρin, uin, vin, Tin) = (1.225, 272.15, 0.0, 288.15),
+# Inlet primitive state used by the Sec. 3.3 boundary loss.
 TAF_RHO_IN = 1.225
 TAF_T_IN = 288.15
 
@@ -140,7 +147,7 @@ TAF_P_OUT = 0.0
 TAF_CC_NUM_HIDDEN_LAYERS = 4
 TAF_CC_HIDDEN_WIDTH = 40
 
-# Files produced by your generator
+# Filenames produced by `generate_aerofoil_training_sets.py`.
 TAF_X_IN_FILE = "X_in.npy"
 TAF_X_OUT_FILE = "X_out.npy"
 TAF_X_TOP_FILE = "X_top.npy"
@@ -152,5 +159,6 @@ TAF_X_DATA_INT_FILE = "X_data_int.npy"
 
 
 def set_dtype(dtype: torch.dtype) -> None:
+    """Propagate the runtime-selected dtype to modules importing `HQPINN.config`."""
     global DTYPE
     DTYPE = dtype

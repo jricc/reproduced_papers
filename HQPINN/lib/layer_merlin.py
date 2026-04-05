@@ -120,18 +120,20 @@ def build_merlin_circuit() -> pcvl.Circuit:
 #  QuantumLayers factory
 # ============================================================
 
-# Dual-rail: 2 modes per logical qubit, 1 photon per qubit.
+# Dual-rail convention used throughout the Merlin/Perceval branch factory:
+# two optical modes encode one logical qubit-like degree of freedom.
 n_modes = 2 * DEFAULT_N_OUTPUTS
 input_state = [1, 0] * DEFAULT_N_OUTPUTS
 n_photons = sum(input_state)
 
-# Fock space dimension for n_photons over n_modes modes.
+# Dimension of the full Fock basis used by the grouped probability readout.
 fock_dim = comb(n_modes + n_photons - 1, n_photons)
 
-# Number of logical output features used by the classical readout.
+# The grouped measurement is projected to twice the number of physical outputs,
+# then compressed by the learned readout of `BranchMerlin`.
 group_dim = 2 * DEFAULT_N_OUTPUTS
 
-# Grouping from Fock basis to logical features.
+# Group Fock states into a compact feature vector before the classical readout.
 grouping = LexGrouping(fock_dim, group_dim)
 
 
@@ -244,9 +246,13 @@ class BranchMerlin(nn.Module):
                 f"Valid values: {', '.join(sorted(valid_kinds))}."
             )
 
+        # Merlin returns grouped photonic features; this linear map converts
+        # them into the branch output channels consumed by the HQPINN fusion.
         self.readout = nn.Linear(self.group_dim, n_outputs, dtype=DTYPE)
 
     def _feature_map_dho(self, x_in: torch.Tensor) -> torch.Tensor:
+        # Match the harmonic DHO encoding used by the PennyLane branch so that
+        # architecture comparisons isolate the backend, not the input map.
         if x_in.ndim == 2:
             t = x_in[:, 0]
         else:
@@ -292,6 +298,9 @@ class BranchMerlin(nn.Module):
             )
         x = x_in[:, 0]
         y = x_in[:, 1]
+        # The current Merlin TAF branch keeps a compact 3-angle encoding even
+        # though the physical output has four channels; the extra expressivity
+        # is provided downstream by the branch readout and fusion layer.
         phi0 = np.pi * x
         phi1 = np.pi * y
         phi2 = np.pi * (x - y)
@@ -306,7 +315,8 @@ class BranchMerlin(nn.Module):
             return self._feature_map_dee(x_in)
         if self.feature_map_kind == "taf":
             return self._feature_map_taf(x_in)
-        # auto: keep backward-compatible behavior
+        # `auto` preserves the historical repo behavior used before the
+        # benchmark wrappers passed the problem type explicitly.
         if x_in.ndim == 2 and x_in.shape[1] == 2:
             return self._feature_map_see(x_in)
         return self._feature_map_dho(x_in)
@@ -318,30 +328,33 @@ class BranchMerlin(nn.Module):
             - Euler style: [N,2] with (x,t) pairs → 2D encoding
         """
 
-        # phi_single: [N, 3] with features for one layer of the MerLin circuit.
+        # `phi_single` contains the angles for one feature layer of the circuit.
         phi_single = self._feature_map(x_in)
 
-        # Number of angle encoding layers = N_LAYERS - 1 (one encoding layer between each pair of ansatz layers).
+        # There is one feature layer between consecutive ansatz layers, hence
+        # N_LAYERS - 1 encoded copies of the same problem-specific features.
         n_feature_layers = max(N_LAYERS - 1, 0)
 
         if n_feature_layers > 0:
-            # Repeat phi_single for each feature layer, giving [N, 3 * n_feature_layers].
+            # Concatenate one copy per feature layer so Merlin receives the full
+            # flattened parameter vector expected by its circuit builder.
             X = torch.cat([phi_single] * n_feature_layers, dim=1)
         else:
-            # No feature layers, so X is empty with shape [N, 0].
+            # Degenerate single-ansatz case: no data re-encoding layer.
             X = torch.empty(x_in.shape[0], 0, dtype=DTYPE, device=x_in.device)
 
         if self.processor is None:
-            # Local Execution, differentiable (SLOS)
+            # Local differentiable execution for training.
             q_out = self.qlayer(X).to(DTYPE)  # (N, output_size)
         else:
-            # Remote Execution via MerlinProcessor → shots / simulator / QPU
-            # No gradient here since we only use the processor for inference, not training.
+            # Remote execution is inference-only in this repository, so gradients
+            # are intentionally disabled before dispatching cloud jobs.
             self.qlayer.eval()
             with torch.no_grad():
                 q_out = self.processor.forward(self.qlayer, X).to(DTYPE)
 
-        # QuantumLayer output is already grouped: (N, 2 * n_qubits).
+        # The QuantumLayer output is already grouped; the learned readout maps it
+        # to branch channels comparable to the classical branch outputs.
         u = self.readout(q_out)  # (N, 1)
 
         return u
@@ -351,8 +364,8 @@ def make_merlin_processor(processor="sim:ascella") -> ML.MerlinProcessor:
     """
     Build a MerlinProcessor for remote simulation/QPU execution.
 
-    This is the execution backend used when running the interferometer branch
-    against cloud simulators or hardware-like targets.
+    This is the execution backend used when the paper's photonic branch is run
+    against a remote simulator or QPU-like service.
     """
     raw_backend = str(processor).strip().lower()
     backend_aliases = {

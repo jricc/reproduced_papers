@@ -1,4 +1,10 @@
-# core_see.py
+"""
+Core losses and evaluation utilities for the smooth Euler benchmark.
+
+This module implements the Sec. 3.1 one-dimensional smooth Euler case. The
+network predicts the primitive variables (rho, u, p), while the loss converts
+them to the conservative form required by the Euler residual.
+"""
 
 import os
 import csv
@@ -48,7 +54,7 @@ SEE_SUMMARY_COLUMNS = [
 
 
 def partial_derivative(y: torch.Tensor, x: torch.Tensor, index: int) -> torch.Tensor:
-    """Compute dy/dx_index where x has shape [N, 2] = [x, t]."""
+    """Differentiate a scalar field with respect to x or t on a batched grid."""
     grads = torch.autograd.grad(
         outputs=y,
         inputs=x,
@@ -66,20 +72,17 @@ def euler_loss_batched(
     n_bc_batch: Optional[int] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Mini-batching
+    Estimate the Sec. 3.1 loss with optional mini-batching.
 
-    Instead of evaluating all PDE, IC, and BC points at every epoch
-    (e.g., 2000 PDE points, 50 IC, 50 BC), we randomly sample a small
-    subset such as:
-
-        n_f_batch = 128     # PDE points
-        n_ic_batch = 25     # initial condition points
-        n_bc_batch = 25     # boundary points
+    The function redraws SEE points every call. When batch sizes are smaller
+    than the full sample counts, the optimizer sees a stochastic estimate of
+    the paper objective:
+    - initial-condition loss on t=0,
+    - periodic boundary loss at x_min/x_max,
+    - Euler residual loss on interior collocation points.
     """
 
-    # ==========================
-    # 1. Initial condition loss
-    # ==========================
+    # 1) Initial condition term on the line t=0.
     x_ic, t_ic = sample_ic_points()  # [N_ic, 1]
     N_ic = x_ic.size(0)
     if n_ic_batch is not None and n_ic_batch < N_ic:
@@ -101,9 +104,7 @@ def euler_loss_batched(
         + (p_ic - p_ic_exact) ** 2
     )
 
-    # ==========================
-    # 2. Periodic boundary loss
-    # ==========================
+    # 2) Periodicity term: the paper identifies x=x_min and x=x_max.
     x_left, x_right, t_bc = sample_bc_points()  # [N_bc, 1]
     N_bc = x_left.size(0)
     if n_bc_batch is not None and n_bc_batch < N_bc:
@@ -120,9 +121,7 @@ def euler_loss_batched(
 
     loss_bc = torch.mean((U_left - U_right) ** 2)
 
-    # ==========================
-    # 3. PDE residual loss (batched)
-    # ==========================
+    # 3) Physics term on interior collocation points.
     x_f, t_f = sample_collocation_points()  # [N_f, 1]
     N_f = x_f.size(0)
 
@@ -140,6 +139,8 @@ def euler_loss_batched(
 
     gamma = GAMMA
 
+    # Convert primitive variables to the conservative variables used by the
+    # 1D Euler system in the paper.
     e = p / ((gamma - 1.0) * rho)
     E = e + 0.5 * u**2
 
@@ -163,6 +164,8 @@ def euler_loss_batched(
     r2 = U2_t + F2_x
     r3 = U3_t + F3_x
 
+    # The residual vanishes only when the predicted field satisfies all three
+    # conservation laws simultaneously.
     loss_f = torch.mean(r1**2 + r2**2 + r3**2)
 
     return loss_ic, loss_bc, loss_f
@@ -174,7 +177,7 @@ def exact_rho(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
 
 
 def exact_solution(x: torch.Tensor, t: torch.Tensor):
-    """Exact smooth Euler solution (rho,u,p) at (x,t)."""
+    """Exact Sec. 3.1 travelling-wave solution (rho, u, p)."""
     rho = exact_rho(x, t)
     u = torch.ones_like(x)
     p = torch.ones_like(x)
@@ -182,7 +185,7 @@ def exact_solution(x: torch.Tensor, t: torch.Tensor):
 
 
 def evaluate_see_errors(model, nx: int = 1000):
-    """Relative L2 errors computed at t = T."""
+    """Relative L2 errors at the final time used for summary reporting."""
     t_final = SEE_T_MAX
     x = torch.linspace(SEE_X_MIN, SEE_X_MAX, nx, dtype=DTYPE, device=DEVICE)
     t = torch.full_like(x, t_final)
@@ -195,7 +198,7 @@ def evaluate_see_errors(model, nx: int = 1000):
 
     rho_exact, u_exact, p_exact = exact_solution(x[:, None], t[:, None])
 
-    # PINN-style L2 error
+    # Report relative errors on physical outputs, as in the benchmark tables.
     def rel_l2(pred, exact):
         num = torch.sqrt(torch.mean((pred - exact) ** 2))
         den = torch.sqrt(torch.mean(exact**2))
@@ -313,9 +316,13 @@ def train_see(
     ] = euler_loss_batched,
     # ] = euler_loss,
 ):
-    # -> tuple[float, float, float, int]
-    # :
-    """Training loop for the Smooth Euler Equation PINN (classical-classical)."""
+    """
+    Train one SEE model and export the diagnostic artifacts used in comparison.
+
+    The default loss is mini-batched. Because `euler_loss_batched` redraws
+    points at every call, this loop optimizes a stochastic version of the
+    smooth-Euler objective.
+    """
 
     os.makedirs(out_dir, exist_ok=True)
 
@@ -330,24 +337,21 @@ def train_see(
     )
     csv_path = os.path.join(out_dir, f"see-{model_label}_{run_id}.csv")
 
-    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    #     optimizer, factor=0.5, patience=500
-    # )
-
     rows = []
     start = datetime.now()
 
     for epoch in range(n_epochs):
         optimizer.zero_grad()
 
-        # Compute the three loss components
+        # The paper objective is L = L_IC + L_BC + L_F for this benchmark.
         loss_ic, loss_bc, loss_f = loss_fn(model)
         loss = loss_ic + loss_bc + loss_f
 
         loss.backward()
         optimizer.step()
 
-        # Logging every plot_every epochs
+        # Keep a sparse loss trace so training curves stay comparable between
+        # architectures without writing an entry at every epoch.
         if epoch % plot_every == 0:
             elapsed = (datetime.now() - start).total_seconds()
 
@@ -381,7 +385,7 @@ def train_see(
         writer.writerow(["epoch", "elapsed (s)", "Loss", "IC", "BC", "F"])
         writer.writerows(rows)
 
-    # Final evaluation grid for PNG outputs
+    # Evaluate on a dense deterministic grid for the final paper-style figures.
     with torch.no_grad():
         nx, nt = SEE_NX_SAMPLES, SEE_NT_SAMPLES
         x = torch.linspace(SEE_X_MIN, SEE_X_MAX, nx, dtype=DTYPE, device=DEVICE)
@@ -392,20 +396,20 @@ def train_see(
         U_pred = model(xt)
         rho_pred = U_pred[:, 0].reshape(nx, nt)
 
-        # Exact density
+        # The exact travelling-wave density provides the reference contour map.
         rho_exact = exact_rho(X, T)  # [nx, nt]
 
-        # Error (still in Tensor)
+        # Keep the error in tensor form until plotting tensors are materialized.
         rho_error = rho_pred - rho_exact  # Tensor [nx, nt]
 
-        # ---- Only now: convert everything to numpy for plotting ----
+        # Convert only once all model-side tensor work is finished.
         X_np = X.cpu().numpy()
         T_np = T.cpu().numpy()
         rho_pred_np = rho_pred.cpu().numpy()
         rho_exact_np = rho_exact.cpu().numpy()
         rho_err_np = rho_error.cpu().numpy()
 
-        # 1) Predicted density
+        # 1) Predicted density field.
         fig, ax = plt.subplots(figsize=(8, 5))  # 8x5 inches
         cs = ax.contourf(
             X_np, T_np, rho_pred_np, levels=50
@@ -418,7 +422,7 @@ def train_see(
         fig.savefig(rho_pred_png_path, dpi=300)
         plt.close(fig)
 
-        # 2) Exact density
+        # 2) Exact density field.
         fig, ax = plt.subplots(figsize=(8, 5))
         cs = ax.contourf(X_np, T_np, rho_exact_np, levels=50)
         fig.colorbar(cs, ax=ax)
@@ -429,7 +433,7 @@ def train_see(
         fig.savefig(rho_exact_png_path, dpi=300)
         plt.close(fig)
 
-        # 3) Error (pred - exact)
+        # 3) Pointwise density error.
         fig, ax = plt.subplots(figsize=(8, 5))
         cs = ax.contourf(X_np, T_np, rho_err_np, levels=50, cmap="bwr")
         fig.colorbar(cs, ax=ax)
@@ -455,7 +459,6 @@ def train_see(
     return final_loss, err_rho, err_p, n_params
 
 
-# Displaying of the result
 def save_density_plot(
     model: nn.Module,
     ckpt_dir: str,
@@ -464,13 +467,15 @@ def save_density_plot(
     run_id: str,
     backend: str,
 ) -> str:
+    """Save the inference-time density contour used for SEE visual inspection."""
 
     model.eval()
 
     with torch.no_grad():
         nx, nt = SEE_NX_SAMPLES, SEE_NT_SAMPLES
         if backend.lower() != "local":
-            # Remote backends create many cloud jobs; downsample for robustness.
+            # Remote photonic execution can be expensive because each grid point
+            # becomes one cloud job; downsample the plotting grid accordingly.
             nx = min(nx, 30)
             nt = min(nt, 30)
             print(

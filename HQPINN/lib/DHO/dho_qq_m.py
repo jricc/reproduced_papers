@@ -1,5 +1,9 @@
-# dho_qq_m.py
-# Interferometer-Interferometer PINN for the damped oscillator using oscillator_core + merlin_quantum
+"""
+DHO interferometer-interferometer wrapper (Appendix A.2 quantum-quantum case).
+
+Both branches are Merlin interferometer models. The learned scalar fusion layer
+keeps the branch combination identical to the rest of the HQPINN family.
+"""
 
 import os
 from datetime import datetime
@@ -37,14 +41,9 @@ from ..layer_merlin import make_interf_qlayer, BranchMerlin
 from ..layer_classical import LearnedScalarFusion
 
 
-# ============================================================
-#  MM_PINN model: two MerLin quantum branches
-# ============================================================
-
-
 class MM_PINN(nn.Module):
     """
-    Interferometer-Interferometer PINN with linear fusion to scalar output.
+    DHO quantum-quantum baseline with two Merlin interferometer branches.
     """
 
     def __init__(
@@ -55,7 +54,8 @@ class MM_PINN(nn.Module):
     ) -> None:
         super().__init__()
 
-        # Two distinct quantum branches with independent parameters
+        # The two interferometer branches are independent so the comparison with
+        # CC and HY models preserves the same two-branch topology.
         self.branch1 = BranchMerlin(
             make_interf_qlayer(n_photons=n_photons),
             processor=processor,
@@ -66,6 +66,8 @@ class MM_PINN(nn.Module):
             processor=processor,
             feature_map_kind="dho",
         )
+        # Fusion stays classical and linear, exactly as in the paper's high-level
+        # HQPINN diagram.
         self.fusion = LearnedScalarFusion()
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
@@ -109,9 +111,12 @@ def run(
     force_retrain: bool = False,
 ) -> None:
     """
-    mode = "train" : train the model from scratch and save the checkpoint
-    mode = "run"   : load the latest checkpoint and run inference (not implemented here, but can be added)
-    mode = "remote" : load and run in remote
+    Train or evaluate the DHO quantum-quantum Merlin baseline.
+
+    The three modes match the other experiment wrappers:
+    - `train`: optimize and save a checkpoint
+    - `run`: local inference from the latest checkpoint
+    - `remote`: inference through a remote Merlin backend
     """
     seed_everything(0)
 

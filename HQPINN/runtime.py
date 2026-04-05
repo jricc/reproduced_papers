@@ -1,3 +1,5 @@
+"""Runtime helpers for reproducible HQPINN experiment execution."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -20,6 +22,7 @@ DEFAULT_CONFIG_PATH = CONFIGS_DIR / "defaults.json"
 
 
 def configure_logging() -> None:
+    """Initialize process-wide logging once the CLI/shared runner starts."""
     level_name = os.getenv("HQPINN_LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
     logging.basicConfig(
@@ -29,6 +32,7 @@ def configure_logging() -> None:
 
 
 def log_run_banner(config: dict[str, Any]) -> None:
+    """Log the resolved experiment identity before dispatching benchmark code."""
     LOGGER.info(
         "Starting run: experiment=%s mode=%s backend=%s",
         config.get("experiment"),
@@ -42,7 +46,7 @@ def log_run_banner(config: dict[str, Any]) -> None:
 
 
 def seed_everything(seed: int = 0) -> None:
-    """Seed Python, PyTorch, and NumPy RNGs when available."""
+    """Seed Python, PyTorch, and NumPy so repeated runs stay comparable."""
     random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -62,11 +66,17 @@ def require_file(path: Path, *, label: str) -> Path:
 
 
 def _is_dtype_key(key: str) -> bool:
+    """Recognize config keys that should be interpreted as dtype selectors."""
     return key == "dtype" or key.endswith("_dtype")
 
 
 def normalize_dtype_config(config: dict[str, Any]) -> dict[str, Any]:
-    """Deep-copy config and replace dtype aliases with validated DtypeSpec objects."""
+    """
+    Deep-copy config and replace dtype aliases with validated `DtypeSpec` objects.
+
+    The benchmark modules import `HQPINN.config.DTYPE` directly, so runtime
+    normalization must happen before experiment dispatch.
+    """
 
     def _normalize(value: Any) -> Any:
         if isinstance(value, dict):
@@ -85,7 +95,12 @@ def normalize_dtype_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def apply_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
-    """Normalize runtime config and apply global dtype settings to HQPINN config."""
+    """
+    Normalize runtime config and propagate the selected dtype to `HQPINN.config`.
+
+    This keeps all branch implementations on the same numerical precision during
+    differentiation of the paper's residual losses.
+    """
     normalized = normalize_dtype_config(config)
     global_dtype = normalized.get("dtype")
     if global_dtype is not None:

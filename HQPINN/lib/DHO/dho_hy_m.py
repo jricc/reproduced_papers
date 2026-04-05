@@ -1,4 +1,9 @@
-# Classical–Interferometer PINN for the damped oscillator
+"""
+DHO hybrid classical-interferometer wrapper (Appendix A.2).
+
+The Merlin branch implements the photonic quantum path, while the MLP branch
+provides the classical companion of the HQPINN hybrid architecture.
+"""
 
 import os
 from datetime import datetime
@@ -36,14 +41,9 @@ from ..layer_merlin import make_interf_qlayer, BranchMerlin
 from ..layer_classical import DHOBranchPyTorch, LearnedScalarFusion
 
 
-# ============================================================
-#  CI_PINN model: MerLin quantum + classical branch
-# ============================================================
-
-
 class CI_PINN(nn.Module):
     """
-    Classical–Interferometer PINN with linear fusion to scalar output.
+    Hybrid DHO model with one Merlin interferometer branch and one MLP branch.
     """
 
     def __init__(
@@ -56,17 +56,18 @@ class CI_PINN(nn.Module):
     ) -> None:
         super().__init__()
 
-        # One MerLin quantum branch
+        # The two branches share the same input coordinate t and are fused only
+        # after each branch has formed its own latent representation.
         self.branch1 = BranchMerlin(
             make_interf_qlayer(n_photons=n_photons),
             processor=processor,
             feature_map_kind="dho",
         )
-        # One classical MLP branch
         self.branch2 = DHOBranchPyTorch(
             num_hidden_layers=num_hidden_layers,
             hidden_width=hidden_width,
         )
+        # This learned scalar fusion layer is the final HQPINN readout to u(t).
         self.fusion = LearnedScalarFusion()
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
@@ -112,7 +113,7 @@ def run(
     n_photons: int = 1,
     force_retrain: bool = False,
 ) -> None:
-    """Run the Classical–Interferometer DHO PINN experiment."""
+    """Train or evaluate the DHO hybrid model with a Merlin branch."""
     seed_everything(0)
     ckpt_dir = "HQPINN/models/DHO"
     case_prefix = _case_prefix(n_layers, n_nodes, n_photons)

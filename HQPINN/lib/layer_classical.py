@@ -34,6 +34,9 @@ class BranchPyTorch(nn.Module):
 
         if num_hidden_layers < 1:
             raise ValueError("num_hidden_layers must be >= 1")
+        # The branch returns one latent channel per physical variable so that
+        # the downstream fusion layer can mix classical and/or quantum features
+        # without changing the benchmark loss definitions.
         layers = [
             nn.Linear(in_features, out_features, dtype=DTYPE),
             nn.Tanh(),
@@ -88,6 +91,8 @@ class DHOBranchPyTorch(nn.Module):
 
         if num_hidden_layers < 1:
             raise ValueError("num_hidden_layers must be >= 1")
+        # DHO keeps a scalar target u(t), but the branch emits a small feature
+        # vector before fusion so the two-branch architecture remains expressive.
         layers = [
             nn.Linear(in_features, 1, dtype=DTYPE),
             nn.Tanh(),
@@ -111,6 +116,9 @@ class DHOBranchPyTorch(nn.Module):
 class LearnedScalarFusion(nn.Module):
     """
     Learned linear fusion over two scalar branch outputs.
+
+    This layer is the scalar counterpart of the paper's fusion operator:
+    it mixes branch contributions after each branch has encoded the same input.
     """
 
     def __init__(self) -> None:

@@ -1,5 +1,9 @@
-# dee_qq_m.py
-# Interferometer-Interferometer PINN
+"""
+DEE interferometer-interferometer wrapper (paper Sec. 3.2 quantum-quantum case).
+
+Both branches are Merlin interferometer models, and the learned fusion layer
+maps their concatenated outputs to the discontinuous Euler variables.
+"""
 
 import os
 from datetime import datetime
@@ -35,17 +39,14 @@ from ..layer_merlin import make_interf_qlayer, BranchMerlin
 
 class II_PINN(nn.Module):
     """
-    Interferometer-Interferometer PINN:
-
-        u(t) = u_q1(t) + u_q2(t)
-
-    Each branch uses its own QuantumLayer instance → independent parameters.
+    Quantum-quantum DEE baseline with two independent Merlin branches.
     """
 
     def __init__(self, n_photons: int, processor=None) -> None:
         super().__init__()
 
-        # Two distinct quantum branches with independent parameters
+        # Both branches share the same DEE feature map but own independent
+        # photonic parameters, matching the Sec. 3.2 QQ configuration.
         self.branch1 = BranchMerlin(
             make_interf_qlayer(n_photons=n_photons),
             n_outputs=3,
@@ -58,6 +59,8 @@ class II_PINN(nn.Module):
             processor=processor,
             feature_map_kind="dee",
         )
+        # The final fusion map converts branch features into the primitive
+        # variables consumed by the DEE residual and boundary terms.
         self.fusion = nn.Linear(6, 3, dtype=DTYPE)
 
         # Human-readable size label ("1", "2", ..., "6")
@@ -70,6 +73,7 @@ class II_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))  # [N, 3]
 
 
+# Configurations reproduced for the Sec. 3.2 comparison tables.
 MODELS = [
     ("1", 1),
     ("2", 2),
@@ -80,8 +84,12 @@ MODELS = [
 ]
 
 
-def run(mode="train", backend="sim:ascella", n_photons=2):
-    """Run all DEE Interferometer-Interferometer models and write summary CSV."""
+def run(
+    mode="train",
+    backend="sim:ascella",
+    n_photons: int | None = None,
+):
+    """Train or evaluate the Sec. 3.2 quantum-quantum Merlin models."""
     seed_everything(0)
 
     ckpt_dir = "HQPINN/models/DEE"
@@ -95,7 +103,8 @@ def run(mode="train", backend="sim:ascella", n_photons=2):
     if mode == "train":
         print("=== TRAINING MODE ===")
         summary_csv = "HQPINN/results/DEE/dee_summary.csv"
-        for label, nb_photons in MODELS:
+        models = [(str(n_photons), int(n_photons))] if n_photons is not None else MODELS
+        for label, nb_photons in models:
             seed_everything(0)
             print(f"\nTraining DEE-QQ-M {nb_photons} photons")
 
@@ -231,6 +240,8 @@ def run(mode="train", backend="sim:ascella", n_photons=2):
     # ======================
 
     elif mode == "run":
+        if n_photons is None:
+            n_photons = 2
         case_prefix = f"dee_qq_m_{n_photons}"
         run_density_inference_mode(
             mode="run",
@@ -250,6 +261,8 @@ def run(mode="train", backend="sim:ascella", n_photons=2):
     # ======================
 
     elif mode == "remote":
+        if n_photons is None:
+            n_photons = 2
         case_prefix = f"dee_qq_m_{n_photons}"
         run_density_inference_mode(
             mode="remote",

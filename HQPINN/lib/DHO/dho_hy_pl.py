@@ -1,5 +1,10 @@
-# dho_hy_pl.py
-# Classical–PennyLane PINN with a quantum branch and a classical MLP branch
+"""
+DHO hybrid classical-PennyLane wrapper (Appendix A.2).
+
+This variant follows the HQPINN hybrid design: one quantum branch and one
+classical branch process the same input t, then a learned scalar fusion layer
+produces the displacement prediction u(t).
+"""
 
 import os
 from datetime import datetime
@@ -41,7 +46,7 @@ from ..layer_classical import DHOBranchPyTorch, LearnedScalarFusion
 
 class CQ_PINN(nn.Module):
     """
-    Hybrid Classical–Quantum PINN with linear fusion to scalar output.
+    Hybrid DHO model with one PennyLane branch and one classical branch.
     """
 
     def __init__(
@@ -55,6 +60,8 @@ class CQ_PINN(nn.Module):
 
         qblock = make_quantum_block(n_qubits=n_qubits)
 
+        # The quantum branch uses the DHO harmonic feature map, while the
+        # classical branch provides a standard MLP surrogate on the same input.
         self.branch_q = BranchPennylane(
             qblock,
             feature_map=lambda t: dho_feature_map(t, n_qubits=n_qubits),
@@ -66,6 +73,8 @@ class CQ_PINN(nn.Module):
             num_hidden_layers=num_hidden_layers,
             hidden_width=hidden_width,
         )
+        # This learned scalar fusion layer implements the paper's final
+        # branch-combination step for the observable u(t).
         self.fusion = LearnedScalarFusion()
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
@@ -110,7 +119,7 @@ def run(
     n_nodes: int = DHO_HIDDEN_WIDTH,
     n_qubits: int = DEFAULT_N_OUTPUTS,
 ) -> None:
-    """Run the Classical–PennyLane DHO PINN experiment."""
+    """Train or evaluate the DHO hybrid model with a PennyLane branch."""
     seed_everything(0)
     ckpt_dir = "HQPINN/models/DHO"
     case_prefix = _case_prefix(n_layers, n_nodes, n_qubits)

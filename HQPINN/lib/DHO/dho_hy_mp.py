@@ -1,5 +1,9 @@
-# dho_hy_mp.py
-# Classical–Perceval PINN with a quantum branch using MerLin QuantumLayer and a classical MLP branch
+"""
+DHO hybrid classical-Perceval wrapper (Appendix A.2).
+
+This variant keeps the same hybrid HQPINN topology as the other DHO hybrids,
+but the quantum branch is executed through the Perceval/Merlin photonic stack.
+"""
 
 import os
 from datetime import datetime
@@ -37,14 +41,9 @@ from ..layer_merlin import make_perceval_qlayer, BranchMerlin
 from ..layer_classical import DHOBranchPyTorch, LearnedScalarFusion
 
 
-# ============================================================
-#  Hybrid CM_PINN model
-# ============================================================
-
-
 class CM_PINN(nn.Module):
     """
-    Hybrid Classical–Perceval PINN with linear fusion to scalar output.
+    Hybrid DHO model with one Perceval-backed quantum branch and one MLP branch.
     """
 
     def __init__(
@@ -55,6 +54,8 @@ class CM_PINN(nn.Module):
         hidden_width: int = DHO_HIDDEN_WIDTH,
     ) -> None:
         super().__init__()
+        # The branch pair matches the paper's hybrid setting: one quantum path
+        # and one classical path, both conditioned on the same time coordinate.
         self.branch_q = BranchMerlin(
             make_perceval_qlayer(),
             processor=processor,
@@ -64,6 +65,8 @@ class CM_PINN(nn.Module):
             num_hidden_layers=num_hidden_layers,
             hidden_width=hidden_width,
         )
+        # The final scalar readout learns how the two branch outputs should
+        # contribute to the physical displacement u(t).
         self.fusion = LearnedScalarFusion()
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
@@ -103,7 +106,7 @@ def run(
     n_layers: int = DHO_NUM_HIDDEN_LAYERS,
     n_nodes: int = DHO_HIDDEN_WIDTH,
 ) -> None:
-    """Run the Classical–Perceval DHO PINN experiment."""
+    """Train or evaluate the DHO hybrid model with a Perceval branch."""
     seed_everything(0)
     ckpt_dir = "HQPINN/models/DHO"
     case_prefix = _case_prefix(n_layers, n_nodes)

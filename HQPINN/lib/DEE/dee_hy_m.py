@@ -1,5 +1,9 @@
-# dee_hy_m.py
-# Classical–Interferometer PINN for DEE
+"""
+DEE hybrid classical-interferometer wrapper (paper Sec. 3.2).
+
+This version pairs a classical MLP branch with a Merlin interferometer branch,
+then fuses both outputs into the discontinuous Euler primitive variables.
+"""
 
 import os
 from datetime import datetime
@@ -38,7 +42,7 @@ from ..layer_merlin import make_interf_qlayer, BranchMerlin
 
 class CI_PINN(nn.Module):
     """
-    Classical-Interferometer PINN with one classical branch and one quantum branch.
+    Hybrid DEE model with one classical branch and one Merlin branch.
     """
 
     def __init__(
@@ -50,6 +54,8 @@ class CI_PINN(nn.Module):
     ) -> None:
         super().__init__()
 
+        # The branch pair follows the HQPINN hybrid pattern: one classical path,
+        # one photonic path, and one shared linear fusion step.
         self.branch1 = BranchPyTorch(
             in_features=2,
             out_features=3,
@@ -62,6 +68,8 @@ class CI_PINN(nn.Module):
             processor=processor,
             feature_map_kind="dee",
         )
+        # Fusion is learned so the model can adaptively mix smooth and
+        # shock-sensitive branch features.
         self.fusion = nn.Linear(6, 3, dtype=DTYPE)
 
         self.size_label = f"{hidden_width}-{num_hidden_layers}"
@@ -73,6 +81,7 @@ class CI_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))
 
 
+# Configurations reproduced for the Sec. 3.2 comparison tables.
 MODELS = [
     ("10-4-1", 10, 4, 1),
     ("10-7-1", 10, 7, 1),
@@ -88,8 +97,12 @@ def _get_model_config(model_size: str) -> tuple[str, int, int, int]:
     raise ValueError(f"Unknown model_size='{model_size}'. Valid values: {valid}")
 
 
-def run(mode="train", backend="sim:ascella", model_size="10-4-1"):
-    """Run DEE Classical-Interferometer models and write summary CSV."""
+def run(
+    mode="train",
+    backend="sim:ascella",
+    model_size: str | None = None,
+):
+    """Train or evaluate the Sec. 3.2 hybrid Merlin models."""
     seed_everything(0)
 
     ckpt_dir = "HQPINN/models/DEE"
@@ -98,7 +111,8 @@ def run(mode="train", backend="sim:ascella", model_size="10-4-1"):
     if mode == "train":
         print("=== TRAINING MODE ===")
         summary_csv = "HQPINN/results/DEE/dee_summary.csv"
-        for label, width, layers, n_photons in MODELS:
+        models = [_get_model_config(model_size)] if model_size is not None else MODELS
+        for label, width, layers, n_photons in models:
             seed_everything(0)
             print(
                 f"\nTraining DEE-HY-M model: {label} (width={width}, layers={layers}, {n_photons} photons)"
@@ -236,7 +250,7 @@ def run(mode="train", backend="sim:ascella", model_size="10-4-1"):
             print()
 
     elif mode == "run":
-        label, width, layers, n_photons = _get_model_config(model_size)
+        label, width, layers, n_photons = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"dee_hy_m_{label}"
         run_density_inference_mode(
             mode="run",
@@ -255,7 +269,7 @@ def run(mode="train", backend="sim:ascella", model_size="10-4-1"):
         )
 
     elif mode == "remote":
-        label, width, layers, n_photons = _get_model_config(model_size)
+        label, width, layers, n_photons = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"dee_hy_m_{label}"
         run_density_inference_mode(
             mode="remote",

@@ -1,5 +1,9 @@
-# see_hy_m.py
-# Classical–Interferometer PINN
+"""
+SEE hybrid classical-interferometer wrapper (paper Sec. 3.1).
+
+This version pairs a classical MLP branch with a Merlin interferometer branch,
+then fuses both outputs into the smooth Euler primitive variables.
+"""
 
 import os
 from datetime import datetime
@@ -38,8 +42,7 @@ from ..layer_merlin import make_interf_qlayer, BranchMerlin
 
 class CI_PINN(nn.Module):
     """
-    Classical-Interferometer PINN with one classical branch and one quantum branch.
-    The quantum branch is a MerLin interferometer with independent parameters.
+    Hybrid SEE model with one classical branch and one Merlin branch.
     """
 
     def __init__(
@@ -51,7 +54,8 @@ class CI_PINN(nn.Module):
     ) -> None:
         super().__init__()
 
-        # Two parallel classical branches: each (x,t) -> (rho,u,p)
+        # The branch pair follows the HQPINN hybrid pattern: same input, two
+        # independent representations, one learned fusion operator.
         self.branch1 = BranchPyTorch(
             in_features=2,
             out_features=3,
@@ -64,6 +68,7 @@ class CI_PINN(nn.Module):
             processor=processor,
             feature_map_kind="see",
         )
+        # The final linear map is the fusion step highlighted in the paper.
         self.fusion = nn.Linear(6, 3, dtype=DTYPE)
 
         # Human-readable size label, e.g. "10-4"
@@ -76,6 +81,7 @@ class CI_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))
 
 
+# Configurations reproduced for the Sec. 3.1 comparison tables.
 MODELS = [
     ("10-4-2", 10, 4, 2),
     ("10-7-2", 10, 7, 2),
@@ -116,7 +122,7 @@ def run(
     n_layers: int | None = None,
     n_photons: int | None = None,
 ):
-    """Run SEE Classical-Interferometer models and write summary CSV."""
+    """Train or evaluate the Sec. 3.1 hybrid Merlin models."""
     seed_everything(0)
 
     ckpt_dir = "HQPINN/models/SEE"

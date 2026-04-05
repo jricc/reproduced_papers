@@ -1,5 +1,9 @@
-# taf_qq_m.py
-# Interferometer–Interferometer PINN for TAF (Sec. 3.3)
+"""
+TAF interferometer-interferometer wrapper (paper Sec. 3.3 quantum-quantum case).
+
+Both branches are Merlin interferometer models, and the learned fusion layer
+maps their outputs to the primitive variables of the aerofoil flow.
+"""
 
 import os
 from datetime import datetime
@@ -37,11 +41,13 @@ from .core_taf import (
 
 
 class II_PINN(nn.Module):
-    """Interferometer-Interferometer TAF PINN with two independent quantum branches."""
+    """Quantum-quantum TAF baseline with two independent Merlin branches."""
 
     def __init__(self, n_photons: int, processor=None) -> None:
         super().__init__()
 
+        # Both branches use the same TAF feature map but maintain independent
+        # photonic parameters, preserving the QQ benchmark structure.
         self.branch1 = BranchMerlin(
             make_interf_qlayer(n_photons=n_photons),
             n_outputs=TAF_N_OUTPUTS,
@@ -54,6 +60,8 @@ class II_PINN(nn.Module):
             processor=processor,
             feature_map_kind="taf",
         )
+        # The final linear readout keeps the fusion stage aligned with the rest
+        # of the HQPINN family.
         self.fusion = nn.Linear(2 * TAF_N_OUTPUTS, TAF_N_OUTPUTS, dtype=DTYPE)
 
     def forward(self, xy: torch.Tensor) -> torch.Tensor:
@@ -63,6 +71,7 @@ class II_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))
 
 
+# Configurations reproduced for the Sec. 3.3 comparison tables.
 MODELS = [
     ("1", 1),
     ("2", 2),
@@ -73,8 +82,12 @@ MODELS = [
 ]
 
 
-def run(mode="train", backend="sim:ascella", n_photons=2) -> None:
-    """Run TAF interferometer-interferometer models and write summary CSV."""
+def run(
+    mode="train",
+    backend="sim:ascella",
+    n_photons: int | None = None,
+) -> None:
+    """Train or evaluate the Sec. 3.3 quantum-quantum Merlin models."""
     seed_everything(0)
 
     data = load_training_sets()
@@ -86,8 +99,9 @@ def run(mode="train", backend="sim:ascella", n_photons=2) -> None:
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
     if mode == "train":
         summary_csv = "HQPINN/results/TAF/taf_summary.csv"
+        models = [(str(n_photons), int(n_photons))] if n_photons is not None else MODELS
 
-        for label, n_photons_sel in MODELS:
+        for label, n_photons_sel in models:
             seed_everything(0)
             print(f"\nTraining TAF-QQ-M model: {label} photons")
 
@@ -220,6 +234,8 @@ def run(mode="train", backend="sim:ascella", n_photons=2) -> None:
             print()
 
     elif mode == "run":
+        if n_photons is None:
+            n_photons = 2
         case_prefix = f"taf_qq_m_{n_photons}"
         run_density_inference_mode(
             mode="run",
@@ -235,6 +251,8 @@ def run(mode="train", backend="sim:ascella", n_photons=2) -> None:
         )
 
     elif mode == "remote":
+        if n_photons is None:
+            n_photons = 2
         case_prefix = f"taf_qq_m_{n_photons}"
         run_density_inference_mode(
             mode="remote",

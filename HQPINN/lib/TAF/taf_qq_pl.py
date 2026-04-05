@@ -1,5 +1,9 @@
-# taf_qq_pl.py
-# PennyLane–PennyLane PINN for TAF (Sec. 3.3)
+"""
+TAF PennyLane-PennyLane wrapper (paper Sec. 3.3 quantum-quantum baseline).
+
+Both branches are independent gate-model quantum circuits, and the learned
+fusion layer maps their outputs to the primitive variables of the aerofoil flow.
+"""
 
 import os
 from datetime import datetime
@@ -42,7 +46,7 @@ from .core_taf import (
 
 
 class PP_PINN(nn.Module):
-    """PennyLane-PennyLane TAF PINN with two independent quantum branches."""
+    """Quantum-quantum TAF baseline with two independent PennyLane branches."""
 
     def __init__(
         self,
@@ -62,6 +66,8 @@ class PP_PINN(nn.Module):
             n_layers=q_layers, n_qubits=TAF_N_OUTPUTS
         )
 
+        # Both branches use the same normalized TAF encoding but keep independent
+        # trainable quantum parameters.
         self.branch1 = BranchPennylane(
             qblock_multi_1,
             feature_map=taf_feature_map,
@@ -77,7 +83,8 @@ class PP_PINN(nn.Module):
             n_qubits=TAF_N_OUTPUTS,
         )
 
-        # Two branches of TAF_N_OUTPUTS quantum outputs each.
+        # Fusion is linear so the comparison isolates the branch backend rather
+        # than adding a more expressive classical head.
         self.fusion = nn.Linear(2 * TAF_N_OUTPUTS, TAF_N_OUTPUTS, dtype=DTYPE)
         self.size_label = f"{q_layers}"
 
@@ -87,6 +94,7 @@ class PP_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))  # [N, TAF_N_OUTPUTS]
 
 
+# Configurations reproduced for the Sec. 3.3 comparison tables.
 MODELS = [
     ("2", 2),
     ("4", 4),
@@ -102,7 +110,11 @@ def _get_model_config(model_size: str) -> tuple[str, int]:
     raise ValueError(f"Unknown model_size='{model_size}'. Valid values: {valid}")
 
 
-def run(mode="train", backend="sim:ascella", model_size="2") -> None:
+def run(
+    mode="train",
+    backend="sim:ascella",
+    model_size: str | None = None,
+) -> None:
     """Run TAF PennyLane-PennyLane models and write summary CSV."""
     seed_everything(0)
 
@@ -115,8 +127,9 @@ def run(mode="train", backend="sim:ascella", model_size="2") -> None:
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
     if mode == "train":
         summary_csv = "HQPINN/results/TAF/taf_summary.csv"
+        models = [_get_model_config(model_size)] if model_size is not None else MODELS
 
-        for label, q_layers in MODELS:
+        for label, q_layers in models:
             seed_everything(0)
             print(f"\nTraining TAF-QQ-PL model: {label} q_layers={q_layers}")
 
@@ -247,7 +260,7 @@ def run(mode="train", backend="sim:ascella", model_size="2") -> None:
             print()
 
     elif mode == "run":
-        label, q_layers = _get_model_config(model_size)
+        label, q_layers = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"taf_qq_pl_{label}"
         run_density_inference_mode(
             mode="run",
@@ -264,7 +277,7 @@ def run(mode="train", backend="sim:ascella", model_size="2") -> None:
         print(
             "Remote mode is not available for TAF-QQ-PL. Falling back to local run mode."
         )
-        label, q_layers = _get_model_config(model_size)
+        label, q_layers = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"taf_qq_pl_{label}"
         run_density_inference_mode(
             mode="run",

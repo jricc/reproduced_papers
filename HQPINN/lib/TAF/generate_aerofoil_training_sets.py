@@ -1,7 +1,7 @@
 """
 generate_aerofoil_training_sets.py
 
-Generates training datasets for the 2D transonic NACA0012 problem.
+Generate the geometric point clouds used by the Sec. 3.3 TAF benchmark.
 
 Outputs .npy files in TAF/NACA0012/:
   - X_in.npy            (inlet points)            shape (N_in, 2)
@@ -22,9 +22,9 @@ Dependencies:
 import numpy as np
 from pathlib import Path
 
-# ----------------------------
-# 0) Settings / parameters
-# ----------------------------
+# ============================================================
+# 0) Import benchmark geometry and sampling parameters
+# ============================================================
 try:
     # Package execution: python -m HQPINN.lib.TAF.generate_aerofoil_training_sets
     from ...config import (
@@ -78,37 +78,12 @@ except ImportError:
 rng = np.random.default_rng(0)
 
 
-# ---------------------------------------------------------
-# 1) NACA0012 thickness function
-# ---------------------------------------------------------
-# This function implements the standard NACA 4-digit
-# thickness formula for a symmetric airfoil.
-#
-# For NACA 0012:
-#   - "00" → symmetric (no camber)
-#   - "12" → 12% maximum thickness
-#
-# The classical formula is:
-#
-#   y_t(x) = 5 t [
-#       0.2969 √x
-#     - 0.1260 x
-#     - 0.3516 x²
-#     + 0.2843 x³
-#     - 0.1015 x⁴
-#   ]
-#
-# with:
-#   t = 0.12  (12% thickness)
-#   chord c = 1
-#
-# Since 5 * 0.12 = 0.6, we obtain the factor 0.6 below.
-#
-# IMPORTANT:
-#   x must be in [0, 1], i.e. normalized by the chord.
-#   The function returns the HALF-thickness:
-#       +y_t → upper surface (extrados)
-#       -y_t → lower surface (intrados)
+# ============================================================
+# 1) NACA0012 thickness law
+# ============================================================
+# This is the standard NACA 4-digit half-thickness formula for a symmetric
+# NACA0012 aerofoil. The code works in the normalized chord coordinate x/c, so
+# the output is the half-thickness y_t(x/c) before any physical scaling.
 def naca4_thickness(x):
     x = np.asarray(x)  # Ensure vectorized NumPy operations
 
@@ -121,25 +96,12 @@ def naca4_thickness(x):
     )
 
 
-# ---------------------------------------------------------
-# 2) NACA0012 surface generator (closed polygon)
-# ---------------------------------------------------------
-# This function builds the FULL airfoil boundary (wall points)
-# from the NACA0012 half-thickness distribution.
-#
-# Geometry convention:
-#   - Chord runs from chord_start (LE) to chord_end (TE)
-#   - Airfoil is symmetric about y = 0
-#   - Thickness function returns half-thickness y_t(x)
-#
-# The contour is built as:
-#   1) Upper surface  (extrados)  : LE → TE
-#   2) Lower surface  (intrados)  : TE → LE
-#
-# This produces a closed loop suitable for:
-#   - Wall boundary conditions
-#   - Normal computation
-#   - Interior masking
+# ============================================================
+# 2) Closed NACA0012 wall polygon
+# ============================================================
+# The upper surface is traced from leading edge to trailing edge and the lower
+# surface is traced back in reverse order. The resulting closed polygon is then
+# reused for wall normals and for excluding interior collocation points.
 def generate_naca0012_surface(
     n_points_along_chord=200, chord_start=None, chord_end=None
 ):
@@ -147,16 +109,13 @@ def generate_naca0012_surface(
         chord_start = TAF_CHORD_X0
     if chord_end is None:
         chord_end = TAF_CHORD_X1
-    # Local normalized chord coordinate (0 → 1)
-    # x_local is dimensionless (x/c), independent of physical scaling.
+    # Work first in the dimensionless chord coordinate x/c in [0, 1].
     x_local = np.linspace(0.0, 1.0, n_points_along_chord)
 
-    # Compute half-thickness distribution
+    # Evaluate the half-thickness law on the normalized chord.
     yt = naca4_thickness(x_local)
 
-    # Upper surface (extrados)
-    # Scale normalized coordinate to physical chord:
-    # x = chord_start + x_local * chord_length
+    # Scale the normalized coordinate back to the physical chord interval.
     chord_length = chord_end - chord_start
 
     xu = chord_start + x_local * chord_length
@@ -167,68 +126,56 @@ def generate_naca0012_surface(
     xl = chord_start + x_local[::-1] * chord_length
     yl = -yt[::-1]  # negative offset below camber line
 
-    # Build closed polygon
+    # Concatenate the two surfaces into one closed wall contour.
     xs = np.concatenate([xu, xl])
     ys = np.concatenate([yu, yl])
 
     return xs, ys
 
 
-# ---------------------------------------------------------
-# 2) Build airfoil wall points and outward normals
-# ---------------------------------------------------------
-# This block:
-#   1) Generates the airfoil boundary points (wall points)
-#   2) Computes outward unit normal vectors at each wall point
-#   3) Packs everything into (x, y, nx, ny)
-#
-# These are later used to impose the free-slip condition:
-#       u · n = 0
-# on the airfoil surface.
+# ============================================================
+# 3) Wall points and outward unit normals
+# ============================================================
+# These arrays support the impermeability condition used in the TAF loss:
+# the velocity must remain tangent to the wall, i.e. u.n = 0.
 
-# Generate closed airfoil contour:
-#   upper surface (LE → TE)
-#   lower surface (TE → LE)
-# We divide TAF_N_WALL by 2 because half the points go to each surface.
+# Split `TAF_N_WALL` evenly between upper and lower surfaces.
 Xw_x, Xw_y = generate_naca0012_surface(
     n_points_along_chord=TAF_N_WALL // 2,
     chord_start=TAF_CHORD_X0,
     chord_end=TAF_CHORD_X1,
 )
 
-# Stack coordinates into (x, y) pairs
-# Shape: (N_wall_points, 2)
+# Stack wall coordinates into the point cloud used by the boundary loss.
 X_wall = np.stack([Xw_x, Xw_y], axis=-1)
 
 
-# Compute outward unit normals along the airfoil boundary
 def compute_normals(xs, ys):
+    """Compute outward unit normals along the closed aerofoil polygon."""
 
-    # Compute numerical tangent vector along the curve
-    # This is derivative along the contour parameter (not ∂/∂x or ∂/∂y)
+    # Tangents are computed along the polygon parameter, not as partial
+    # derivatives with respect to the physical coordinates.
     dx = np.gradient(xs)
     dy = np.gradient(ys)
     tangents = np.stack([dx, dy], axis=-1)
 
-    # Rotate tangent by -90°:
-    # If t = (tx, ty), a perpendicular vector is (-ty, tx)
+    # Rotate each tangent by -90 degrees to obtain a candidate normal.
     normals = np.empty_like(tangents)
     normals[:, 0] = -tangents[:, 1]
     normals[:, 1] = tangents[:, 0]
 
-    # Normalize to unit length
+    # Normalize to unit length.
     norms = np.linalg.norm(normals, axis=1, keepdims=True)
     norms[norms == 0] = 1.0  # avoid division by zero
     normals /= norms
 
-    # Ensure normals point outward
-    # Compute centroid of the polygon
+    # Flip the orientation if the normal points toward the polygon centroid.
     centroid = np.array([np.mean(xs), np.mean(ys)])
 
-    # Vector from centroid to each boundary point
+    # Outward normals should align with the centroid-to-boundary vector.
     vecs = np.stack([xs - centroid[0], ys - centroid[1]], axis=-1)
 
-    # If dot product < 0, normal points inward → flip it
+    # A negative dot product indicates an inward normal.
     dotp = np.sum(vecs * normals, axis=1)
     flip_mask = dotp < 0
     normals[flip_mask] *= -1.0
@@ -239,25 +186,15 @@ def compute_normals(xs, ys):
 # Compute outward normals
 Xw_normals = compute_normals(Xw_x, Xw_y)
 
-# Final wall array:
-# Each row contains (x, y, nx, ny)
-# Used for enforcing: u * nx + v * ny = 0
+# Each row stores (x, y, nx, ny), exactly what the wall loss needs.
 X_wall_normals = np.concatenate([X_wall, Xw_normals], axis=1)
 
 
-# ---------------------------------------------------------
-# 3) Boundary sampling for the rectangular CFD domain
-# ---------------------------------------------------------
-# The computational domain is a rectangle:
-#   x ∈ [TAF_X_MIN, TAF_X_MAX]
-#   y ∈ [TAF_Y_MIN, TAF_Y_MAX]
-#
-# We discretize each of the four outer boundaries:
-#   - Left  boundary  → inlet  (X_in)
-#   - Right boundary  → outlet (X_out)
-#   - Top boundary    → X_top
-#   - Bottom boundary → X_bot
-#
+# ============================================================
+# 4) Outer rectangular domain boundaries
+# ============================================================
+# The Sec. 3.3 computational box is sampled independently on each side so the
+# training code can apply inlet, outlet, wall, and periodic terms separately.
 # NOTE:
 # These are NOT the airfoil surface points.
 # The airfoil wall points are generated separately.

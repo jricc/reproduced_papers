@@ -1,3 +1,5 @@
+"""Shared-runner adapter for the HQPINN reproduction package."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -13,6 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge user overrides into the shared-runner defaults."""
     merged = deepcopy(base)
     for key, value in override.items():
         if isinstance(merged.get(key), dict) and isinstance(value, dict):
@@ -23,6 +26,7 @@ def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, An
 
 
 def _load_json_object(path: Path) -> dict[str, Any]:
+    """Load a JSON file and require a top-level object."""
     with path.open(encoding="utf-8") as handle:
         payload = json.load(handle)
     if not isinstance(payload, dict):
@@ -31,6 +35,12 @@ def _load_json_object(path: Path) -> dict[str, Any]:
 
 
 def _resolve_config(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    """
+    Resolve the effective HQPINN config seen by the shared runner.
+
+    The merge order is: default config, optional config file, then inline
+    overrides supplied by the shared runner.
+    """
     inline_cfg = deepcopy(dict(cfg))
     config_path = inline_cfg.pop("config_path", None)
 
@@ -49,9 +59,11 @@ def train_and_evaluate(cfg: Mapping[str, Any], run_dir: str | Path) -> dict[str,
     Shared-runner entrypoint for HQPINN.
 
     This wrapper normalizes config loading for the shared runner and ensures
-    `run_dir` exists before delegating to benchmark code, which writes
-    checkpoints and result artifacts directly into the top-level `models/`
-    and `results/` folders.
+    `run_dir` exists before delegating to benchmark code.
+
+    The benchmark implementations still follow the paper-oriented repository
+    layout, where checkpoints and plots are written under top-level `models/`
+    and `results/` folders grouped by benchmark family.
     """
     resolved_run_dir = Path(run_dir).resolve()
     resolved_run_dir.mkdir(parents=True, exist_ok=True)

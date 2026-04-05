@@ -1,4 +1,11 @@
-# core_dee.py
+"""
+Core losses and evaluation utilities for the discontinuous Euler benchmark.
+
+This module implements the Sec. 3.2 problem where density contains a moving
+discontinuity while velocity and pressure remain constant. The implementation
+therefore pays special attention to how the front location enters the feature
+map, the exact solution, and the boundary handling.
+"""
 
 import os
 import csv
@@ -63,7 +70,7 @@ DEE_SUMMARY_COLUMNS = [
 
 
 def partial_derivative(y: torch.Tensor, x: torch.Tensor, index: int) -> torch.Tensor:
-    """Compute dy/dx_index where x has shape [N, 2] = [x, t]."""
+    """Differentiate a scalar field with respect to x or t on a batched grid."""
     grads = torch.autograd.grad(
         outputs=y,
         inputs=x,
@@ -75,7 +82,7 @@ def partial_derivative(y: torch.Tensor, x: torch.Tensor, index: int) -> torch.Te
 
 
 def sample_ic_points():
-    """Sample DEE initial-condition points on t=DEE_T_MIN."""
+    """Sample the Sec. 3.2 initial line, where the density jump is prescribed."""
     x_ic = torch.rand(DEE_N_IC, 1, dtype=DTYPE, device=DEVICE)
     x_ic = DEE_X_MIN + (DEE_X_MAX - DEE_X_MIN) * x_ic
     t_ic = torch.full_like(x_ic, DEE_T_MIN)
@@ -83,7 +90,7 @@ def sample_ic_points():
 
 
 def sample_bc_points():
-    """Sample DEE boundary points at x=DEE_X_MIN and x=DEE_X_MAX."""
+    """Sample left/right boundary points for the DEE benchmark domain."""
     t_bc = torch.rand(DEE_N_BC, 1, dtype=DTYPE, device=DEVICE)
     t_bc = DEE_T_MIN + (DEE_T_MAX - DEE_T_MIN) * t_bc
     x_left = torch.full_like(t_bc, DEE_X_MIN)
@@ -92,7 +99,7 @@ def sample_bc_points():
 
 
 def sample_collocation_points():
-    """Sample DEE collocation points in (x,t) domain."""
+    """Sample interior collocation points for the DEE physics residual."""
     x_f = torch.rand(DEE_N_F, 1, dtype=DTYPE, device=DEVICE)
     x_f = DEE_X_MIN + (DEE_X_MAX - DEE_X_MIN) * x_f
     t_f = torch.rand(DEE_N_F, 1, dtype=DTYPE, device=DEVICE)
@@ -102,10 +109,9 @@ def sample_collocation_points():
 
 def exact_rho(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
     """
-    Discontinuous density:
-      rho(x, t) = 1.4 if x < 0.5 + 0.1*t
-                  1.0 if x > 0.5 + 0.1*t
-                  undefined if x == 0.5 + 0.1*t
+    Exact density with a moving front x_f(t) = x0 + u*t.
+
+    The jump is aligned with the piecewise state described in Sec. 3.2.
     """
     front = DEE_X0 + DEE_U * t
     rho = torch.where(x <= front, DEE_RHO_L, DEE_RHO_R)
@@ -140,20 +146,15 @@ def euler_loss_batched(
     n_bc_batch: Optional[int] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Mini-batching
+    Estimate the Sec. 3.2 loss with optional mini-batching.
 
-    Optionally supports mini-batching. By default, all sampled points
-    are used each epoch (paper setting: 1000 F, 60 IC, 60 BC).
-    If batch sizes are provided, a random subset is selected, e.g.:
-
-        n_f_batch = 128     # F points
-        n_ic_batch = 25     # initial condition points
-        n_bc_batch = 25     # boundary points
+    In contrast to SEE, this function receives pre-sampled tensors from the
+    outer training loop. The repository therefore keeps one fixed draw of IC,
+    BC, and collocation points for the full training run, then optionally
+    sub-samples them at each epoch.
     """
 
-    # ==========================
-    # 1. Initial condition loss
-    # ==========================
+    # 1) Initial condition term. The density discontinuity is anchored here.
     N_ic = x_ic.size(0)
     if n_ic_batch is not None and n_ic_batch < N_ic:
         idx_ic = torch.randperm(N_ic)[:n_ic_batch]
@@ -174,9 +175,7 @@ def euler_loss_batched(
         + (p_ic - p_ic_exact) ** 2
     )
 
-    # ==========================
-    # 2. Dirichlet boundary loss
-    # ==========================
+    # 2) Boundary term on x_min and x_max.
     N_bc = x_left.size(0)
     if n_bc_batch is not None and n_bc_batch < N_bc:
         idx_bc = torch.randperm(N_bc)[:n_bc_batch]
@@ -199,18 +198,17 @@ def euler_loss_batched(
     p_left_exact = torch.full_like(x_left, DEE_P)
     p_right_exact = torch.full_like(x_right, DEE_P)
 
+    # Implementation choice: density is not enforced on the boundaries here.
+    # The moving discontinuity is instead learned from the initial condition and
+    # the PDE residual, while u and p remain clamped to their constant states.
     loss_bc = torch.mean(
-        # (rho_left - rho_left_exact) ** 2
-        # + (rho_right - rho_right_exact) ** 2
         +((u_left - u_left_exact) ** 2)
         + (u_right - u_right_exact) ** 2
         + (p_left - p_left_exact) ** 2
         + (p_right - p_right_exact) ** 2
     )
 
-    # ==========================
-    # 3. PDE residual loss (batched)
-    # ==========================
+    # 3) Physics term on interior collocation points.
     N_f = x_f.size(0)
 
     if n_f_batch is not None and n_f_batch < N_f:
@@ -225,6 +223,8 @@ def euler_loss_batched(
     U_f = model(X_f)  # [n_f_batch, 3]
     rho, u, p = U_f.split(1, dim=1)
 
+    # Convert primitive variables to the conservative form of the 1D Euler
+    # equations before differentiating the flux.
     e = p / ((GAMMA - 1.0) * rho)
     E = e + 0.5 * u**2
 
@@ -254,7 +254,7 @@ def euler_loss_batched(
 
 
 def evaluate_dee_errors(model, nx: int = 1000):
-    """Relative L2 errors computed at t = T."""
+    """Relative L2 errors at the final time, excluding invalid points if any."""
     t_final = DEE_T_MAX
     x = torch.linspace(DEE_X_MIN, DEE_X_MAX, nx, dtype=DTYPE, device=DEVICE)
     t = torch.full_like(x, t_final)
@@ -268,7 +268,8 @@ def evaluate_dee_errors(model, nx: int = 1000):
     rho_exact = exact_rho(x[:, None], t[:, None])
     p_exact = exact_p(x[:, None])
 
-    # PINN-style L2 error
+    # Report relative physical errors on density and pressure, as in the
+    # benchmark summary CSV.
     def rel_l2(pred, exact):
         valid = torch.isfinite(pred) & torch.isfinite(exact)
         if not torch.any(valid):
@@ -391,7 +392,13 @@ def train_dee(
     ] = euler_loss_batched,
     # ] = euler_loss,
 ) -> tuple[float, float, float, int]:
-    """Training loop for the Discontinuous Euler Equation PINN (classical-classical)."""
+    """
+    Train one DEE model and export the artifacts used for comparison.
+
+    The training samples are drawn once and reused. This makes the optimizer
+    history easier to compare across architectures in a problem where the
+    target contains a sharp moving discontinuity.
+    """
 
     os.makedirs(out_dir, exist_ok=True)
 
@@ -414,6 +421,8 @@ def train_dee(
     start = datetime.now()
 
     # Fixed training samples: draw once and reuse for all epochs.
+    # This reduces run-to-run variance caused by repeatedly resampling around
+    # the discontinuity location.
     x_ic_all, t_ic_all = sample_ic_points()
     x_left_all, x_right_all, t_bc_all = sample_bc_points()
     x_f_all, t_f_all = sample_collocation_points()
@@ -421,7 +430,7 @@ def train_dee(
     for epoch in range(n_epochs):
         optimizer.zero_grad()
 
-        # Compute the three loss components
+        # The paper objective is L = L_IC + L_BC + L_F for this benchmark.
         loss_ic, loss_bc, loss_f = loss_fn(
             model,
             x_ic_all,
@@ -437,7 +446,7 @@ def train_dee(
         loss.backward()
         optimizer.step()
 
-        # Logging every plot_every epochs
+        # Keep a sparse but readable training trace for later CSV summaries.
         if epoch % plot_every == 0:
             elapsed = (datetime.now() - start).total_seconds()
 
@@ -511,7 +520,7 @@ def train_dee(
         writer.writerow(["epoch", "elapsed (s)", "Loss", "IC", "BC", "F"])
         writer.writerows(rows)
 
-    # Final evaluation grid for PNG outputs
+    # Final dense grid used to compare the learned shock profile to the exact one.
     with torch.no_grad():
         nx, nt = DEE_NX_SAMPLES, DEE_NT_SAMPLES
         x = torch.linspace(DEE_X_MIN, DEE_X_MAX, nx, dtype=DTYPE, device=DEVICE)
@@ -522,20 +531,20 @@ def train_dee(
         U_pred = model(xt)
         rho_pred = U_pred[:, 0].reshape(nx, nt)
 
-        # Exact density
+        # Exact moving-front density used in the benchmark figures.
         rho_exact = exact_rho(X, T)  # [nx, nt]
 
-        # Error (still in Tensor)
+        # Keep tensor arithmetic until all autograd-free post-processing is done.
         rho_error = rho_pred - rho_exact  # Tensor [nx, nt]
 
-        # ---- Only now: convert everything to numpy for plotting ----
+        # Convert to NumPy only for the plotting backend.
         X_np = X.cpu().numpy()
         T_np = T.cpu().numpy()
         rho_pred_np = rho_pred.cpu().numpy()
         rho_exact_np = rho_exact.cpu().numpy()
         rho_err_np = rho_error.cpu().numpy()
 
-        # 1) Predicted density
+        # 1) Predicted density field.
         fig, ax = plt.subplots(figsize=(8, 5))  # 8x5 inches
         cs = ax.contourf(
             X_np, T_np, rho_pred_np, levels=50
@@ -548,7 +557,7 @@ def train_dee(
         fig.savefig(rho_pred_png_path, dpi=300)
         plt.close(fig)
 
-        # 2) Exact density
+        # 2) Exact density field.
         fig, ax = plt.subplots(figsize=(8, 5))
         cs = ax.contourf(X_np, T_np, rho_exact_np, levels=50)
         fig.colorbar(cs, ax=ax)
@@ -585,7 +594,6 @@ def train_dee(
     return final_loss, err_rho, err_p, n_params
 
 
-# Displaying of the result
 def save_density_plot(
     model: nn.Module,
     ckpt_dir: str,
@@ -594,13 +602,20 @@ def save_density_plot(
     run_id: str,
     backend: str,
 ) -> str:
+    """
+    Save the DEE density contour used in `run` and `remote` modes.
+
+    A 1D density slice is saved as well because the moving shock is easier to
+    inspect on a line plot than on a full contour.
+    """
 
     model.eval()
 
     with torch.no_grad():
         nx, nt = DEE_NX_SAMPLES, DEE_NT_SAMPLES
         if backend.lower() != "local":
-            # Remote backends create many cloud jobs; downsample for robustness.
+            # Remote photonic execution is expensive pointwise, so use a smaller
+            # visualization grid in that mode.
             orig_nx, orig_nt = nx, nt
             nx = min(nx, 30)
             nt = min(nt, 30)
@@ -667,7 +682,7 @@ def save_rho_slice_plot(
     backend: str,
     t_slice: float = 2.0,
 ) -> str:
-    """Save rho(x, t_slice) prediction (and exact profile) for DEE."""
+    """Save rho(x, t_slice) together with the exact moving-front profile."""
     model.eval()
     t_val = min(max(float(t_slice), DEE_T_MIN), DEE_T_MAX)
 

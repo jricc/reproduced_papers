@@ -1,5 +1,9 @@
-# dho_qq_mp.py
-# MerLin–MerLin PINN with two parallel quantum branches using MerLin QuantumLayer
+"""
+DHO Perceval-Perceval wrapper (Appendix A.2 quantum-quantum case).
+
+This is the photonic quantum-only baseline where both branches use the
+Perceval/Merlin stack before the scalar HQPINN fusion layer.
+"""
 
 import os
 from datetime import datetime
@@ -30,20 +34,16 @@ from ..layer_merlin import make_perceval_qlayer, BranchMerlin
 from ..layer_classical import LearnedScalarFusion
 
 
-# ============================================================
-#  MM_PINN model: two Perceval quantum branches
-# ============================================================
-
-
 class MM_PINN(nn.Module):
     """
-    Perceval–Perceval PINN with linear fusion to scalar output.
+    DHO quantum-quantum baseline with two Perceval-backed branches.
     """
 
     def __init__(self, processor=None) -> None:
         super().__init__()
 
-        # Two distinct quantum branches with independent parameters
+        # Both branches are independent quantum surrogates so the only shared
+        # component is the final fusion map to u(t).
         self.branch1 = BranchMerlin(
             make_perceval_qlayer(),
             processor=processor,
@@ -54,6 +54,8 @@ class MM_PINN(nn.Module):
             processor=processor,
             feature_map_kind="dho",
         )
+        # Scalar fusion preserves the same readout structure as the other DHO
+        # baselines and hybrid variants.
         self.fusion = LearnedScalarFusion()
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
@@ -83,7 +85,7 @@ def plot_model_prediction(
 
 
 def run(mode="train", backend="sim:ascella") -> None:
-    """Run the Perceval–Perceval DHO PINN experiment."""
+    """Train or evaluate the DHO quantum-quantum Perceval baseline."""
     seed_everything(0)
     ckpt_dir = "HQPINN/models/DHO"
     case_prefix = "dho_qq_mp"

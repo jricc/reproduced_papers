@@ -1,5 +1,9 @@
-# dho_cc.py
-# Classical–Classical PINN with two parallel MLP branches
+"""
+DHO classical-classical wrapper (Appendix A.2 baseline).
+
+Both branches are classical MLPs. The final scalar readout is the learned
+fusion operator of the HQPINN architecture, specialized here to u(t).
+"""
 
 import os
 from datetime import datetime
@@ -39,8 +43,10 @@ from ..layer_classical import DHOBranchPyTorch
 
 class CC_PINN(nn.Module):
     """
-    Classical–Classical PINN with two parallel MLP branches
-    and a linear fusion readout to a scalar u(t).
+    Two-branch classical baseline for the damped oscillator benchmark.
+
+    Each branch produces a latent feature vector from t, and the final linear
+    layer learns how both surrogates should be combined into u(t).
     """
 
     def __init__(
@@ -50,6 +56,8 @@ class CC_PINN(nn.Module):
         hidden_width: int = DHO_HIDDEN_WIDTH,
     ) -> None:
         super().__init__()
+        # Both branches see the same coordinate t but learn independent latent
+        # representations before the shared fusion step.
         self.branch1 = DHOBranchPyTorch(
             out_features=3,
             num_hidden_layers=num_hidden_layers,
@@ -60,6 +68,8 @@ class CC_PINN(nn.Module):
             num_hidden_layers=num_hidden_layers,
             hidden_width=hidden_width,
         )
+        # The fusion layer is learned rather than fixed, matching the paper's
+        # branch-combination strategy.
         self.fusion = nn.Linear(6, 1, dtype=DTYPE)
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
@@ -100,7 +110,7 @@ def run(
     n_nodes: int = DHO_HIDDEN_WIDTH,
     force_retrain: bool = False,
 ):
-    """Run the Classical–Classical DHO PINN experiment."""
+    """Train or evaluate the Appendix A.2 classical-classical reference model."""
     seed_everything(0)
     ckpt_dir = "HQPINN/models/DHO"
     case_prefix = _case_prefix(n_layers, n_nodes)

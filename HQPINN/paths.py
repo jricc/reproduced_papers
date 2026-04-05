@@ -1,3 +1,5 @@
+"""Project-level path helpers for benchmark-specific models and results."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,6 +12,12 @@ KNOWN_BENCHMARKS = {"DHO", "SEE", "DEE", "TAF"}
 
 
 def results_dir_for_model_dir(model_dir: str | Path) -> str:
+    """
+    Map a benchmark checkpoint directory to its corresponding results folder.
+
+    The folder structure mirrors the paper's four benchmark families: DHO, SEE,
+    DEE, and TAF.
+    """
     model_path = Path(model_dir)
     benchmark = model_path.name.upper()
     if benchmark not in KNOWN_BENCHMARKS:

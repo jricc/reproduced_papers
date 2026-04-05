@@ -1,5 +1,9 @@
-# taf_cc.py
-# Classical–Classical PINN for TAF (Sec. 3.3)
+"""
+TAF classical-classical wrapper (paper Sec. 3.3 baseline).
+
+Both branches are classical MLPs. Their outputs are linearly fused into the
+primitive variables (rho, u, v, T) used by the transonic aerofoil losses.
+"""
 
 import os
 from datetime import datetime
@@ -39,7 +43,7 @@ from .core_taf import (
 
 
 class CC_PINN(nn.Module):
-    """Classical-classical TAF PINN with two parallel branches."""
+    """Two-branch classical baseline for the transonic aerofoil benchmark."""
 
     def __init__(
         self,
@@ -48,7 +52,8 @@ class CC_PINN(nn.Module):
     ) -> None:
         super().__init__()
 
-        # Two parallel classical branches: each (x,y) -> (rho,u,v,T)
+        # Both branches process the same spatial coordinates but learn
+        # independent latent approximations before the HQPINN fusion step.
         self.branch1 = BranchPyTorch(
             in_features=2,
             out_features=TAF_N_OUTPUTS,
@@ -61,6 +66,8 @@ class CC_PINN(nn.Module):
             num_hidden_layers=num_hidden_layers,
             hidden_width=hidden_width,
         )
+        # The learned fusion map returns the primitive variables consumed by the
+        # Sec. 3.3 boundary and PDE residual terms.
         self.fusion = nn.Linear(2 * TAF_N_OUTPUTS, TAF_N_OUTPUTS, dtype=DTYPE)
 
     def forward(self, xy: torch.Tensor) -> torch.Tensor:
@@ -70,6 +77,7 @@ class CC_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))
 
 
+# Configurations reproduced for the Sec. 3.3 comparison tables.
 MODELS = [
     ("40-4", 40, 4),
     ("40-7", 40, 7),
@@ -108,7 +116,7 @@ def run(
     n_nodes: int | None = None,
     n_layers: int | None = None,
 ) -> None:
-    """Run TAF classical-classical models and write summary CSV."""
+    """Train or evaluate the Sec. 3.3 classical-classical baseline."""
     seed_everything(0)
 
     data = load_training_sets()

@@ -1,5 +1,9 @@
-# taf_hy_m.py
-# Classical–Interferometer PINN for TAF (Sec. 3.3)
+"""
+TAF hybrid classical-interferometer wrapper (paper Sec. 3.3).
+
+This version pairs a classical MLP branch with a Merlin interferometer branch,
+then fuses both outputs into the primitive variables of the aerofoil flow.
+"""
 
 import os
 from datetime import datetime
@@ -40,7 +44,7 @@ from .core_taf import (
 
 
 class CI_PINN(nn.Module):
-    """Classical-Interferometer TAF PINN with independent branch parameters."""
+    """Hybrid TAF model with one classical branch and one Merlin branch."""
 
     def __init__(
         self,
@@ -51,6 +55,8 @@ class CI_PINN(nn.Module):
     ) -> None:
         super().__init__()
 
+        # The branch pair follows the HQPINN hybrid pattern for Sec. 3.3:
+        # same spatial input, two representations, one learned fusion map.
         self.branch1 = BranchPyTorch(
             in_features=2,
             out_features=TAF_N_OUTPUTS,
@@ -63,6 +69,8 @@ class CI_PINN(nn.Module):
             processor=processor,
             feature_map_kind="taf",
         )
+        # Fusion returns the primitive variables consumed by the wall, inlet,
+        # outlet, periodic, and PDE residual terms.
         self.fusion = nn.Linear(2 * TAF_N_OUTPUTS, TAF_N_OUTPUTS, dtype=DTYPE)
 
     def forward(self, xy: torch.Tensor) -> torch.Tensor:
@@ -72,6 +80,7 @@ class CI_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))
 
 
+# Configurations reproduced for the Sec. 3.3 comparison tables.
 MODELS = [
     ("40-4-2", 40, 4, 2),
     ("40-7-2", 40, 7, 2),
@@ -87,8 +96,12 @@ def _get_model_config(model_size: str) -> tuple[str, int, int, int]:
     raise ValueError(f"Unknown model_size='{model_size}'. Valid values: {valid}")
 
 
-def run(mode="train", backend="sim:ascella", model_size="40-4-2") -> None:
-    """Run TAF classical-interferometer models and write summary CSV."""
+def run(
+    mode="train",
+    backend="sim:ascella",
+    model_size: str | None = None,
+) -> None:
+    """Train or evaluate the Sec. 3.3 hybrid Merlin models."""
     seed_everything(0)
 
     data = load_training_sets()
@@ -100,8 +113,9 @@ def run(mode="train", backend="sim:ascella", model_size="40-4-2") -> None:
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
     if mode == "train":
         summary_csv = "HQPINN/results/TAF/taf_summary.csv"
+        models = [_get_model_config(model_size)] if model_size is not None else MODELS
 
-        for label, width, layers, n_photons in MODELS:
+        for label, width, layers, n_photons in models:
             seed_everything(0)
             print(
                 f"\nTraining TAF-HY-M model: {label} "
@@ -245,7 +259,7 @@ def run(mode="train", backend="sim:ascella", model_size="40-4-2") -> None:
             print()
 
     elif mode == "run":
-        label, width, layers, n_photons = _get_model_config(model_size)
+        label, width, layers, n_photons = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"taf_hy_m_{label}"
         run_density_inference_mode(
             mode="run",
@@ -264,7 +278,7 @@ def run(mode="train", backend="sim:ascella", model_size="40-4-2") -> None:
         )
 
     elif mode == "remote":
-        label, width, layers, n_photons = _get_model_config(model_size)
+        label, width, layers, n_photons = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"taf_hy_m_{label}"
         run_density_inference_mode(
             mode="remote",

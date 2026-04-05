@@ -1,5 +1,9 @@
-# dho_qq_pl.py
-# PennyLane–PennyLane PINN with two parallel quantum branches
+"""
+DHO PennyLane-PennyLane wrapper (Appendix A.2 quantum-quantum baseline).
+
+Both branches are independent variational quantum circuits, and the scalar
+fusion layer learns how to combine their outputs into the oscillator state.
+"""
 
 import os
 from datetime import datetime
@@ -39,8 +43,7 @@ from ..layer_classical import LearnedScalarFusion
 
 class PP_PINN(nn.Module):
     """
-    Physics-Informed model with two independent quantum branches
-    and a linear fusion to scalar output.
+    DHO quantum-quantum baseline with two PennyLane branches.
     """
 
     def __init__(
@@ -52,7 +55,8 @@ class PP_PINN(nn.Module):
         qblock1 = make_quantum_block(n_qubits=n_qubits)
         qblock2 = make_quantum_block(n_qubits=n_qubits)
 
-        # Two distinct branches => two independent parameter sets
+        # Each branch owns its own trainable circuit parameters so the benchmark
+        # measures the value of parallel quantum surrogates, not parameter sharing.
         self.branch1 = BranchPennylane(
             qblock1,
             feature_map=lambda t: dho_feature_map(t, n_qubits=n_qubits),
@@ -67,6 +71,8 @@ class PP_PINN(nn.Module):
             n_layers=N_LAYERS,
             n_qubits=n_qubits,
         )
+        # The only classical readout is the learned fusion map to the scalar
+        # physical observable u(t).
         self.fusion = LearnedScalarFusion()
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:

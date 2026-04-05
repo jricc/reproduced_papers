@@ -1,5 +1,9 @@
-# dee_cc.py
-# Classical–Classical PINN
+"""
+DEE classical-classical wrapper (paper Sec. 3.2 baseline).
+
+Both branches are classical MLPs. Their outputs are fused linearly into the
+primitive variables (rho, u, p) used by the discontinuous Euler loss.
+"""
 
 import os
 from datetime import datetime
@@ -36,7 +40,7 @@ from ..layer_classical import BranchPyTorch
 
 class CC_PINN(nn.Module):
     """
-    Classical-classical PINN with two parallel branches (cc-N-L).
+    Two-branch classical baseline for the discontinuous Euler benchmark.
     """
 
     def __init__(
@@ -46,7 +50,8 @@ class CC_PINN(nn.Module):
     ) -> None:
         super().__init__()
 
-        # Two parallel classical branches: each (x,t) -> (rho,u,p)
+        # Both branches process the same space-time coordinates but learn
+        # independent latent approximations before fusion.
         self.branch1 = BranchPyTorch(
             in_features=2,
             out_features=3,
@@ -59,6 +64,8 @@ class CC_PINN(nn.Module):
             num_hidden_layers=num_hidden_layers,
             hidden_width=hidden_width,
         )
+        # The learned fusion map keeps the readout consistent across CC, HY,
+        # and QQ variants of the Sec. 3.2 benchmark.
         self.fusion = nn.Linear(6, 3, dtype=DTYPE)
 
         # Human-readable size label, e.g. "10-4"
@@ -71,6 +78,7 @@ class CC_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))
 
 
+# Configurations reproduced for the Sec. 3.2 comparison tables.
 MODELS = [
     ("10-4", 10, 4),
     ("10-7", 10, 7),
@@ -109,7 +117,7 @@ def run(
     n_nodes: int | None = None,
     n_layers: int | None = None,
 ):
-    """Run all DEE classical–classical models and write summary CSV."""
+    """Train or evaluate the Sec. 3.2 classical-classical baseline."""
     seed_everything(0)
 
     ckpt_dir = "HQPINN/models/DEE"

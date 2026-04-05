@@ -1,3 +1,5 @@
+"""Utilities for normalizing dtype choices in runtime configuration."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -9,6 +11,8 @@ import torch
 
 @dataclass(frozen=True)
 class DtypeSpec:
+    """Canonical dtype description used by runtime config normalization."""
+
     label: str
     torch_dtype: torch.dtype
 
@@ -39,6 +43,7 @@ _CANONICAL_LABELS: dict[torch.dtype, str] = {
 
 
 def _normalize_label(label: str) -> str:
+    """Validate a string alias and return its canonical lookup key."""
     normalized = label.strip().lower()
     if normalized not in _DTYPE_ALIASES:
         supported = ", ".join(sorted(_DTYPE_ALIASES))
@@ -49,6 +54,7 @@ def _normalize_label(label: str) -> str:
 
 
 def coerce_dtype_spec(value: Any) -> DtypeSpec:
+    """Convert supported dtype representations to a validated `DtypeSpec`."""
     if isinstance(value, DtypeSpec):
         return value
     if isinstance(value, torch.dtype):
@@ -78,8 +84,10 @@ def coerce_dtype_spec(value: Any) -> DtypeSpec:
 
 
 def dtype_label(value: Any) -> str:
+    """Return the canonical string label for a dtype-like value."""
     return coerce_dtype_spec(value).label
 
 
 def dtype_torch(value: Any) -> torch.dtype:
+    """Return the `torch.dtype` corresponding to a dtype-like value."""
     return coerce_dtype_spec(value).torch_dtype

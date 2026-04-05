@@ -1,5 +1,9 @@
-# see_qq_m.py
-# Interferometer-Interferometer PINN for the damped oscillator using oscillator_core + merlin_quantum
+"""
+SEE interferometer-interferometer wrapper (paper Sec. 3.1 quantum-quantum case).
+
+Both branches are Merlin interferometer models, and the learned fusion layer
+maps their concatenated outputs to the smooth Euler variables.
+"""
 
 import os
 from datetime import datetime
@@ -35,17 +39,14 @@ from ..layer_merlin import make_interf_qlayer, BranchMerlin
 
 class II_PINN(nn.Module):
     """
-    Interferometer-Interferometer PINN:
-
-        u(t) = u_q1(t) + u_q2(t)
-
-    Each branch uses its own QuantumLayer instance → independent parameters.
+    Quantum-quantum SEE baseline with two independent Merlin branches.
     """
 
     def __init__(self, n_photons: int, processor=None) -> None:
         super().__init__()
 
-        # Two distinct quantum branches with independent parameters
+        # Both branches share the same SEE feature map but own independent
+        # photonic parameters, matching the paper's QQ setting.
         self.branch1 = BranchMerlin(
             make_interf_qlayer(n_photons=n_photons),
             n_outputs=3,
@@ -58,6 +59,8 @@ class II_PINN(nn.Module):
             processor=processor,
             feature_map_kind="see",
         )
+        # The final fusion map converts the two branch outputs into the primitive
+        # variables consumed by the SEE loss.
         self.fusion = nn.Linear(6, 3, dtype=DTYPE)
 
         # Human-readable size label ("1", "2", ..., "6")
@@ -70,6 +73,7 @@ class II_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))  # [N, 3]
 
 
+# Configurations reproduced for the Sec. 3.1 comparison tables.
 MODELS = [
     ("1", 1),
     ("2", 2),
@@ -85,7 +89,7 @@ def _resolve_model_config(n_photons: int) -> tuple[str, int]:
 
 
 def run(mode="train", backend="sim:ascella", n_photons: int | None = None):
-    """Run all SEE Interferometer-Interferometer models and write summary CSV."""
+    """Train or evaluate the Sec. 3.1 quantum-quantum Merlin models."""
     seed_everything(0)
 
     ckpt_dir = "HQPINN/models/SEE"

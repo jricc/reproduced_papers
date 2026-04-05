@@ -1,5 +1,9 @@
-# dee_hy_pl.py
-# Classical–PennyLane PINN
+"""
+DEE hybrid classical-PennyLane wrapper (paper Sec. 3.2).
+
+One branch is classical and one is a gate-model quantum circuit. Their outputs
+are fused into the primitive variables (rho, u, p) for the moving-front case.
+"""
 
 import os
 from datetime import datetime
@@ -43,7 +47,7 @@ from ..layer_classical import BranchPyTorch
 
 class CP_PINN(nn.Module):
     """
-    Classical–PennyLane PINN with one quantum branch and one classical MLP branch.
+    Hybrid DEE model with one PennyLane branch and one classical MLP branch.
     """
 
     def __init__(
@@ -61,6 +65,8 @@ class CP_PINN(nn.Module):
 
         qblock_multi_1 = make_quantum_block_multiout(n_layers=q_layers)
 
+        # The quantum branch uses the shock-aware DEE feature map, while the
+        # classical branch supplies the hybrid companion path.
         self.branch1 = BranchPennylane(
             qblock_multi_1,
             feature_map=dee_feature_map,
@@ -73,6 +79,8 @@ class CP_PINN(nn.Module):
             num_hidden_layers=num_hidden_layers,
             hidden_width=hidden_width,
         )
+        # Learned fusion preserves the same benchmark interface across all
+        # architecture families.
         self.fusion = nn.Linear(6, 3, dtype=DTYPE)
 
         self.size_label = f"{q_layers}"
@@ -84,6 +92,7 @@ class CP_PINN(nn.Module):
         return self.fusion(torch.cat([out1, out2], dim=1))  # [N, 3]
 
 
+# Configurations reproduced for the Sec. 3.2 comparison tables.
 MODELS = [
     ("10-4-2", 10, 4, 2),
     ("10-7-2", 10, 7, 2),
@@ -99,16 +108,21 @@ def _get_model_config(model_size: str) -> tuple[str, int, int, int]:
     raise ValueError(f"Unknown model_size='{model_size}'. Valid values: {valid}")
 
 
-def run(mode="train", backend="sim:ascella", model_size="10-4-2"):
-    """Run all DEE Classical–PennyLane models and write summary CSV."""
+def run(
+    mode="train",
+    backend="sim:ascella",
+    model_size: str | None = None,
+):
+    """Train or evaluate the Sec. 3.2 hybrid PennyLane models."""
     seed_everything(0)
 
     ckpt_dir = "HQPINN/models/DEE"
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
     if mode == "train":
         summary_csv = "HQPINN/results/DEE/dee_summary.csv"
+        models = [_get_model_config(model_size)] if model_size is not None else MODELS
 
-        for label, width, layers, q_layers in MODELS:
+        for label, width, layers, q_layers in models:
             seed_everything(0)
             print(f"\nTraining DEE-HY-PL model: {label} q_layers={q_layers}")
 
@@ -245,7 +259,7 @@ def run(mode="train", backend="sim:ascella", model_size="10-4-2"):
             print()
 
     elif mode == "run":
-        label, width, layers, q_layers = _get_model_config(model_size)
+        label, width, layers, q_layers = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"dee_hy_pl_{label}"
         run_density_inference_mode(
             mode="run",
@@ -266,7 +280,7 @@ def run(mode="train", backend="sim:ascella", model_size="10-4-2"):
         print(
             "Remote mode is not available for DEE-HY-PL. Falling back to local run mode."
         )
-        label, width, layers, q_layers = _get_model_config(model_size)
+        label, width, layers, q_layers = _get_model_config(model_size or MODELS[0][0])
         case_prefix = f"dee_hy_pl_{label}"
         run_density_inference_mode(
             mode="run",

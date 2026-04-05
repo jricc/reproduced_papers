@@ -95,10 +95,14 @@ def _make_quantum_block_with_measurement(
 
     if device == "lightning":
         dev = make_device_lightning(n_qubits=n_qubits)
-        diff_method = "adjoint"  # first-order gradients only
+        # Adjoint differentiation is efficient for the first-order spatial/temporal
+        # derivatives used by the Euler benchmarks.
+        diff_method = "adjoint"
     elif device == "default":
         dev = make_device_default(n_qubits=n_qubits)
-        diff_method = "backprop"  # supports higher-order derivatives
+        # DHO requires second derivatives with respect to time, so the default
+        # backprop-capable simulator is kept for that scalar-output setting.
+        diff_method = "backprop"
     else:
         raise ValueError(f"Unknown device '{device}'. Use 'default' or 'lightning'.")
 
@@ -180,13 +184,16 @@ class BranchPennylane(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Map input to features phi(x)
+        # The feature map implements the problem-specific encoding described in
+        # the paper before the trainable ansatz is applied.
         phi = self.feature_map(x)
         if phi.dim() != 2 or phi.size(1) != self.n_qubits:
             raise ValueError(
                 f"Feature map must return shape [N, {self.n_qubits}], got {tuple(phi.shape)}"
             )
 
+        # PennyLane QNodes are evaluated sample by sample here because each row
+        # carries its own encoded input angles.
         outputs = []
         for i in range(phi.size(0)):
             out_i = self.quantum_block(phi[i], self.theta)
@@ -210,6 +217,9 @@ def dho_feature_map(
 ) -> torch.Tensor:
     """
     Feature map used for the DHO setting in the paper.
+
+    The harmonic encoding k*pi*t lets a small quantum circuit represent several
+    temporal frequencies of the damped oscillator.
     """
     if n_qubits < 1:
         raise ValueError("n_qubits must be >= 1")
@@ -220,7 +230,7 @@ def dho_feature_map(
         t_flat = t
 
     scale = np.pi
-    # Generalizes the original [1, 2, 3] harmonics to any qubit count.
+    # Generalize the paper-style [pi*t, 2*pi*t, 3*pi*t] encoding to any width.
     phi = torch.stack(
         [k * scale * t_flat for k in range(1, n_qubits + 1)],
         dim=1,
@@ -258,7 +268,7 @@ def dee_feature_map(xt: torch.Tensor) -> torch.Tensor:
     Feature map used for DEE experiments.
 
     It uses the shock-relative coordinate x - (x0 + u*t), aligned with the DEE
-    setup where the front position is x_f(t) = x0 + u*t.
+    setup where the moving front is x_f(t) = x0 + u*t.
     """
     if xt.dim() != 2 or xt.size(1) != 2:
         raise ValueError(f"Expected input of shape [N, 2] for (x,t), got {xt.shape}")
@@ -304,7 +314,12 @@ def dee_feature_map(xt: torch.Tensor) -> torch.Tensor:
 
 
 def taf_feature_map(xy: torch.Tensor) -> torch.Tensor:
-    """TAF: encodage angulaire centré, normalisé, avec couplage modéré."""
+    """
+    Feature map for the TAF benchmark of Sec. 3.3.
+
+    The domain is recentered and rescaled before angle encoding so the four
+    output channels (rho, u, v, T) are not driven by excessively large phases.
+    """
     if xy.ndim != 2 or xy.shape[1] != 2:
         raise ValueError(
             f"Expected input of shape [N, 2] for (x,y), got {tuple(xy.shape)}"
@@ -313,11 +328,12 @@ def taf_feature_map(xy: torch.Tensor) -> torch.Tensor:
     x = xy[:, 0]
     y = xy[:, 1]
 
-    # Domaine recentré et ramené à une échelle ~[-1, 1].
+    # Recenter the Sec. 3.3 rectangle and scale both coordinates to O(1).
     xh = (x - 1.25) / 2.25
     yh = y / 2.25
 
-    # x et y restent lisibles ; x±y ajoutent un couplage sans sur-osciller.
+    # Keep x and y as directly interpretable channels, then add x-y and x+y
+    # to inject mild cross-coordinate coupling into the quantum encoder.
     phi = torch.stack(
         [
             torch.pi * xh,

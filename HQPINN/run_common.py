@@ -1,3 +1,5 @@
+"""Shared inference helpers reused by the paper-specific experiment wrappers."""
+
 import os
 from typing import Callable
 
@@ -14,6 +16,7 @@ def _resolve_checkpoint(
     ckpt_dir: str,
     case_prefix: str,
 ) -> str | None:
+    """Return the latest checkpoint matching one benchmark configuration."""
     ckpt_path = get_latest_checkpoint(ckpt_dir, case_prefix)
     if ckpt_path is None:
         return None
@@ -29,8 +32,12 @@ def _load_model_for_mode(
     warn_if_backend_ignored: bool = True,
     print_remote_header: bool = True,
 ) -> nn.Module:
-    # `run` always loads a local model instance.
-    # `remote` rebuilds the model with a Merlin remote processor attached.
+    """
+    Rebuild a model either for local inference (`run`) or remote Merlin execution.
+
+    The numerical weights always come from a local checkpoint. What changes
+    between modes is the execution backend of the photonic branch.
+    """
     if mode == "run":
         if warn_if_backend_ignored and backend.lower() != "local":
             print(f"Backend '{backend}' is not used in run mode; use mode='remote'.")
@@ -70,7 +77,10 @@ def run_density_inference_mode(
     save_plot_fn: Callable[..., str],
 ) -> str | None:
     """
-    Shared helper for SEE/DEE inference modes (`run` and `remote`).
+    Shared helper for the Euler-density benchmarks SEE/DEE/TAF.
+
+    These experiments all expose a density-oriented visualization in inference
+    mode, even though the underlying models may predict additional variables.
     """
     ckpt_path = _resolve_checkpoint(ckpt_dir=ckpt_dir, case_prefix=case_prefix)
     if ckpt_path is None:
@@ -85,7 +95,8 @@ def run_density_inference_mode(
         print_remote_header=True,
     )
 
-    # Delegate plotting to the caller so each domain keeps its own plot implementation.
+    # Plotting stays benchmark-specific because each paper case uses a different
+    # evaluation grid and different physical fields.
     png_path = save_plot_fn(
         model=model,
         ckpt_dir=ckpt_dir,
@@ -111,6 +122,9 @@ def run_series_inference_mode(
 ) -> None:
     """
     Shared helper for DHO inference modes (`run` and `remote`).
+
+    DHO is the only benchmark that evaluates a 1D time series instead of a
+    space-time or spatial field.
     """
     ckpt_path = _resolve_checkpoint(ckpt_dir=ckpt_dir, case_prefix=case_prefix)
     if ckpt_path is None:
@@ -131,7 +145,8 @@ def run_series_inference_mode(
     with torch.no_grad():
         t = make_time_grid()
         u_pred = model(t)
-        # Normalize output to a flat NumPy vector for downstream plotting.
+        # Normalize output to a flat NumPy vector so all DHO plotting backends
+        # consume the same representation regardless of branch type.
         if isinstance(u_pred, torch.Tensor):
             u_pred = u_pred.detach().cpu().numpy().flatten()
         else:

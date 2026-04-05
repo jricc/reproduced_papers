@@ -1,5 +1,9 @@
 """
 Core training utilities for TAF (2D transonic aerofoil flow, Sec. 3.3).
+
+The TAF benchmark is the most demanding case of the paper: a steady 2D Euler
+system around a NACA0012 aerofoil, with multiple boundary terms, collocation
+sets generated offline, and an Adam-to-L-BFGS optimization schedule.
 """
 
 import csv
@@ -69,7 +73,7 @@ TAF_SUMMARY_COLUMNS = [
 
 
 def load_points(path: str) -> torch.Tensor:
-    """Load .npy points on configured dtype/device."""
+    """Load one precomputed geometric or collocation point cloud."""
     candidate = Path(path)
     if not candidate.is_absolute():
         candidate = DATA_DIR / candidate
@@ -78,6 +82,13 @@ def load_points(path: str) -> torch.Tensor:
 
 
 def load_training_sets() -> dict[str, torch.Tensor]:
+    """
+    Load the pre-generated TAF point sets used by Sec. 3.3 training.
+
+    `X_data_int` is concatenated back into `X_f` so interior geometry-aware
+    samples contribute to the same PDE residual term as the generic
+    collocation points.
+    """
     # No CFD field targets are available in-repo for TAF. We therefore
     # re-inject the generated interior points (`X_data_int`) into the
     # training collocation set used by the optimization loop.
@@ -195,7 +206,7 @@ def append_summary_row(summary_path: str, row: dict[str, object]) -> bool:
 def unpack_primitives(
     raw: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Map network output to (rho, u, v, T)."""
+    """Map model outputs to the primitive variables (rho, u, v, T)."""
     # TAF networks always output 4 channels in this order:
     # density, x-velocity, y-velocity, temperature.
     # Keeping this helper centralizes the convention in one place.
@@ -207,7 +218,7 @@ def unpack_primitives(
 
 
 def grad_scalar(y: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-    """Return gradient of scalar field y(N,1) wrt x(N,2) -> (N,2)."""
+    """Return the spatial gradient of a scalar field on the TAF domain."""
     assert y.ndim == 2 and y.shape[1] == 1
     grads = torch.autograd.grad(
         outputs=y,
@@ -324,7 +335,7 @@ mse = nn.MSELoss()
 
 
 def _sample_rows(x: torch.Tensor, batch_size: Optional[int]) -> torch.Tensor:
-    """Randomly sample rows from x. If batch_size is None, keep full tensor."""
+    """Randomly sub-sample one point set while preserving tensor semantics."""
     if batch_size is None or batch_size >= x.shape[0]:
         return x
     idx = torch.randperm(x.shape[0], device=x.device)[:batch_size]
@@ -334,7 +345,7 @@ def _sample_rows(x: torch.Tensor, batch_size: Optional[int]) -> torch.Tensor:
 def _sample_pair_rows(
     x1: torch.Tensor, x2: torch.Tensor, batch_size: Optional[int]
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Sample aligned rows from two tensors with same first dimension."""
+    """Sample aligned rows from paired tensors such as wall points and normals."""
     if x1.shape[0] != x2.shape[0]:
         raise ValueError(
             f"Paired tensors must have same size on dim 0, got {x1.shape[0]} and {x2.shape[0]}"
@@ -362,13 +373,8 @@ def loss_boundary_terms(
     - wall no-penetration u.n = 0
     - top/bottom periodicity
 
-    Returns
-    -------
-    L_bc : total boundary loss
-    L_in : inlet loss
-    L_out : outlet loss
-    L_wall : wall slip loss
-    L_per : periodic side loss
+    Returns the four components separately so the training loop can log how the
+    total boundary loss is distributed across physical constraints.
     """
     X_in = data["X_in"]
     X_out = data["X_out"]
@@ -382,12 +388,14 @@ def loss_boundary_terms(
     X_wall, X_wall_normals = _sample_pair_rows(X_wall, X_wall_normals, n_wall_batch)
     X_top, X_bot = _sample_pair_rows(X_top, X_bot, n_per_batch)
 
-    # Reference scales from the paper inlet state
+    # Normalize all boundary terms by inlet scales so rho, velocity, and
+    # temperature errors contribute on comparable magnitudes.
     rho_ref = U_in[0]
     u_ref = U_in[1]
     T_ref = U_in[3]
 
-    # v_in = 0 in the paper, so use u_ref as the velocity scale for v
+    # The inlet y-velocity is zero. Reuse u_ref as the characteristic velocity
+    # scale so the normalization remains well defined.
     v_ref = u_ref
 
     # Sec. 3.3 inlet BC, applied on `X_in` (left boundary of the box domain):
@@ -411,33 +419,19 @@ def loss_boundary_terms(
     L_in = mse(U_pred_in_norm, U_in_norm)
 
     # Sec. 3.3 outlet BC, applied on `X_out` (right boundary):
-    # Keep outputs as (rho,u,v,T), but interpret P_out = 0 as zero gauge pressure.
-    # Reference absolute pressure from inlet:
-    #
-    #   p_ref = rho_in * R * T_in
-    #
-    # Predicted absolute pressure:
-    #
-    #   p_abs = rho * R * T
-    #
-    # Relative/gauge-like pressure:
-    #
-    #   p_rel = (p_abs - p_ref) / p_ref
-    #
-    # Paper says P_out = 0, interpreted as p_rel = 0.
+    # the code interprets the reported P_out = 0 as zero gauge pressure with
+    # respect to the inlet reference state.
     pred_out = model(X_out)
     rho_o, _, _, T_o = unpack_primitives(pred_out)
 
-    # Reference absolute pressure from inlet state
-    # Uin = (ρin, uin, vin, Tin) = (1.225, 272.15, 0.0, 288.15),
-    # p_ref = 101306
+    # Reference absolute pressure from the inlet primitive state.
     p_ref = rho_ref * TAF_R_GAS * T_ref
 
-    # Relative / gauge-like pressure normalized by reference pressure
+    # Convert the predicted absolute pressure to a normalized gauge-like value.
     p_abs_pred = rho_o * TAF_R_GAS * T_o
     p_rel_pred = (p_abs_pred - p_ref) / p_ref
 
-    # Paper says P_out = 0; interpreted as zero gauge pressure
+    # Zero target means atmospheric outlet pressure relative to the inlet state.
     p_rel_target = torch.zeros_like(p_rel_pred)
 
     L_out = mse(p_rel_pred, p_rel_target)
@@ -452,8 +446,8 @@ def loss_boundary_terms(
     u_dot_n_norm = u_dot_n / u_ref
     L_wall = mse(u_dot_n_norm, torch.zeros_like(u_dot_n_norm))
 
-    # Sec. 3.3 far-field closure in this repo: periodic pairing of
-    # top and bottom boundaries (`X_top`, `X_bot`) for all primitives.
+    # Repository choice for far-field closure: pair top and bottom boundaries
+    # periodically across all primitive variables.
     pred_top = model(X_top)
     pred_bot = model(X_bot)
     rho_t, u_t, v_t, T_t = unpack_primitives(pred_top)
@@ -478,6 +472,7 @@ def loss_boundary(
     n_wall_batch: Optional[int] = None,
     n_per_batch: Optional[int] = None,
 ) -> torch.Tensor:
+    """Return the scalar boundary loss L_bc = L_in + L_out + L_wall + L_per."""
     L_in, L_out, L_wall, L_per = loss_boundary_terms(
         model,
         data,
@@ -496,12 +491,16 @@ def loss_pde(
     eps_lambda: float = TAF_EPSILON_LAMBDA,
     n_f_batch: Optional[int] = 1024,
 ) -> torch.Tensor:
-    """Weighted PDE residual term."""
+    """
+    Weighted PDE residual term for the steady 2D Euler equations.
+
+    The mini-batch is drawn from the pre-generated collocation cloud, then the
+    shock-adaptive weight lambda is applied pointwise before averaging.
+    """
     X_f = _sample_rows(data["X_f"], n_f_batch)
     R, _, _, _, _ = euler_residual(model, X_f)
-    # Same collocation points, different role:
-    # - R: Euler residuals to minimize
-    # - lam: shock-aware per-point weight
+    # The same collocation points provide both the residual magnitude and the
+    # local compression indicator used in the shock-aware weight.
     lam = compute_lambda(model, X_f, eps=eps_lambda)
     R2 = torch.sum(R**2, dim=1, keepdim=True)
     return torch.mean(lam * R2)
@@ -519,7 +518,7 @@ def log_training_info(
     loss_per: torch.Tensor,
     rows: list[list[str]],
 ) -> None:
-    """Console log + in-memory CSV row append."""
+    """Console log plus one in-memory CSV row for the TAF training trace."""
     print(
         f"Step {epoch:6d} | elapsed={elapsed:.2f}s | "
         f"L={loss.item():.3e} | "
@@ -564,7 +563,13 @@ def train_taf(
     n_wall_batch: Optional[int] = 128,
     n_per_batch: Optional[int] = None,
 ) -> Tuple[float, float, float, int]:
-    """Train TAF model and return summary metrics."""
+    """
+    Train one TAF model and return the summary metrics written to CSV files.
+
+    The optimization schedule matches the standard PINN recipe used in the
+    paper reproduction here: stochastic Adam steps first, then deterministic
+    full-batch L-BFGS refinement.
+    """
     os.makedirs(out_dir, exist_ok=True)
 
     csv_path = os.path.join(out_dir, f"taf-{model_label}_{run_id}.csv")
@@ -576,8 +581,7 @@ def train_taf(
     for epoch in range(1, n_epochs + 1):
         optimizer.zero_grad()
 
-        # Paper objective:
-        #   L = L_bc + L_f
+        # Sec. 3.3 objective: total loss is the sum of boundary and PDE terms.
         L_in, L_out, L_wall, L_per = loss_boundary_terms(
             model,
             data,
@@ -621,7 +625,8 @@ def train_taf(
 
         def closure():
             optimizer_lbfgs.zero_grad()
-            # Use full-batch in L-BFGS closure for deterministic updates.
+            # Use full-batch losses in the closure so quasi-Newton updates are
+            # deterministic and consistent with the approximated Hessian.
             L_bc_c = loss_boundary(model, data, U_in)
             L_f_c = loss_pde(model, data, eps_lambda=eps_lambda, n_f_batch=None)
             L_total_c = L_bc_c + L_f_c
@@ -630,8 +635,8 @@ def train_taf(
 
         optimizer_lbfgs.step(closure)
 
-    # Do not use torch.no_grad() here: PDE loss relies on autograd
-    # to evaluate spatial derivatives in euler_residual().
+    # Do not disable autograd here: the final PDE residual still differentiates
+    # the model output with respect to spatial coordinates.
     L_in, L_out, L_wall, L_per = loss_boundary_terms(model, data, U_in)
     L_bc = L_in + L_out + L_wall + L_per
     L_f = loss_pde(model, data, eps_lambda=eps_lambda, n_f_batch=None)
@@ -687,7 +692,12 @@ def save_density_plot(
     run_id: str,
     backend: str,
 ) -> str:
-    """Save TAF primitive-field scatter plots for inference."""
+    """
+    Save TAF primitive-field scatter plots for inference.
+
+    Only sparse interior points are visualized because no dense CFD reference
+    field is shipped with the repository.
+    """
     del plot_label  # TAF plots do not currently display a model-variant label.
     model.eval()
 
@@ -696,7 +706,8 @@ def save_density_plot(
 
     with torch.no_grad():
         if backend.lower() != "local":
-            # Remote execution can be expensive with large evaluation grids.
+            # Remote photonic execution is pointwise and therefore much more
+            # expensive than local evaluation on a full point cloud.
             max_points = 400
             if X_data.shape[0] > max_points:
                 step = max(1, X_data.shape[0] // max_points)
@@ -723,6 +734,7 @@ def save_density_plot(
         kind: str,
         kind_label: str,
     ) -> str:
+        """Render one primitive variable on the available interior samples."""
         png_path = os.path.join(
             results_dir,
             f"{case_prefix}_{backend}_{run_id}_{field_key}_{kind}.png",

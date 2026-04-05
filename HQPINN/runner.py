@@ -22,6 +22,10 @@ from .runtime import (
 )
 
 
+# Canonical names keep the paper's architecture families visible in configs:
+# CC = classical-classical, HY = hybrid, QQ = quantum-quantum.
+# Legacy aliases such as CP/CI/PP/II are still accepted for backward
+# compatibility with older notebooks and config files.
 EXPERIMENT_ALIASES: dict[str, str] = {
     "dho-cc": "dho-cc",
     "dho-hy-pl": "dho-hy-pl",
@@ -67,10 +71,12 @@ EXPERIMENT_ALIASES: dict[str, str] = {
 
 
 def _canonical_experiment_name(experiment: str) -> str:
+    """Normalize historical experiment names to the current CLI vocabulary."""
     return EXPERIMENT_ALIASES.get(experiment, experiment)
 
 
 def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Merge config overrides recursively so defaults stay benchmark-specific."""
     merged = dict(base)
     for key, value in override.items():
         if isinstance(merged.get(key), dict) and isinstance(value, dict):
@@ -81,6 +87,7 @@ def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, An
 
 
 def _load_json(path: Path) -> dict[str, Any]:
+    """Load a JSON config file and require a top-level object."""
     with require_file(path, label="runtime config file").open(encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
@@ -89,6 +96,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def _load_config(config_path: str) -> dict[str, Any]:
+    """Resolve defaults plus one user-supplied config file."""
     defaults = _load_json(DEFAULT_CONFIG_PATH)
 
     path = Path(config_path)
@@ -120,6 +128,7 @@ def _require_model_int(
     key: str,
     experiment: str,
 ) -> int:
+    """Read an integer-valued model hyperparameter with a clear error message."""
     value = model_config.get(key)
     if value is None:
         raise ValueError(f"{experiment} config requires model.{key}")
@@ -127,10 +136,17 @@ def _require_model_int(
 
 
 def _build_model_size(*parts: int) -> str:
+    """Serialize benchmark hyperparameters into the repository naming scheme."""
     return "-".join(str(part) for part in parts)
 
 
 def run_from_project(config: dict[str, Any]) -> None:
+    """
+    Dispatch one resolved config to the matching benchmark wrapper.
+
+    The dispatch is grouped by the four paper problems: DHO, SEE, DEE, and TAF.
+    Each wrapper then instantiates the requested branch composition.
+    """
     config = apply_runtime_config(config)
     experiment = config["experiment"]
     mode = config["mode"]
@@ -139,6 +155,7 @@ def run_from_project(config: dict[str, Any]) -> None:
     shared_runner_config = config.get("shared_runner") or {}
     force_retrain = bool(shared_runner_config.get("force_retrain", False))
 
+    # Appendix A.2: damped harmonic oscillator.
     if experiment == "dho-cc":
         n_layers = model_config.get("n_layers")
         n_nodes = model_config.get("n_nodes")
@@ -253,6 +270,7 @@ def run_from_project(config: dict[str, Any]) -> None:
         )
         return
 
+    # Sec. 3.1: smooth Euler equation.
     if experiment == "see-cc":
         n_layers = model_config.get("n_layers")
         n_nodes = model_config.get("n_nodes")
@@ -337,6 +355,7 @@ def run_from_project(config: dict[str, Any]) -> None:
         )
         return
 
+    # Sec. 3.2: discontinuous Euler equation.
     if experiment == "dee-cc":
         n_layers = _require_model_int(model_config, "n_layers", experiment)
         n_nodes = _require_model_int(model_config, "n_nodes", experiment)
@@ -403,6 +422,7 @@ def run_from_project(config: dict[str, Any]) -> None:
         )
         return
 
+    # Sec. 3.3: transonic aerofoil flow.
     if experiment == "taf-cc":
         n_layers = _require_model_int(model_config, "n_layers", experiment)
         n_nodes = _require_model_int(model_config, "n_nodes", experiment)
