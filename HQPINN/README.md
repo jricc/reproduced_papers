@@ -445,6 +445,8 @@ python3 -m HQPINN.lib.TAF.generate_aerofoil_training_sets
 
 The regenerated interior points use a configurable mix of full-domain coverage and denser sampling around the airfoil. The defaults live in `HQPINN/config.py` as `TAF_NEAR_AIRFOIL_FRACTION`, `TAF_NEAR_AIRFOIL_PAD_X`, and `TAF_NEAR_AIRFOIL_PAD_Y`. The TAF PDE loss now also combines separate near-airfoil and far-field residual averages, weighted by `TAF_PDE_NEAR_WEIGHT` and `TAF_PDE_FAR_WEIGHT`.
 
+Branch note for `taf-essais-loss-stratifiee`: we tried two no-CFD adjustments for TAF, namely near-airfoil oversampling in the generated collocation cloud and a stratified near/far PDE residual in training. Both changes were kept in this branch for documentation, but on our runs they did not produce a clear improvement in the Figure 7-style plots relative to the baseline setup.
+
 ## Where To Look At Results
 
 - Canonical result artifacts: `HQPINN/results/`

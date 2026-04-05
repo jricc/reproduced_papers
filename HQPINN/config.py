@@ -135,6 +135,10 @@ TAF_N_BOUNDARY = 40
 TAF_N_DOMAIN_TOTAL = 4000
 TAF_N_DATA_INTERNAL = 400
 TAF_N_WALL = 400
+# Exploratory knobs kept on branch `taf-essais-loss-stratifiee`: denser
+# near-airfoil sampling plus a stratified near/far PDE average. In our local
+# tests without CFD supervision, these settings did not yield a clear
+# improvement in the Figure 7-style TAF fields.
 TAF_NEAR_AIRFOIL_FRACTION = 0.5
 TAF_NEAR_AIRFOIL_PAD_X = 0.25
 TAF_NEAR_AIRFOIL_PAD_Y = 0.25

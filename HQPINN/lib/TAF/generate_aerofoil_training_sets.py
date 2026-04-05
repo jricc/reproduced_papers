@@ -303,6 +303,11 @@ def sample_domain_points(
     The global component preserves coverage of the whole fluid box, while the
     local component increases resolution around the profile where gradients are
     most likely to matter.
+
+    Branch note (`taf-essais-loss-stratifiee`): this oversampling was tried to
+    better constrain the airfoil neighborhood without CFD targets. It did make
+    the cloud denser near the profile, but did not noticeably improve the
+    downstream TAF training results on its own.
     """
     if not 0.0 <= near_airfoil_fraction <= 1.0:
         raise ValueError(

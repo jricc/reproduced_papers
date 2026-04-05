@@ -168,6 +168,10 @@ def split_pde_points_by_airfoil_box(
     X_wall: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Split collocation points into near-airfoil and far-field subsets."""
+    # Branch note (`taf-essais-loss-stratifiee`): this split was introduced to
+    # stop the near-airfoil region from being diluted by the far-field average.
+    # It documents an attempted TAF fix, but it did not visibly improve the
+    # resulting Figure 7-style fields in our no-CFD experiments.
     near_box_low, near_box_high = compute_near_airfoil_box(X_wall)
     near_mask = points_in_box(X_f, near_box_low, near_box_high)
     return X_f[near_mask], X_f[~near_mask], near_box_low, near_box_high
@@ -650,6 +654,10 @@ def loss_pde(
     far-field subset, so the residual around the profile cannot be drowned out
     by the larger rectangular domain. Each subset keeps the same shock-adaptive
     lambda weighting used by the original reproduction.
+
+    Branch note (`taf-essais-loss-stratifiee`): this stratified averaging was
+    tried as a no-CFD remedy for the near-constant-field collapse, but it did
+    not deliver a clear qualitative improvement in our TAF plots.
     """
     X_f_near = data.get("X_f_near")
     X_f_far = data.get("X_f_far")
