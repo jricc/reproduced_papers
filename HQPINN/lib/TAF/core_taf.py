@@ -25,6 +25,10 @@ from ...config import (
     GAMMA,
     TAF_EPSILON_LAMBDA,
     TAF_LBFGS_STEPS,
+    TAF_NEAR_AIRFOIL_PAD_X,
+    TAF_NEAR_AIRFOIL_PAD_Y,
+    TAF_PDE_FAR_WEIGHT,
+    TAF_PDE_NEAR_WEIGHT,
     TAF_R_GAS,
     TAF_X_BOT_FILE,
     TAF_X_DATA_INT_FILE,
@@ -109,6 +113,66 @@ def load_points(path: str) -> torch.Tensor:
     return torch.tensor(arr, dtype=DTYPE, device=DEVICE)
 
 
+def _clip_box_to_domain(
+    low: torch.Tensor,
+    high: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Clip a local box so it remains inside the full TAF domain."""
+    domain_low = torch.tensor([TAF_X_MIN, TAF_Y_MIN], dtype=low.dtype, device=low.device)
+    domain_high = torch.tensor(
+        [TAF_X_MAX, TAF_Y_MAX], dtype=high.dtype, device=high.device
+    )
+    low = torch.maximum(low, domain_low)
+    high = torch.minimum(high, domain_high)
+    if torch.any(high <= low):
+        raise ValueError(
+            "Invalid near-airfoil box after clipping: "
+            f"low={low.tolist()} high={high.tolist()}"
+        )
+    return low, high
+
+
+def compute_near_airfoil_box(
+    wall_points: torch.Tensor,
+    pad_x: float = TAF_NEAR_AIRFOIL_PAD_X,
+    pad_y: float = TAF_NEAR_AIRFOIL_PAD_Y,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Build the padded local box used for near-airfoil PDE stratification."""
+    if pad_x < 0.0 or pad_y < 0.0:
+        raise ValueError(
+            "Near-airfoil padding must be non-negative, "
+            f"got pad_x={pad_x} and pad_y={pad_y}."
+        )
+    wall_min = torch.min(wall_points, dim=0).values
+    wall_max = torch.max(wall_points, dim=0).values
+    padding = torch.tensor([pad_x, pad_y], dtype=wall_points.dtype, device=wall_points.device)
+    return _clip_box_to_domain(wall_min - padding, wall_max + padding)
+
+
+def points_in_box(
+    points: torch.Tensor,
+    low: torch.Tensor,
+    high: torch.Tensor,
+) -> torch.Tensor:
+    """Return a boolean mask for points inside an axis-aligned box."""
+    return (
+        (points[:, 0] >= low[0])
+        & (points[:, 0] <= high[0])
+        & (points[:, 1] >= low[1])
+        & (points[:, 1] <= high[1])
+    )
+
+
+def split_pde_points_by_airfoil_box(
+    X_f: torch.Tensor,
+    X_wall: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Split collocation points into near-airfoil and far-field subsets."""
+    near_box_low, near_box_high = compute_near_airfoil_box(X_wall)
+    near_mask = points_in_box(X_f, near_box_low, near_box_high)
+    return X_f[near_mask], X_f[~near_mask], near_box_low, near_box_high
+
+
 def load_training_sets() -> dict[str, torch.Tensor]:
     """
     Load the pre-generated TAF point sets used by Sec. 3.3 training.
@@ -122,15 +186,25 @@ def load_training_sets() -> dict[str, torch.Tensor]:
     # training collocation set used by the optimization loop.
     X_data_int = load_points(TAF_X_DATA_INT_FILE)
     X_f = load_points(TAF_X_F_FILE)
+    X_wall = load_points(TAF_X_WALL_FILE)
+    X_f_all = torch.cat([X_data_int, X_f], dim=0)
+    X_f_near, X_f_far, near_box_low, near_box_high = split_pde_points_by_airfoil_box(
+        X_f_all,
+        X_wall,
+    )
 
     return {
         "X_in": load_points(TAF_X_IN_FILE),
         "X_out": load_points(TAF_X_OUT_FILE),
         "X_top": load_points(TAF_X_TOP_FILE),
         "X_bot": load_points(TAF_X_BOT_FILE),
-        "X_wall": load_points(TAF_X_WALL_FILE),
+        "X_wall": X_wall,
         "X_data_int": X_data_int,
-        "X_f": torch.cat([X_data_int, X_f], dim=0),
+        "X_f": X_f_all,
+        "X_f_near": X_f_near,
+        "X_f_far": X_f_far,
+        "X_f_near_box_low": near_box_low,
+        "X_f_near_box_high": near_box_high,
         "X_wall_normals": load_points(TAF_X_WALL_NORMALS_FILE),
     }
 
@@ -384,6 +458,56 @@ def _sample_pair_rows(
     return x1[idx], x2[idx]
 
 
+def _normalized_pde_stratified_weights() -> tuple[float, float]:
+    """Return near/far PDE weights normalized to sum to one."""
+    if TAF_PDE_NEAR_WEIGHT < 0.0 or TAF_PDE_FAR_WEIGHT < 0.0:
+        raise ValueError(
+            "TAF_PDE_NEAR_WEIGHT and TAF_PDE_FAR_WEIGHT must be non-negative, "
+            f"got {TAF_PDE_NEAR_WEIGHT} and {TAF_PDE_FAR_WEIGHT}."
+        )
+    weight_sum = TAF_PDE_NEAR_WEIGHT + TAF_PDE_FAR_WEIGHT
+    if weight_sum <= 0.0:
+        raise ValueError("At least one TAF PDE stratification weight must be positive.")
+    return TAF_PDE_NEAR_WEIGHT / weight_sum, TAF_PDE_FAR_WEIGHT / weight_sum
+
+
+def _allocate_stratified_batch_sizes(
+    total_batch_size: Optional[int],
+    near_weight: float,
+    far_weight: float,
+) -> tuple[Optional[int], Optional[int]]:
+    """Split the total PDE batch budget between near-airfoil and far-field sets."""
+    if total_batch_size is None:
+        return None, None
+    if total_batch_size <= 0:
+        raise ValueError(f"n_f_batch must be positive when provided, got {total_batch_size}.")
+
+    raw_sizes = np.array(
+        [total_batch_size * near_weight, total_batch_size * far_weight],
+        dtype=float,
+    )
+    batch_sizes = np.floor(raw_sizes).astype(int)
+    remaining = total_batch_size - int(batch_sizes.sum())
+    if remaining > 0:
+        order = np.argsort(raw_sizes - batch_sizes)[::-1]
+        for idx in order[:remaining]:
+            batch_sizes[idx] += 1
+
+    return int(batch_sizes[0]), int(batch_sizes[1])
+
+
+def _mean_weighted_pde_residual(
+    model: nn.Module,
+    X_f: torch.Tensor,
+    eps_lambda: float,
+) -> torch.Tensor:
+    """Return the mean weighted Euler residual on one collocation subset."""
+    R, _, _, _, _ = euler_residual(model, X_f)
+    lam = compute_lambda(model, X_f, eps=eps_lambda)
+    R2 = torch.sum(R**2, dim=1, keepdim=True)
+    return torch.mean(lam * R2)
+
+
 def loss_boundary_terms(
     model: nn.Module,
     data: dict[str, torch.Tensor],
@@ -522,16 +646,54 @@ def loss_pde(
     """
     Weighted PDE residual term for the steady 2D Euler equations.
 
-    The mini-batch is drawn from the pre-generated collocation cloud, then the
-    shock-adaptive weight lambda is applied pointwise before averaging.
+    The mini-batch is split between a near-airfoil subset and the remaining
+    far-field subset, so the residual around the profile cannot be drowned out
+    by the larger rectangular domain. Each subset keeps the same shock-adaptive
+    lambda weighting used by the original reproduction.
     """
-    X_f = _sample_rows(data["X_f"], n_f_batch)
-    R, _, _, _, _ = euler_residual(model, X_f)
-    # The same collocation points provide both the residual magnitude and the
-    # local compression indicator used in the shock-aware weight.
-    lam = compute_lambda(model, X_f, eps=eps_lambda)
-    R2 = torch.sum(R**2, dim=1, keepdim=True)
-    return torch.mean(lam * R2)
+    X_f_near = data.get("X_f_near")
+    X_f_far = data.get("X_f_far")
+
+    if X_f_near is None or X_f_far is None:
+        X_f = _sample_rows(data["X_f"], n_f_batch)
+        return _mean_weighted_pde_residual(model, X_f, eps_lambda=eps_lambda)
+
+    near_weight, far_weight = _normalized_pde_stratified_weights()
+    near_batch, far_batch = _allocate_stratified_batch_sizes(
+        n_f_batch,
+        near_weight,
+        far_weight,
+    )
+
+    subset_terms: list[tuple[float, torch.Tensor]] = []
+
+    X_f_near = _sample_rows(X_f_near, near_batch)
+    if near_weight > 0.0 and X_f_near.shape[0] > 0:
+        subset_terms.append(
+            (
+                near_weight,
+                _mean_weighted_pde_residual(model, X_f_near, eps_lambda=eps_lambda),
+            )
+        )
+
+    X_f_far = _sample_rows(X_f_far, far_batch)
+    if far_weight > 0.0 and X_f_far.shape[0] > 0:
+        subset_terms.append(
+            (
+                far_weight,
+                _mean_weighted_pde_residual(model, X_f_far, eps_lambda=eps_lambda),
+            )
+        )
+
+    if not subset_terms:
+        X_f = _sample_rows(data["X_f"], n_f_batch)
+        return _mean_weighted_pde_residual(model, X_f, eps_lambda=eps_lambda)
+
+    active_weight_sum = sum(weight for weight, _ in subset_terms)
+    weighted_sum = sum(
+        (weight / active_weight_sum) * loss_value for weight, loss_value in subset_terms
+    )
+    return weighted_sum
 
 
 def log_training_info(

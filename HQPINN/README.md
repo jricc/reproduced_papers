@@ -330,7 +330,7 @@ $$
 - outlet condition: $P_{out} = 0$
 - side boundaries: periodic
 - wall condition: free-slip on the airfoil surface
-- training: 40 boundary points per boundary, 4000 domain points for physics loss, adaptive gradient weight, Adam for 40000 steps with learning rate `0.0005`, then L-BFGS for 2000 steps
+- training: 40 boundary points per boundary, 4000 domain points for physics loss with a mixed global plus near-airfoil sampling cloud and a stratified near/far PDE residual, adaptive gradient weight, Adam for 40000 steps with learning rate `0.0005`, then L-BFGS for 2000 steps
 
 ## Reproduction Limitations
 
@@ -442,6 +442,8 @@ The `.npy` files for the NACA0012 case are already present in `HQPINN/lib/TAF/NA
 ```bash
 python3 -m HQPINN.lib.TAF.generate_aerofoil_training_sets
 ```
+
+The regenerated interior points use a configurable mix of full-domain coverage and denser sampling around the airfoil. The defaults live in `HQPINN/config.py` as `TAF_NEAR_AIRFOIL_FRACTION`, `TAF_NEAR_AIRFOIL_PAD_X`, and `TAF_NEAR_AIRFOIL_PAD_Y`. The TAF PDE loss now also combines separate near-airfoil and far-field residual averages, weighted by `TAF_PDE_NEAR_WEIGHT` and `TAF_PDE_FAR_WEIGHT`.
 
 ## Where To Look At Results
 

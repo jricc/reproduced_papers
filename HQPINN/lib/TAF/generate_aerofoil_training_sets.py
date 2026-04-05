@@ -4,23 +4,25 @@ generate_aerofoil_training_sets.py
 Generate the geometric point clouds used by the Sec. 3.3 TAF benchmark.
 
 Outputs .npy files in TAF/NACA0012/:
-  - X_in.npy            (inlet points)            shape (N_in, 2)
-  - X_out.npy           (outlet points)           shape (N_out, 2)
-  - X_top.npy           (top boundary points)     shape (N_top, 2)
-  - X_bot.npy           (bottom boundary points)  shape (N_bot, 2)
-  - X_wall.npy          (airfoil surface points)  shape (N_wall, 2)
-  - X_wall_normals.npy  (x,y,nx,ny for wall)      shape (N_wall, 4)
+  - X_in.npy            (inlet points)             shape (N_in, 2)
+  - X_out.npy           (outlet points)            shape (N_out, 2)
+  - X_top.npy           (top boundary points)      shape (N_top, 2)
+  - X_bot.npy           (bottom boundary points)   shape (N_bot, 2)
+  - X_wall.npy          (airfoil surface points)   shape (N_wall, 2)
+  - X_wall_normals.npy  (x,y,nx,ny for wall)       shape (N_wall, 4)
   - X_data_int.npy      (internal CFD data points) shape (N_data_int, 2)
-  - X_f.npy             (PDE collocation points)  shape (N_pde, 2)
+  - X_f.npy             (PDE collocation points)   shape (N_pde, 2)
 
 Usage:
   python generate_aerofoil_training_sets.py
+
 Dependencies:
   numpy, (matplotlib optional for quick plot)
 """
 
-import numpy as np
 from pathlib import Path
+
+import numpy as np
 
 # ============================================================
 # 0) Import benchmark geometry and sampling parameters
@@ -34,6 +36,9 @@ try:
         TAF_N_DATA_INTERNAL,
         TAF_N_DOMAIN_TOTAL,
         TAF_N_WALL,
+        TAF_NEAR_AIRFOIL_FRACTION,
+        TAF_NEAR_AIRFOIL_PAD_X,
+        TAF_NEAR_AIRFOIL_PAD_Y,
         TAF_X_MAX,
         TAF_X_MIN,
         TAF_Y_MAX,
@@ -55,6 +60,9 @@ except ImportError:
             TAF_N_DATA_INTERNAL,
             TAF_N_DOMAIN_TOTAL,
             TAF_N_WALL,
+            TAF_NEAR_AIRFOIL_FRACTION,
+            TAF_NEAR_AIRFOIL_PAD_X,
+            TAF_NEAR_AIRFOIL_PAD_Y,
             TAF_X_MAX,
             TAF_X_MIN,
             TAF_Y_MAX,
@@ -69,13 +77,17 @@ except ImportError:
             TAF_N_DATA_INTERNAL,
             TAF_N_DOMAIN_TOTAL,
             TAF_N_WALL,
+            TAF_NEAR_AIRFOIL_FRACTION,
+            TAF_NEAR_AIRFOIL_PAD_X,
+            TAF_NEAR_AIRFOIL_PAD_Y,
             TAF_X_MAX,
             TAF_X_MIN,
             TAF_Y_MAX,
             TAF_Y_MIN,
         )
 
-rng = np.random.default_rng(0)
+FULL_DOMAIN_LOW = np.array([TAF_X_MIN, TAF_Y_MIN], dtype=float)
+FULL_DOMAIN_HIGH = np.array([TAF_X_MAX, TAF_Y_MAX], dtype=float)
 
 
 # ============================================================
@@ -85,10 +97,10 @@ rng = np.random.default_rng(0)
 # NACA0012 aerofoil. The code works in the normalized chord coordinate x/c, so
 # the output is the half-thickness y_t(x/c) before any physical scaling.
 def naca4_thickness(x):
-    x = np.asarray(x)  # Ensure vectorized NumPy operations
+    x = np.asarray(x)
 
     return 0.6 * (
-        0.2969 * np.sqrt(np.clip(x, 0.0, None))  # √x term (singular slope at LE)
+        0.2969 * np.sqrt(np.clip(x, 0.0, None))
         - 0.1260 * x
         - 0.3516 * x**2
         + 0.2843 * x**3
@@ -109,27 +121,19 @@ def generate_naca0012_surface(
         chord_start = TAF_CHORD_X0
     if chord_end is None:
         chord_end = TAF_CHORD_X1
-    # Work first in the dimensionless chord coordinate x/c in [0, 1].
+
     x_local = np.linspace(0.0, 1.0, n_points_along_chord)
-
-    # Evaluate the half-thickness law on the normalized chord.
     yt = naca4_thickness(x_local)
-
-    # Scale the normalized coordinate back to the physical chord interval.
     chord_length = chord_end - chord_start
 
     xu = chord_start + x_local * chord_length
-    yu = +yt  # positive offset above camber line (y=0)
+    yu = +yt
 
-    # Lower surface (intrados)
-    # Reverse x order so contour closes properly (TE → LE)
     xl = chord_start + x_local[::-1] * chord_length
-    yl = -yt[::-1]  # negative offset below camber line
+    yl = -yt[::-1]
 
-    # Concatenate the two surfaces into one closed wall contour.
     xs = np.concatenate([xu, xl])
     ys = np.concatenate([yu, yl])
-
     return xs, ys
 
 
@@ -138,55 +142,37 @@ def generate_naca0012_surface(
 # ============================================================
 # These arrays support the impermeability condition used in the TAF loss:
 # the velocity must remain tangent to the wall, i.e. u.n = 0.
-
-# Split `TAF_N_WALL` evenly between upper and lower surfaces.
 Xw_x, Xw_y = generate_naca0012_surface(
     n_points_along_chord=TAF_N_WALL // 2,
     chord_start=TAF_CHORD_X0,
     chord_end=TAF_CHORD_X1,
 )
-
-# Stack wall coordinates into the point cloud used by the boundary loss.
 X_wall = np.stack([Xw_x, Xw_y], axis=-1)
 
 
 def compute_normals(xs, ys):
     """Compute outward unit normals along the closed aerofoil polygon."""
-
-    # Tangents are computed along the polygon parameter, not as partial
-    # derivatives with respect to the physical coordinates.
     dx = np.gradient(xs)
     dy = np.gradient(ys)
     tangents = np.stack([dx, dy], axis=-1)
 
-    # Rotate each tangent by -90 degrees to obtain a candidate normal.
     normals = np.empty_like(tangents)
     normals[:, 0] = -tangents[:, 1]
     normals[:, 1] = tangents[:, 0]
 
-    # Normalize to unit length.
     norms = np.linalg.norm(normals, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0  # avoid division by zero
+    norms[norms == 0] = 1.0
     normals /= norms
 
-    # Flip the orientation if the normal points toward the polygon centroid.
     centroid = np.array([np.mean(xs), np.mean(ys)])
-
-    # Outward normals should align with the centroid-to-boundary vector.
     vecs = np.stack([xs - centroid[0], ys - centroid[1]], axis=-1)
-
-    # A negative dot product indicates an inward normal.
     dotp = np.sum(vecs * normals, axis=1)
     flip_mask = dotp < 0
     normals[flip_mask] *= -1.0
-
     return normals
 
 
-# Compute outward normals
 Xw_normals = compute_normals(Xw_x, Xw_y)
-
-# Each row stores (x, y, nx, ny), exactly what the wall loss needs.
 X_wall_normals = np.concatenate([X_wall, Xw_normals], axis=1)
 
 
@@ -195,186 +181,247 @@ X_wall_normals = np.concatenate([X_wall, Xw_normals], axis=1)
 # ============================================================
 # The Sec. 3.3 computational box is sampled independently on each side so the
 # training code can apply inlet, outlet, wall, and periodic terms separately.
-# NOTE:
-# These are NOT the airfoil surface points.
-# The airfoil wall points are generated separately.
-
-# ---- Inlet (left vertical boundary, x = constant = TAF_X_MIN)
-# We sample points uniformly along the y-direction.
 y_in = np.linspace(TAF_Y_MIN, TAF_Y_MAX, TAF_N_BOUNDARY)
-
-# Create (x, y) pairs:
-# x is fixed at TAF_X_MIN
-# y varies along the vertical boundary
 X_in = np.stack([np.full_like(y_in, TAF_X_MIN), y_in], axis=-1)
-
-# ---- Outlet (right vertical boundary, x = constant = TAF_X_MAX)
-# Same y sampling as inlet.
 X_out = np.stack([np.full_like(y_in, TAF_X_MAX), y_in], axis=-1)
 
-# ---- Top boundary (horizontal boundary, y = constant = TAF_Y_MAX)
-# Here x varies while y is fixed.
 x_topbot = np.linspace(TAF_X_MIN, TAF_X_MAX, TAF_N_BOUNDARY)
-
 X_top = np.stack([x_topbot, np.full_like(x_topbot, TAF_Y_MAX)], axis=-1)
-
-# ---- Bottom boundary (horizontal boundary, y = constant = TAF_Y_MIN)
 X_bot = np.stack([x_topbot, np.full_like(x_topbot, TAF_Y_MIN)], axis=-1)
 
 
-# ---------------------------------------------------------
-# 4) Point-in-polygon test (Ray Casting Algorithm)
-# ---------------------------------------------------------
-# This function determines whether each point in xy_points
-# lies inside a closed polygon defined by (poly_x, poly_y).
-#
-# In our case:
-#   - The polygon is the airfoil surface.
-#   - We use this to remove collocation points that fall
-#     inside the solid airfoil (non-physical region).
-#
-# Method:
-#   Ray casting algorithm.
-#   For each test point:
-#       Cast a horizontal ray to +∞.
-#       Count how many times it intersects the polygon edges.
-#   If the number of intersections is odd → point is inside.
-#   If even → point is outside.
+# ============================================================
+# 5) Point-in-polygon test
+# ============================================================
 def point_in_polygon(xy_points, poly_x, poly_y):
-
-    # Extract x and y coordinates of test points
+    """Ray-casting test for whether each point falls inside the airfoil."""
     x = xy_points[:, 0]
     y = xy_points[:, 1]
-
-    # Number of vertices in polygon
     n = len(poly_x)
-
-    # Boolean mask: True = inside polygon
     inside = np.zeros(len(x), dtype=bool)
 
-    # Loop over each polygon edge
     for i in range(n):
-        j = (i + n - 1) % n  # Previous vertex index (wrap-around)
-
+        j = (i + n - 1) % n
         xi, yi = poly_x[i], poly_y[i]
         xj, yj = poly_x[j], poly_y[j]
 
-        # Check if horizontal ray crosses this edge
-        # Condition 1:
-        #   The test point's y lies between yi and yj
-        # Condition 2:
-        #   The intersection x-coordinate is to the right of the point
         intersect = ((yi > y) != (yj > y)) & (
             x < (xj - xi) * (y - yi) / (yj - yi + 1e-20) + xi
         )
-
-        # Toggle inside status each time we detect an intersection
         inside ^= intersect
 
     return inside
 
 
-# The airfoil polygon is defined by its boundary coordinates
 poly_x = Xw_x
 poly_y = Xw_y
 
 
-# ---------------------------------------------------------
-# 5) Domain collocation points (uniform sampling + airfoil filtering)
-# ---------------------------------------------------------
-# Goal:
-#   Build a set of points in the *fluid domain* (rectangle minus airfoil interior).
-#
-# We create:
-#   - X_data_int : internal points supervised by CFD data
-#   - X_f        : collocation points used for the PDE residual
-#
-# Strategy:
-#   1) Sample points uniformly in the bounding rectangle.
-#   2) Remove points that fall inside the airfoil polygon.
-#   3) If we don't have enough points left, sample extra points.
-#   4) Shuffle and keep the requested total number.
+def clip_sampling_box(low, high):
+    """Clip a proposed sampling box so it remains inside the full TAF domain."""
+    low = np.maximum(np.asarray(low, dtype=float), FULL_DOMAIN_LOW)
+    high = np.minimum(np.asarray(high, dtype=float), FULL_DOMAIN_HIGH)
+    if np.any(high <= low):
+        raise ValueError(
+            "Invalid sampling box after clipping: "
+            f"low={low.tolist()} high={high.tolist()}"
+        )
+    return low, high
 
-# Oversample because many points will be rejected (inside the airfoil)
-oversample_factor = 2.5
-n_try = int(TAF_N_DOMAIN_TOTAL * oversample_factor)
 
-# Uniform random points in the rectangular domain
-# points shape: (n_try, 2) with columns (x, y)
-points = rng.uniform(
-    [TAF_X_MIN, TAF_Y_MIN],
-    [TAF_X_MAX, TAF_Y_MAX],
-    size=(n_try, 2),
-)
-
-# Identify points that lie inside the airfoil polygon (solid region)
-inside_mask = point_in_polygon(points, poly_x, poly_y)
-
-# Keep only points outside the airfoil → fluid region
-points_outside = points[~inside_mask]
-
-# Safety: if too many points were rejected (airfoil is large or oversampling too small),
-# sample more points and filter again until we have enough.
-while len(points_outside) < TAF_N_DOMAIN_TOTAL:
-    needed = TAF_N_DOMAIN_TOTAL - len(points_outside)
-
-    # Sample extra points (slightly more than needed to reduce chance of shortage)
-    extra = rng.uniform(
-        [TAF_X_MIN, TAF_Y_MIN],
-        [TAF_X_MAX, TAF_Y_MAX],
-        size=(int(needed * 1.5) + 100, 2),
+def points_in_box(points, low, high):
+    """Return a boolean mask for points inside an axis-aligned box."""
+    return (
+        (points[:, 0] >= low[0])
+        & (points[:, 0] <= high[0])
+        & (points[:, 1] >= low[1])
+        & (points[:, 1] <= high[1])
     )
 
-    # Filter extra points with the same inside-airfoil test
-    extra_inside = point_in_polygon(extra, poly_x, poly_y)
-    extra_out = extra[~extra_inside]
 
-    # Append extra valid fluid points to the pool
-    points_outside = np.vstack([points_outside, extra_out])
-
-# Keep exactly the requested total number of valid fluid points
-points_outside = points_outside[:TAF_N_DOMAIN_TOTAL]
-
-# Shuffle points to avoid any spatial ordering bias
-perm = rng.permutation(len(points_outside))
-points_outside = points_outside[perm]
-
-if TAF_N_DATA_INTERNAL > TAF_N_DOMAIN_TOTAL:
-    raise ValueError(
-        "TAF_N_DATA_INTERNAL must be <= TAF_N_DOMAIN_TOTAL "
-        f"(got {TAF_N_DATA_INTERNAL} > {TAF_N_DOMAIN_TOTAL})."
+def compute_near_airfoil_box(wall_points, pad_x, pad_y):
+    """Build a padded local box around the airfoil for denser collocation."""
+    if pad_x < 0.0 or pad_y < 0.0:
+        raise ValueError(
+            "Near-airfoil padding must be non-negative, "
+            f"got pad_x={pad_x} and pad_y={pad_y}."
+        )
+    wall_min = wall_points.min(axis=0)
+    wall_max = wall_points.max(axis=0)
+    return clip_sampling_box(
+        wall_min - np.array([pad_x, pad_y], dtype=float),
+        wall_max + np.array([pad_x, pad_y], dtype=float),
     )
 
-# Split internal fluid points:
-#   - first chunk for CFD-supervised internal data
-#   - remaining chunk for PDE residual points
-X_data_int = points_outside[:TAF_N_DATA_INTERNAL]
-X_f = points_outside[TAF_N_DATA_INTERNAL:]
 
-# ----------------------------
-# 6) Save files and print summary
-# ----------------------------
-script_path = Path(__file__).resolve()
-output_dir = script_path.parent / "NACA0012"
-output_dir.mkdir(parents=True, exist_ok=True)
+def sample_valid_fluid_points(
+    n_points,
+    low,
+    high,
+    poly_x,
+    poly_y,
+    rng,
+    oversample_factor=1.5,
+):
+    """Sample points in a box, rejecting those that fall inside the airfoil."""
+    if n_points <= 0:
+        return np.empty((0, 2), dtype=float)
 
-np.save(output_dir / "X_in.npy", X_in)
-np.save(output_dir / "X_out.npy", X_out)
-np.save(output_dir / "X_top.npy", X_top)
-np.save(output_dir / "X_bot.npy", X_bot)
-np.save(output_dir / "X_wall.npy", X_wall)
-np.save(output_dir / "X_wall_normals.npy", X_wall_normals)
-np.save(output_dir / "X_data_int.npy", X_data_int)
-np.save(output_dir / "X_f.npy", X_f)
+    sampled_chunks = []
+    n_collected = 0
 
-print("Saved: X_in, X_out, X_top, X_bot, X_wall, X_wall_normals, X_data_int, X_f")
-print("Saved to directory:", output_dir)
-print(
-    "Domain bounds: x_min,x_max =",
-    TAF_X_MIN,
-    TAF_X_MAX,
-    "  y_min,y_max =",
-    TAF_Y_MIN,
-    TAF_Y_MAX,
-)
-print("Chord placed on [0,1] (LE at x=0, TE at x=1)")
+    while n_collected < n_points:
+        remaining = n_points - n_collected
+        n_try = max(int(np.ceil(remaining * oversample_factor)), remaining + 32)
+        candidates = rng.uniform(low, high, size=(n_try, 2))
+        outside = candidates[~point_in_polygon(candidates, poly_x, poly_y)]
+
+        if len(outside) == 0:
+            oversample_factor = max(oversample_factor * 1.5, 2.0)
+            continue
+
+        take = outside[:remaining]
+        sampled_chunks.append(take)
+        n_collected += len(take)
+
+    return np.vstack(sampled_chunks)
+
+
+def sample_domain_points(
+    total_points,
+    wall_points,
+    poly_x,
+    poly_y,
+    near_airfoil_fraction,
+    near_airfoil_pad_x,
+    near_airfoil_pad_y,
+    rng,
+):
+    """
+    Sample a mixed collocation cloud with global coverage plus a near-airfoil bias.
+
+    The global component preserves coverage of the whole fluid box, while the
+    local component increases resolution around the profile where gradients are
+    most likely to matter.
+    """
+    if not 0.0 <= near_airfoil_fraction <= 1.0:
+        raise ValueError(
+            "TAF_NEAR_AIRFOIL_FRACTION must be in [0, 1], "
+            f"got {near_airfoil_fraction}."
+        )
+
+    near_box_low, near_box_high = compute_near_airfoil_box(
+        wall_points=wall_points,
+        pad_x=near_airfoil_pad_x,
+        pad_y=near_airfoil_pad_y,
+    )
+
+    n_near = int(round(total_points * near_airfoil_fraction))
+    n_global = total_points - n_near
+
+    global_points = sample_valid_fluid_points(
+        n_points=n_global,
+        low=FULL_DOMAIN_LOW,
+        high=FULL_DOMAIN_HIGH,
+        poly_x=poly_x,
+        poly_y=poly_y,
+        rng=rng,
+    )
+    near_points = sample_valid_fluid_points(
+        n_points=n_near,
+        low=near_box_low,
+        high=near_box_high,
+        poly_x=poly_x,
+        poly_y=poly_y,
+        rng=rng,
+    )
+
+    points_outside = np.vstack([global_points, near_points])
+    perm = rng.permutation(len(points_outside))
+    points_outside = points_outside[perm]
+
+    near_mask = points_in_box(points_outside, near_box_low, near_box_high)
+    sampling_info = {
+        "near_box_low": near_box_low,
+        "near_box_high": near_box_high,
+        "n_global_target": n_global,
+        "n_near_target": n_near,
+        "actual_near_count": int(np.count_nonzero(near_mask)),
+    }
+    return points_outside, sampling_info
+
+
+def build_training_sets(rng=None):
+    """Assemble the full geometry, boundary, and interior TAF point clouds."""
+    if rng is None:
+        rng = np.random.default_rng(0)
+
+    if TAF_N_DATA_INTERNAL > TAF_N_DOMAIN_TOTAL:
+        raise ValueError(
+            "TAF_N_DATA_INTERNAL must be <= TAF_N_DOMAIN_TOTAL "
+            f"(got {TAF_N_DATA_INTERNAL} > {TAF_N_DOMAIN_TOTAL})."
+        )
+
+    points_outside, sampling_info = sample_domain_points(
+        total_points=TAF_N_DOMAIN_TOTAL,
+        wall_points=X_wall,
+        poly_x=poly_x,
+        poly_y=poly_y,
+        near_airfoil_fraction=TAF_NEAR_AIRFOIL_FRACTION,
+        near_airfoil_pad_x=TAF_NEAR_AIRFOIL_PAD_X,
+        near_airfoil_pad_y=TAF_NEAR_AIRFOIL_PAD_Y,
+        rng=rng,
+    )
+
+    training_sets = {
+        "X_in": X_in,
+        "X_out": X_out,
+        "X_top": X_top,
+        "X_bot": X_bot,
+        "X_wall": X_wall,
+        "X_wall_normals": X_wall_normals,
+        "X_data_int": points_outside[:TAF_N_DATA_INTERNAL],
+        "X_f": points_outside[TAF_N_DATA_INTERNAL:],
+    }
+    return training_sets, sampling_info
+
+
+def save_training_sets(training_sets, output_dir):
+    """Persist the generated TAF point clouds to the canonical NACA0012 folder."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for name, array in training_sets.items():
+        np.save(output_dir / f"{name}.npy", array)
+
+
+def main():
+    training_sets, sampling_info = build_training_sets()
+    script_path = Path(__file__).resolve()
+    output_dir = script_path.parent / "NACA0012"
+    save_training_sets(training_sets, output_dir)
+
+    print("Saved: X_in, X_out, X_top, X_bot, X_wall, X_wall_normals, X_data_int, X_f")
+    print("Saved to directory:", output_dir)
+    print(
+        "Domain bounds: x_min,x_max =",
+        TAF_X_MIN,
+        TAF_X_MAX,
+        "  y_min,y_max =",
+        TAF_Y_MIN,
+        TAF_Y_MAX,
+    )
+    print("Chord placed on [0,1] (LE at x=0, TE at x=1)")
+    print(
+        "Near-airfoil box: "
+        f"x in [{sampling_info['near_box_low'][0]:.3f}, {sampling_info['near_box_high'][0]:.3f}], "
+        f"y in [{sampling_info['near_box_low'][1]:.3f}, {sampling_info['near_box_high'][1]:.3f}]"
+    )
+    print(
+        "Sampling mix: "
+        f"{sampling_info['n_near_target']} near-airfoil + "
+        f"{sampling_info['n_global_target']} global "
+        f"(actual inside local box: {sampling_info['actual_near_count']}/{TAF_N_DOMAIN_TOTAL})"
+    )
+
+
+if __name__ == "__main__":
+    main()
