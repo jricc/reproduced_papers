@@ -1,0 +1,68 @@
+{
+  "description": "QSVM medical-embedding reproduction (arXiv:2604.24597) runner",
+  "arguments": [
+    {
+      "flags": ["--source"],
+      "help": "Data source: synthetic | real | auto",
+      "type": "str",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "dataset.source"}
+    },
+    {
+      "flags": ["--model"],
+      "help": "Foundation model for real data (medsiglip-448 | rad-dino | vit-patch32-cls)",
+      "type": "str",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "dataset.model"}
+    },
+    {
+      "flags": ["--signal"],
+      "help": "Synthetic label SNR knob (0 = unpredictable, mimics insurance)",
+      "type": "float",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "dataset.synthetic.signal"}
+    },
+    {
+      "flags": ["--n-samples"],
+      "help": "Synthetic sample count",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "dataset.synthetic.n_samples"}
+    },
+    {
+      "flags": ["--minority-fraction"],
+      "help": "Synthetic positive-class fraction",
+      "type": "float",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "dataset.synthetic.minority_fraction"}
+    },
+    {
+      "flags": ["--q-list"],
+      "help": "Comma-separated qubit/PCA dimensions, e.g. 2,4,6,11",
+      "type": "csv_int_list",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "experiment.q_list"}
+    },
+    {
+      "flags": ["--seeds"],
+      "help": "Comma-separated seeds, e.g. 0,1,2,3,4",
+      "type": "csv_int_list",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "experiment.seeds"}
+    },
+    {
+      "flags": ["--circuit"],
+      "help": "Quantum feature map: bsp (default) | zz",
+      "type": "str",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "experiment.circuit"}
+    },
+    {
+      "flags": ["--reps"],
+      "help": "Data re-uploading repetitions of the feature map",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "experiment.reps"}
+    }
+  ]
+}

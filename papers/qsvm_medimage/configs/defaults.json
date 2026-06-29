@@ -1,0 +1,28 @@
+{
+    "description": "Default = fast smoke config (synthetic embeddings, tiny).",
+    "seed": 42,
+    "outdir": "outdir",
+    "device": "cpu",
+    "data_root": null,
+    "dataset": {
+        "source": "auto",
+        "model": "medsiglip-448",
+        "synthetic": {
+            "n_samples": 200,
+            "ambient_dim": 256,
+            "latent_dim": 30,
+            "spectrum_decay": 0.9,
+            "minority_fraction": 0.28,
+            "signal": 0.0,
+            "noise": 1.0
+        }
+    },
+    "experiment": {
+        "q_list": [2, 4, 6],
+        "seeds": [0],
+        "circuit": "bsp",
+        "reps": 1,
+        "classifiers": ["qsvm", "linear_c1", "rbf_c1", "rbf_rank_matched", "linear_balanced", "linear_tuned"]
+    },
+    "logging": {"level": "info", "save_config_snapshot": true}
+}

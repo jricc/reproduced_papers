@@ -1,0 +1,26 @@
+{
+    "description": "Main reproduction: near-zero-signal, imbalanced task (mimics insurance-from-X-ray). Synthetic foundation-model embeddings (V4).",
+    "seed": 42,
+    "outdir": "outdir",
+    "device": "cpu",
+    "dataset": {
+        "source": "synthetic",
+        "synthetic": {
+            "n_samples": 1000,
+            "ambient_dim": 768,
+            "latent_dim": 50,
+            "spectrum_decay": 0.9,
+            "minority_fraction": 0.28,
+            "signal": 0.0,
+            "noise": 1.0
+        }
+    },
+    "experiment": {
+        "q_list": [2, 3, 4, 5, 6, 8, 10, 11, 12],
+        "seeds": [0, 1, 2, 3, 4],
+        "circuit": "bsp",
+        "reps": 1,
+        "classifiers": ["qsvm", "linear_c1", "rbf_c1", "rbf_rank_matched", "linear_balanced", "linear_tuned"]
+    },
+    "logging": {"level": "info", "save_config_snapshot": true}
+}
