@@ -33,19 +33,35 @@ def test_count_positive_eigenvalues_uses_tolerance():
 
 
 def test_eigenvalue_rows_include_cumulative_variance():
-    rows = figure2.eigenvalue_rows(np.array([0.75, 0.25]))
+    rows = figure2.eigenvalue_rows(np.array([3.0, 1.0]))
 
     assert rows == [
         {
             "eigenvalue_index": 0,
+            "raw_eigenvalue": 3.0,
             "normalized_eigenvalue": 0.75,
             "eigenvalue_count": 1,
             "cumulative_variance": 0.75,
         },
         {
             "eigenvalue_index": 1,
+            "raw_eigenvalue": 1.0,
             "normalized_eigenvalue": 0.25,
             "eigenvalue_count": 2,
             "cumulative_variance": 1.0,
         },
     ]
+
+
+def test_linear_kernel_rank_validation_is_bounded_by_q():
+    X = np.array(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+        ]
+    )
+    K = X @ X.T
+    raw = figure2.kernel_eigenvalues(K)
+
+    assert figure2.count_positive_eigenvalues(raw) <= X.shape[1]

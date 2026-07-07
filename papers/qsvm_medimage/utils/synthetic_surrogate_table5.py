@@ -64,7 +64,7 @@ def compute_table5_row(
     quantum_kernel = fidelity_kernel(X_train)
     return {
         "source": source,
-        "synthetic_surrogate": source == "synthetic",
+        "synthetic_surrogate": source != "real",
         "model": model,
         "q": q,
         "seed": seed,
@@ -129,12 +129,14 @@ def write_markdown(path: Path, *, payload: dict[str, object]) -> None:
 def default_prefix(source: str) -> str:
     if source == "synthetic":
         return "synthetic_surrogate_table5"
+    if source == "synthetic_file":
+        return "synthetic_file_table5"
     return "real_table5"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("synthetic", "real"), default="synthetic")
+    parser.add_argument("--source", choices=("synthetic", "synthetic_file", "real"), default="synthetic")
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--results-dir", type=Path, default=Path("results"))
     parser.add_argument("--output-prefix", default=None)
@@ -189,7 +191,7 @@ def main() -> None:
         },
         "data": {
             "source": args.source,
-            "synthetic_surrogate": args.source == "synthetic",
+            "synthetic_surrogate": args.source != "real",
             "synthetic_spec": asdict(synthetic) if args.source == "synthetic" else None,
             "data_root": str(args.data_root) if args.data_root else None,
             "seed": args.seed,

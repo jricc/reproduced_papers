@@ -1,0 +1,26 @@
+{
+    "description": "Fast synthetic fallback smoke test: small high-dimensional embeddings, linear/RBF only.",
+    "seed": 42,
+    "outdir": "outdir",
+    "device": "cpu",
+    "data": {
+        "mode": "synthetic",
+        "model_name": "synthetic_medsiglip",
+        "n_samples": 150,
+        "embedding_dim": 64,
+        "positive_ratio": 0.304,
+        "n_signal_latents": 8,
+        "n_nuisance_latents": 24,
+        "signal_strength": 0.25,
+        "noise_std": 1.0,
+        "nuisance_scale": 3.0
+    },
+    "experiment": {
+        "q_list": [4],
+        "seeds": [0],
+        "circuit": "bsp",
+        "reps": 1,
+        "classifiers": ["linear_c1", "rbf_c1"]
+    },
+    "logging": {"level": "info", "save_config_snapshot": true}
+}

@@ -39,7 +39,11 @@ for root in (PROJECT_ROOT, REPRO_ROOT):
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
-from lib.data import load_real_embeddings, make_synthetic_embeddings
+from lib.data import (
+    load_real_embeddings,
+    load_synthetic_npz_embeddings,
+    make_synthetic_embeddings,
+)
 from lib.quantum_kernel import fidelity_kernel
 from lib.svm_pipeline import preprocess, split_indices
 
@@ -82,6 +86,9 @@ MODEL_SEED_OFFSETS = {
     "vit-patch32-cls": 20_000,
 }
 
+SOURCE_CHOICES = ("synthetic", "synthetic_file", "real")
+SYNTHETIC_FILE_SOURCES = {"synthetic_file", "synthetic_npz", "generated_synthetic"}
+
 
 @dataclass(frozen=True)
 class SyntheticSpec:
@@ -122,6 +129,14 @@ def load_dataset(
         if data_root is None:
             raise ValueError("--data-root is required with --source real")
         return load_real_embeddings(model=model, seed=seed, data_root=data_root)
+    if source in SYNTHETIC_FILE_SOURCES:
+        if data_root is None:
+            raise ValueError("--data-root is required with --source synthetic_file")
+        return load_synthetic_npz_embeddings(
+            model_name=model,
+            seed=seed,
+            data_root=str(data_root),
+        )
 
     synthetic_seed = seed + MODEL_SEED_OFFSETS[model]
     return make_synthetic_embeddings(
@@ -282,7 +297,7 @@ def run_one_config(
 
     run_metadata = {
         "source": source,
-        "synthetic_surrogate": source == "synthetic",
+        "synthetic_surrogate": source != "real",
         "model": model,
         "q": q,
         "seed": seed,
@@ -421,12 +436,14 @@ def write_markdown(path: Path, *, payload: dict[str, object]) -> None:
 def default_prefix(source: str) -> str:
     if source == "synthetic":
         return "synthetic_surrogate_table1"
+    if source in SYNTHETIC_FILE_SOURCES:
+        return "synthetic_file_table1"
     return "real_table1"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("synthetic", "real"), default="synthetic")
+    parser.add_argument("--source", choices=SOURCE_CHOICES, default="synthetic")
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--results-dir", type=Path, default=Path("results"))
     parser.add_argument("--output-prefix", default=None)
@@ -491,7 +508,7 @@ def main() -> None:
         },
         "data": {
             "source": args.source,
-            "synthetic_surrogate": args.source == "synthetic",
+            "synthetic_surrogate": args.source != "real",
             "synthetic_spec": asdict(synthetic) if args.source == "synthetic" else None,
             "data_root": str(args.data_root) if args.data_root else None,
             "seeds": seeds,

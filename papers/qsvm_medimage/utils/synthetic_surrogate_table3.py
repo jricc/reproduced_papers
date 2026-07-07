@@ -77,7 +77,7 @@ def compute_table3(
     matrix = confusion_matrix(y_test, y_pred, labels=[0, 1])
     return {
         "source": source,
-        "synthetic_surrogate": source == "synthetic",
+        "synthetic_surrogate": source != "real",
         "model": model,
         "q": q,
         "seed": seed,
@@ -150,12 +150,14 @@ def write_markdown(path: Path, *, payload: dict[str, object]) -> None:
 def default_prefix(source: str) -> str:
     if source == "synthetic":
         return "synthetic_surrogate_table3"
+    if source == "synthetic_file":
+        return "synthetic_file_table3"
     return "real_table3"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("synthetic", "real"), default="synthetic")
+    parser.add_argument("--source", choices=("synthetic", "synthetic_file", "real"), default="synthetic")
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--results-dir", type=Path, default=Path("results"))
     parser.add_argument("--output-prefix", default=None)
@@ -207,7 +209,7 @@ def main() -> None:
         },
         "data": {
             "source": args.source,
-            "synthetic_surrogate": args.source == "synthetic",
+            "synthetic_surrogate": args.source != "real",
             "synthetic_spec": asdict(synthetic) if args.source == "synthetic" else None,
             "data_root": str(args.data_root) if args.data_root else None,
             "split": "80/10/10 stratified via lib.svm_pipeline.split_indices",

@@ -33,8 +33,7 @@ def test_select_sorted_training_subset_sorts_by_class():
 
 def test_linear_kernel_stats_uses_population_variance():
     kernel = np.array([[1.0, 0.0], [0.0, 3.0]])
-    stats = table6.linear_kernel_stats(kernel, np.array([0, 1]))
+    stats = table6.linear_kernel_stats(kernel)
 
-    assert stats["linear_kernel_mean"] == 1.0
-    assert np.isclose(stats["linear_kernel_variance"], stats["linear_kernel_std"] ** 2)
-    assert stats["between_class_mean"] == 0.0
+    assert stats["k_l_mean"] == 1.0
+    assert np.isclose(stats["k_l_var"], stats["k_l_std"] ** 2)

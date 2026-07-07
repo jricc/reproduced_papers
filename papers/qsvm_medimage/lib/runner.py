@@ -59,13 +59,29 @@ def train_and_evaluate(cfg, run_dir: Path) -> None:
     for r in all_rows:
         agg.setdefault((r["method"], r["q"]), []).append(r)
     summary = []
-    metric_keys = ["f1", "recall", "precision", "accuracy", "auc", "majority_acc", "eff_rank"]
+    metric_keys = [
+        "f1",
+        "recall",
+        "precision",
+        "accuracy",
+        "auc",
+        "majority_acc",
+        "eff_rank",
+        "predicted_minority_count",
+        "true_minority_count",
+        "collapse",
+    ]
     for (method, q), rs in sorted(agg.items(), key=lambda kv: (kv[0][0], kv[0][1])):
         row = {"method": method, "q": q, "n_seeds": len(rs)}
         for mk in metric_keys:
             vals = np.array([x[mk] for x in rs], dtype=float)
-            row[f"{mk}_mean"] = float(np.nanmean(vals))
-            row[f"{mk}_std"] = float(np.nanstd(vals))
+            finite = vals[np.isfinite(vals)]
+            if len(finite) == 0:
+                row[f"{mk}_mean"] = float("nan")
+                row[f"{mk}_std"] = float("nan")
+            else:
+                row[f"{mk}_mean"] = float(np.mean(finite))
+                row[f"{mk}_std"] = float(np.std(finite))
         summary.append(row)
     sfields = ["method", "q", "n_seeds"] + [f"{mk}_{s}" for mk in metric_keys for s in ("mean", "std")]
     with (run_dir / "summary.csv").open("w", newline="") as f:
@@ -73,18 +89,22 @@ def train_and_evaluate(cfg, run_dir: Path) -> None:
         w.writeheader()
         w.writerows(summary)
 
-    # --- collapse rates (fraction of seeds with minority-F1 < 0.05) -------------------
+    # --- collapse rates (fraction of seeds with majority-only / zero-F1 predictions) ---
     collapse = {}
     for r in all_rows:
         key = (r["method"], r["q"])
-        collapse.setdefault(key, []).append(r["f1"])
+        collapse.setdefault(key, []).append(bool(r.get("collapse", False)))
     collapse_rows = [
-        {"method": m, "q": q, "collapse_rate": float(np.mean(np.array(v) < 0.05)),
-         "mean_f1": float(np.mean(v))}
+        {
+            "method": m,
+            "q": q,
+            "collapse_rate": float(np.mean(v)),
+            "n_seeds": len(v),
+        }
         for (m, q), v in sorted(collapse.items())
     ]
     with (run_dir / "collapse_rates.csv").open("w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["method", "q", "collapse_rate", "mean_f1"])
+        w = csv.DictWriter(f, fieldnames=["method", "q", "collapse_rate", "n_seeds"])
         w.writeheader()
         w.writerows(collapse_rows)
 

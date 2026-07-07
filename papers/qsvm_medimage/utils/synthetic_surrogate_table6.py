@@ -11,10 +11,18 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPRO_ROOT = PROJECT_ROOT.parents[1]
+for root in (PROJECT_ROOT, REPRO_ROOT):
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
 from lib.svm_pipeline import preprocess, split_indices
 from synthetic_surrogate_table1 import SyntheticSpec, load_dataset
 
@@ -28,6 +36,12 @@ TABLE6_CONFIGS: tuple[tuple[str, int], ...] = (
     ("vit-patch32-cls", 4),
     ("vit-patch32-cls", 6),
 )
+
+MODEL_DISPLAY = {
+    "medsiglip-448": "MedSigLIP",
+    "rad-dino": "RAD-DINO",
+    "vit-patch32-cls": "ViT-p32",
+}
 
 
 def select_sorted_training_subset(
@@ -45,21 +59,12 @@ def select_sorted_training_subset(
     return X_train[selected], y_train[selected]
 
 
-def linear_kernel_stats(kernel: np.ndarray, y_subset: np.ndarray) -> dict[str, float]:
-    """Compute Table 6 stats plus explicit within/between-class diagnostics."""
-    same_class = y_subset[:, None] == y_subset[None, :]
-    off_diagonal = ~np.eye(len(y_subset), dtype=bool)
-    within_mask = same_class & off_diagonal
-    between_mask = ~same_class
-    within_mean = float(np.mean(kernel[within_mask])) if np.any(within_mask) else float("nan")
-    between_mean = float(np.mean(kernel[between_mask])) if np.any(between_mask) else float("nan")
+def linear_kernel_stats(kernel: np.ndarray) -> dict[str, float]:
+    """Compute the three statistics reported in paper Table 6."""
     return {
-        "linear_kernel_mean": float(np.mean(kernel)),
-        "linear_kernel_std": float(np.std(kernel)),
-        "linear_kernel_variance": float(np.var(kernel)),
-        "within_class_offdiag_mean": within_mean,
-        "between_class_mean": between_mean,
-        "within_between_gap": within_mean - between_mean,
+        "k_l_mean": float(np.mean(kernel)),
+        "k_l_std": float(np.std(kernel)),
+        "k_l_var": float(np.var(kernel)),
     }
 
 
@@ -93,11 +98,12 @@ def compute_table6_row(
         subsample_size=subsample_size,
     )
     linear_kernel = X_subset @ X_subset.T
-    stats = linear_kernel_stats(linear_kernel, y_subset)
+    stats = linear_kernel_stats(linear_kernel)
     return {
         "source": source,
-        "synthetic_surrogate": source == "synthetic",
+        "synthetic_surrogate": source != "real",
         "model": model,
+        "model_display": MODEL_DISPLAY[model],
         "q": q,
         "seed": seed,
         "train_samples": int(len(idx_train)),
@@ -129,22 +135,19 @@ def write_markdown(path: Path, *, payload: dict[str, object]) -> None:
         "",
         f"Paper methodology pointer: {PAPER_TABLE6_POINTER}",
         "",
-        "Table 6 is a linear-kernel diagnostic: it reports the mean, standard deviation, and variance of the PCA-q linear kernel on a sorted training subset.",
+        "Table 6 is a linear-kernel diagnostic: it reports the mean, standard deviation, and variance of the PCA-q linear kernel on 200 subsampled training samples sorted by class.",
         "",
-        "| Model | q | mean | std | var | within offdiag mean | between mean | gap |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Model | q | K_L mean | K_L std | K_L var |",
+        "| --- | ---: | ---: | ---: | ---: |",
     ]
     for row in payload["summary_rows"]:
         lines.append(
-            "| {model} | {q} | {mean} | {std} | {var} | {within} | {between} | {gap} |".format(
-                model=row["model"],
+            "| {model} | {q} | {mean} | {std} | {var} |".format(
+                model=row["model_display"],
                 q=row["q"],
-                mean=format_float(row["linear_kernel_mean"]),
-                std=format_float(row["linear_kernel_std"]),
-                var=format_float(row["linear_kernel_variance"]),
-                within=format_float(row["within_class_offdiag_mean"]),
-                between=format_float(row["between_class_mean"]),
-                gap=format_float(row["within_between_gap"]),
+                mean=format_float(row["k_l_mean"]),
+                std=format_float(row["k_l_std"]),
+                var=format_float(row["k_l_var"]),
             )
         )
 
@@ -164,12 +167,14 @@ def write_markdown(path: Path, *, payload: dict[str, object]) -> None:
 def default_prefix(source: str) -> str:
     if source == "synthetic":
         return "synthetic_surrogate_table6"
+    if source == "synthetic_file":
+        return "synthetic_file_table6"
     return "real_table6"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("synthetic", "real"), default="synthetic")
+    parser.add_argument("--source", choices=("synthetic", "synthetic_file", "real"), default="synthetic")
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--results-dir", type=Path, default=Path("results"))
     parser.add_argument("--output-prefix", default=None)
@@ -226,7 +231,7 @@ def main() -> None:
         },
         "data": {
             "source": args.source,
-            "synthetic_surrogate": args.source == "synthetic",
+            "synthetic_surrogate": args.source != "real",
             "synthetic_spec": asdict(synthetic) if args.source == "synthetic" else None,
             "data_root": str(args.data_root) if args.data_root else None,
             "seed": args.seed,

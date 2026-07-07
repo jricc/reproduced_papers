@@ -6,3 +6,12 @@ FEEDBACK.md
 INSIGHTS.md
 LOG.md
 VISITED_URLS.md
+
+data/
+outdir/
+models/
+
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store

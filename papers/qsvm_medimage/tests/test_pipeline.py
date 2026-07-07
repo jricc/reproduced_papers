@@ -19,15 +19,15 @@ def test_synthetic_shapes_and_balance():
 
 
 def test_signal_knob_changes_separability():
-    # With signal, a balanced linear SVM should beat chance; with signal=0 it should not.
+    # The synthetic signal is nonlinear; RBF should benefit more than a linear model.
     rows0, rows2 = {}, {}
     X0, y0 = data_mod.make_synthetic_embeddings(n_samples=400, ambient_dim=64, signal=0.0, seed=0)
     X2, y2 = data_mod.make_synthetic_embeddings(n_samples=400, ambient_dim=64, signal=3.0, seed=0)
-    for r in pipe.run_one(X0, y0, q=4, seed=0, classifiers=["linear_tuned"]):
+    for r in pipe.run_one(X0, y0, q=4, seed=0, classifiers=["rbf_c1"]):
         rows0[r["method"]] = r
-    for r in pipe.run_one(X2, y2, q=4, seed=0, classifiers=["linear_tuned"]):
+    for r in pipe.run_one(X2, y2, q=4, seed=0, classifiers=["rbf_c1"]):
         rows2[r["method"]] = r
-    assert rows2["linear_tuned"]["auc"] > rows0["linear_tuned"]["auc"]
+    assert rows2["rbf_c1"]["auc"] > rows0["rbf_c1"]["auc"]
 
 
 def test_run_one_returns_all_methods():

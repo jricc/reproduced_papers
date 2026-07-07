@@ -26,6 +26,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.metrics import (accuracy_score, f1_score, precision_score,
                              recall_score, roc_auc_score)
+from sklearn.metrics import confusion_matrix
 from sklearn.metrics.pairwise import rbf_kernel
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -50,17 +51,27 @@ def preprocess(X_tr, X_val, X_te, q):
     pca = PCA(n_components=q).fit(X_tr)
     X_tr, X_val, X_te = pca.transform(X_tr), pca.transform(X_val), pca.transform(X_te)
     mm = MinMaxScaler(feature_range=(-1, 1)).fit(X_tr)
-    return (mm.transform(X_tr), mm.transform(X_val), mm.transform(X_te),
-            float(pca.explained_variance_ratio_.sum()))
+    X_tr = np.clip(mm.transform(X_tr), -1.0, 1.0)
+    X_val = np.clip(mm.transform(X_val), -1.0, 1.0)
+    X_te = np.clip(mm.transform(X_te), -1.0, 1.0)
+    return X_tr, X_val, X_te, float(pca.explained_variance_ratio_.sum())
 
 
 def _scores(y_true, y_pred, y_proba):
+    cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
+    predicted_minority_count = int(np.sum(y_pred == 1))
+    true_minority_count = int(np.sum(y_true == 1))
+    f1 = float(f1_score(y_true, y_pred, zero_division=0))
     out = {
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "precision": float(precision_score(y_true, y_pred, zero_division=0)),
         "recall": float(recall_score(y_true, y_pred, zero_division=0)),
-        "f1": float(f1_score(y_true, y_pred, zero_division=0)),
+        "f1": f1,
         "majority_acc": float(max(np.mean(y_true), 1 - np.mean(y_true))),
+        "confusion_matrix": cm.tolist(),
+        "predicted_minority_count": predicted_minority_count,
+        "true_minority_count": true_minority_count,
+        "collapse": bool(f1 == 0.0 or predicted_minority_count == 0),
     }
     try:
         out["auc"] = float(roc_auc_score(y_true, y_proba))
@@ -117,10 +128,30 @@ def run_one(X, y, q, seed, circuit="bsp", reps=1, C=1.0, classifiers=None):
         results.append(("qsvm", m))
 
     if "qsvm_photonic" in classifiers:
-        from .photonic_kernel import photonic_fidelity_kernels
-        Kp_tr, Kp_te = photonic_fidelity_kernels(Xtr, Xte, q, n_photons=2, seed=seed)
-        m = _fit_score_kernel(Kp_tr, ytr, Kp_te, yte, C=C, seed=seed)
-        m["eff_rank"] = effective_rank(Kp_tr)
+        try:
+            from .photonic_kernel import photonic_fidelity_kernels
+
+            Kp_tr, Kp_te = photonic_fidelity_kernels(Xtr, Xte, q, n_photons=2, seed=seed)
+            m = _fit_score_kernel(Kp_tr, ytr, Kp_te, yte, C=C, seed=seed)
+            m["eff_rank"] = effective_rank(Kp_tr)
+            m["skipped"] = False
+            m["skip_reason"] = ""
+        except Exception as exc:
+            m = {
+                "accuracy": float("nan"),
+                "precision": float("nan"),
+                "recall": float("nan"),
+                "f1": float("nan"),
+                "majority_acc": float("nan"),
+                "auc": float("nan"),
+                "eff_rank": float("nan"),
+                "confusion_matrix": [[0, 0], [0, 0]],
+                "predicted_minority_count": 0,
+                "true_minority_count": int(np.sum(yte == 1)),
+                "collapse": True,
+                "skipped": True,
+                "skip_reason": f"MerLin/Perceval unavailable: {exc}",
+            }
         results.append(("qsvm_photonic", m))
 
     if "linear_c1" in classifiers:

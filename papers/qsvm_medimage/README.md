@@ -54,6 +54,68 @@ unpredictable from a chest X-ray*, so the task carries almost no learnable signa
 A paper-accurate path is retained for credentialed users: `configs/real_medsiglip.json` +
 `export QML_DATA_ROOT=/path/to/qml-mimic-cxr-embeddings` (or `--data-root`).
 
+### Synthetic fallback benchmark
+
+The synthetic dataset is not intended to simulate chest radiographs, patients, or insurance
+metadata. It is a controlled high-dimensional embedding benchmark designed to stress-test
+the same kernel geometry studied by Ordóñez et al.: after PCA compression, linear kernels
+can become structurally low-rank and collapse to majority-class prediction under class
+imbalance, while richer nonlinear or photonic fidelity kernels may preserve minority-class
+signal.
+
+This fallback is useful for CI, smoke tests, local development, and MerLin photonic-kernel
+testing when the gated MIMIC-CXR embedding dataset is unavailable. Claims on the original
+medical task require the real MIMIC-CXR embedding dataset.
+
+The current generator (`synthetic_kernel_geometry_v4_table5_table6_calibrated`) mirrors the
+experimental structure of the gated embedding files: `data_type9`-sized cohorts by default,
+class imbalance near 30.4% positive, 20-seed-compatible deterministic generation, and
+model-shaped embedding dimensions (`synthetic_medsiglip`: 1152, `synthetic_raddino`: 768,
+`synthetic_vit`: 768). Labels are shared across synthetic model families for the same seed
+and sample count; only the frozen-style embedding geometry changes by model. The default
+profiles are calibrated against the paper's Table V PCA geometry and Table VI linear-kernel
+moments, not against classifier performance.
+
+Recommended local workflow keeps the three stages separate:
+
+```bash
+# From papers/qsvm_medimage.
+
+# 1. Generate a materialized synthetic dataset once.
+python utils/generate_synthetic_dataset.py \
+  --output-root data/synthetic_qml_mimic_cxr_embeddings \
+  --models synthetic_medsiglip,synthetic_raddino,synthetic_vit \
+  --seeds 0,1,2,3,4,5,6,7,8,9
+
+# 2. Train/evaluate models from the fixed dataset.
+python ../../implementation.py \
+  --paper qsvm_medimage \
+  --config configs/synthetic_file_collapse.json
+
+# 3. Render artifacts from saved training outputs, without retraining.
+python utils/render_run_artifacts.py --run-dir outdir/run_XXXX
+
+# Optional: paper-style diagnostics can also read the fixed dataset.
+python utils/synthetic_surrogate_table10.py --source synthetic_file --data-root data/synthetic_qml_mimic_cxr_embeddings
+
+# Or run selected table/figure scripts with the same fixed dataset source.
+python utils/generate_artifacts_from_dataset.py \
+  --source synthetic_file \
+  --data-root data/synthetic_qml_mimic_cxr_embeddings \
+  --only figure2,table6,table10
+
+# Audit geometry before changing the synthetic generator.
+python utils/audit_synthetic_geometry.py \
+  --source synthetic_file \
+  --data-root data/synthetic_qml_mimic_cxr_embeddings
+```
+
+The in-memory configs (`synthetic_smoke.json`, `synthetic_collapse.json`) remain useful for quick
+checks. The `synthetic_file_*` configs are preferred when comparing runs, because the dataset is fixed
+on disk. The `render_run_artifacts.py` script is the strict no-training artifact step; the
+`synthetic_surrogate_*` scripts are paper-style diagnostics that may recompute the specific kernels or
+models needed for a table or figure, but from the same fixed dataset.
+
 ## Install and How to Run
 ```bash
 cd papers/qsvm_medimage

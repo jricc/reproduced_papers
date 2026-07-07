@@ -122,17 +122,28 @@ def fidelity_kernel(data1: np.ndarray, data2: np.ndarray | None = None,
     return np.abs(s1.conj() @ s2.T) ** 2
 
 
+def trace_normalize_kernel(K: np.ndarray) -> np.ndarray:
+    """Return K / trace(K), leaving non-positive-trace kernels unchanged."""
+    K = np.asarray(K, dtype=np.float64)
+    trace = float(np.trace(K))
+    if trace <= 0.0:
+        return K.copy()
+    return K / trace
+
+
 def effective_rank(K: np.ndarray) -> float:
     """exp(von Neumann entropy) of the trace-normalised kernel (paper eq.).
 
     Matches ``rbf_rank_matched_multiseed.eff_rank``.
     """
-    tr = np.trace(K)
+    K = np.asarray(K, dtype=np.float64)
+    K = 0.5 * (K + K.T)
+    tr = float(np.trace(K))
     if tr <= 0:
         return 1.0
     eig = np.linalg.eigvalsh(K / tr)
     eig = np.maximum(eig, 0.0)
-    s = eig.sum()
+    s = float(eig.sum())
     if s <= 0:
         return 1.0
     p = eig / s
