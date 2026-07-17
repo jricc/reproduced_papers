@@ -67,7 +67,7 @@ def test_model_defaults_match_embedding_families():
 
     assert X_medsig.shape == (120, 1152)
     assert X_raddino.shape == (120, 768)
-    assert meta_medsig["generator_version"] == "synthetic_kernel_geometry_v4_table5_table6_calibrated"
+    assert meta_medsig["generator_version"] == "synthetic_kernel_geometry_v5_qsvm_separable"
     assert meta_raddino["model_family"] == "RAD-DINO"
 
 

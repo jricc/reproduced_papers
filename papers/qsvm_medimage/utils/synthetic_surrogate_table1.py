@@ -87,6 +87,8 @@ MODEL_SEED_OFFSETS = {
 }
 
 SOURCE_CHOICES = ("synthetic", "synthetic_file", "real")
+
+PAPER_TABLE1_POINTER = "https://arxiv.org/html/2604.24597v1#S4.T1"
 SYNTHETIC_FILE_SOURCES = {"synthetic_file", "synthetic_npz", "generated_synthetic"}
 
 
@@ -417,6 +419,8 @@ def write_markdown(path: Path, *, payload: dict[str, object]) -> None:
         "",
         "This artifact is a surrogate computation only. It does not reproduce the paper numbers because the gated MIMIC-CXR embedding dataset is not available locally.",
         "",
+        f"Paper methodology pointer: {PAPER_TABLE1_POINTER}",
+        "",
         "| Tier | Comparison | Wins / total | Mean F1 gain |",
         "| --- | --- | ---: | ---: |",
         f"| Tier 1 | {tier1['comparison']} | {tier1['wins']} / {tier1['total']} | {tier1['mean_f1_gain']:.6f} |",
@@ -499,6 +503,8 @@ def main() -> None:
 
     payload: dict[str, object] = {
         "artifact": prefix,
+        "paper_table": "Table 1",
+        "paper_pointer": PAPER_TABLE1_POINTER,
         "aggregate": aggregate,
         "paths": {
             "long_csv": str(long_path),

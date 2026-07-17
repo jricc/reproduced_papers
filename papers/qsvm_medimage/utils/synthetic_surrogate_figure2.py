@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
@@ -19,6 +20,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPRO_ROOT = PROJECT_ROOT.parents[1]
+for root in (PROJECT_ROOT, REPRO_ROOT):
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
 
 from synthetic_surrogate_table1 import SyntheticSpec, load_dataset
 from lib.quantum_kernel import effective_rank

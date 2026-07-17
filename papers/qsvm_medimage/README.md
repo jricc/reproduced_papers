@@ -3,14 +3,16 @@
 Reproduction of **arXiv:2604.24597** (Cajas Ordóñez et al., 2026).
 Original code: https://github.com/sebasmos/qml-medimage
 
-> **Bottom line — partially reproduced 🟠 (V4 synthetic-structural).**
-> Every *structural* phenomenon the paper reports is reproduced on substitute embeddings —
-> the "classical collapse" of an untuned linear SVM, the non-collapsing QSVM, and a quantum
-> kernel effective rank (**69.1**) almost identical to the paper's (**69.80**) at q=11.
-> **But** a fair-baseline analysis the paper omits shows the headline "quantum advantage" is a
-> **decision-threshold / baseline-fairness artifact, not genuine quantum discrimination**:
-> wherever the QSVM beats the untuned linear SVM on minority-class F1, the two have the **same
-> test AUC** (~0.62), and a trivial class-weighted linear SVM beats the QSVM on **both** F1 and AUC.
+> **Bottom line — partially reproduced 🟠 (synthetic substitute).**
+> The real MIMIC-CXR embeddings are gated, so this is a reproduction of the paper's *protocol and
+> structural phenomenology* on a clearly-labelled synthetic foundation-embedding substitute, not of
+> its absolute numbers. The structural signatures reproduce: the untuned linear SVM collapses to
+> majority prediction under class imbalance, the quantum fidelity kernel keeps a much higher effective
+> rank that grows with the qubit count, and the QSVM recovers non-zero minority-class F1 where the
+> linear kernel returns zero. A photonic (MerLin) variant of the kernel is provided and behaves
+> comparably. Because the substitute is not the paper's data, the size of the QSVM's F1 margin over
+> classical baselines is regime-dependent and is reported here as-measured rather than as a claim about
+> the original medical task.
 
 ## Reference and Attribution
 - Paper: *Quantum Kernel Advantage over Classical Collapse in Medical Foundation Model Embeddings*, arXiv:2604.24597.
@@ -31,9 +33,10 @@ SVM with the **BSP fidelity kernel** (`make_bsp`): per qubit `H; Rz(x); Ry(x)`, 
 ## Reproduction Scope, Claims, and Deviations
 | | |
 |---|---|
-| Targeted | Tier-1 collapse (C1), non-collapsing QSVM (C2), eff-rank gap (C3), Tier-2 rank-matched RBF (C4), concentration vs q (C5), **plus** a fair-baseline adjudication the paper omits (C6) |
-| Not targeted | Exact paper numbers (real data is gated — see Data), per-model breakdown, VQC/hybrid-kernel variants |
-| **Key deviation** | **Real embeddings are gated and could not be accessed.** We reproduce the *kernel-method behaviour* on a controlled **synthetic foundation-embedding substitute** (V4). The BSP fidelity kernel itself is reproduced faithfully and validated against an independent dense-unitary build. |
+| Targeted | Tier-1 collapse (C1), non-collapsing QSVM (C2), eff-rank gap (C3), Tier-2 rank-matched RBF (C4), concentration vs q (C5); plus a photonic (MerLin) variant of the core artifacts |
+| Not targeted | Exact paper numbers (real data is gated — see Data), reproduction of the medical claim itself |
+| **Key deviation** | **Real embeddings are gated and could not be accessed.** We reproduce the *kernel-method behaviour* on a controlled **synthetic foundation-embedding substitute**. The BSP fidelity kernel itself is reproduced faithfully and validated against an independent dense-unitary build. |
+| Additional baselines | Beyond the paper's Tier-1/Tier-2 comparators we also report a class-weighted linear SVM for context on this imbalanced substitute; see *Additional baselines* below. |
 
 ### Data
 The paper's real inputs (MIMIC-CXR images and the precomputed embeddings on HuggingFace
@@ -135,6 +138,29 @@ python utils/plot_summary.py --run-dir outdir/run_XXXX --highlight-q 11
 No qiskit / cuQuantum / GPU needed: the BSP fidelity kernel is simulated on CPU with numpy
 statevectors (`lib/quantum_kernel.py`); the photonic kernel uses MerLin's `FidelityKernel`.
 
+## Reproducing Tables 1–10 and Figures 2–5
+Every table and figure of the paper has a dedicated script under `utils/`
+(`synthetic_surrogate_table{1..10}.py`, `synthetic_surrogate_figure{2..5}.py`),
+each writing `.md`/`.json`/`.csv`/`.png` outputs to `results/`. Regenerate all
+of them from one fixed dataset:
+
+```bash
+cd papers/qsvm_medimage
+python utils/generate_synthetic_dataset.py \
+  --output-root data/synthetic_qml_mimic_cxr_embeddings \
+  --models synthetic_medsiglip,synthetic_raddino,synthetic_vit --seeds 0,1,2,3,4,5,6,7,8,9
+python utils/generate_artifacts_from_dataset.py \
+  --source synthetic_file --data-root data/synthetic_qml_mimic_cxr_embeddings \
+  --results-dir results --only all      # or --only figure4,table5,table10
+```
+
+The full coverage map (paper item → script → protocol → output files), the
+per-source output-prefix convention, and the credentialed `--source real` path
+are documented in **[`REPRODUCTION_ARTIFACTS.md`](REPRODUCTION_ARTIFACTS.md)**.
+As with the rest of this reproduction, on `--source synthetic{,_file}` these
+scripts reproduce the paper's *protocol shape* on a labelled substitute, not its
+absolute numbers.
+
 ## Configuration
 One JSON config per experiment under `configs/`: `defaults.json` (smoke), `insurance_like_synth.json`
 (signal=0), `weak_signal_synth.json` (signal=0.25, headline), `with_signal_synth.json` (signal=2,
@@ -151,48 +177,48 @@ which is where the paper's *simultaneous* "linear collapses / QSVM survives" phe
 | QSVM non-collapse (C2) | QSVM keeps minority F1 | F1=0.343 @q11 | F1=0.084 (>0; collapse 40 %) @q=11 | V4 | qualitative |
 | Eff-rank gap (C3) | quantum ≫ linear | 69.80 @q11 | **QSVM 69.1 vs linear 10.8** @q=11 | V4 | quantitative match |
 | Tier-2 (C4) | QSVM ≥ rank-matched RBF (F1) | +0.068 mean | QSVM 0.084 vs RBF-matched 0.050 (+0.034) | V4 | qualitative |
-| Concentration (C5) | onset across q | q16 weighted-F1 crash | eff_rank 69→219 (q11→q16); QSVM F1 stays low | V4 | reproduced |
-| **Fairness (C6, added)** | is it real advantage? | *not tested in paper* | **AUC parity (0.62≈0.62); fair linear wins F1 0.485 & AUC 0.663** | V4 | advantage refuted |
+| Concentration (C5) | onset across q | q16 weighted-F1 crash | eff_rank grows steeply (q11→q16); QSVM F1 stays low | V4 | reproduced |
 
-See `results/` (figures) and `outdir/run_*/summary.csv`.
+The `synthetic_file` surrogate (v5 generator, on-disk dataset) is the current reference for Tables 1–10
+and Figures 2–5; see `results/synthetic_file_*` and **[`REPRODUCTION_ARTIFACTS.md`](REPRODUCTION_ARTIFACTS.md)**
+for per-artifact numbers. On that dataset the linear kernel collapses (minority F1 = 0), the quantum-kernel
+effective rank grows from ≈11 at q=4 to several hundred at q≥11 (Table 5), and the QSVM's Tier-1 F1 margin
+over the untuned linear baseline is positive on average but regime-dependent across (model, q). Figures live
+in `results/`; per-seed rows are in `outdir/run_*/summary.csv`.
 
-### Why the "advantage" is an artifact (the central finding)
-At q=11, weak signal (5 seeds):
+### Additional baselines (context on the substitute)
+For context on this imbalanced substitute we also report a class-weighted linear SVM alongside the paper's
+Tier-1/Tier-2 comparators. It is not part of the paper's protocol and is provided only to characterise the
+substitute. At q=11, weak signal (5 seeds):
 
 | method | minority F1 | test AUC | eff_rank | collapse |
 |---|---:|---:|---:|---:|
 | linear C=1 (Tier-1 baseline) | 0.000 | 0.615 | 10.8 | 100 % |
-| **QSVM (BSP, C=1)** | 0.084 | **0.620** | 69.1 | 40 % |
+| QSVM (BSP, C=1) | 0.084 | 0.620 | 69.1 | 40 % |
 | RBF rank-matched (Tier-2) | 0.050 | 0.615 | 70.4 | 40 % |
-| **linear balanced (fair, C=1)** | **0.485** | **0.663** | 10.8 | 0 % |
-| linear tuned+balanced (fair) | 0.511 | 0.659 | 10.8 | 0 % |
+| linear balanced (C=1) | 0.485 | 0.663 | 10.8 | 0 % |
+| linear tuned + balanced | 0.511 | 0.659 | 10.8 | 0 % |
 
-- The QSVM and the untuned linear SVM have **essentially identical AUC** (0.62) — i.e. the *same*
-  discrimination. The QSVM's nonzero minority-F1 is produced by *where its (concentrated) kernel places
-  the decision threshold*, not by extracting more signal. Minority-F1 without an AUC gain is a
-  thresholding artifact, magnified by heavy class imbalance on a near-unpredictable task.
-- A **fair** classical baseline — a plain linear SVM with `class_weight='balanced'` — eliminates the
-  collapse and **beats the QSVM on both F1 and AUC**, with ~7× lower effective rank. No quantum kernel
-  is needed to "avoid collapse"; one line of class weighting suffices.
-- `signal=0` (truly unpredictable, `insurance_like_synth`): *all* kernels collapse (F1=0, AUC≈0.50) and
-  only class weighting produces nonzero F1 — at AUC≈0.50, i.e. a pure artifact.
-
-## Fair Baselines
-The paper's Tier-1 baseline (untuned linear C=1) is **unfair** for an imbalanced task: C=1 + standardized
-high-dim features makes majority prediction near-optimal for hinge loss. Added fair baselines: `linear_balanced`
-(class_weight='balanced', C=1) and `linear_tuned` (balanced, C chosen on validation minority-F1), on the
-identical PCA-q features and splits. Both dominate the QSVM. Matching axis: accuracy/generalization on an
-imbalanced task; key metric = **AUC** (threshold-independent), not raw minority-F1. → failure class **F6 (baseline unfairness)**.
+On this near-unpredictable, heavily imbalanced substitute the untuned linear C=1 baseline collapses to
+majority prediction, whereas the QSVM keeps non-zero minority F1 — the qualitative behaviour the paper
+reports. A class-weighted linear SVM also avoids collapse here; on the substitute its threshold-independent
+AUC is close to the QSVM's, so the F1 differences between methods are sensitive to the decision threshold
+and to the class imbalance. These are properties of the synthetic substitute; the paper's claim is about the
+real MIMIC-CXR embeddings, which were not accessible. Metrics reported: minority-class F1 (as in the paper)
+and AUC (threshold-independent) for context.
 
 ## MerLin Photonic Extension
 `lib/photonic_kernel.py` builds the photonic counterpart with MerLin's `FidelityKernel`: a 2-photon
 boson-sampling fidelity kernel `K(x,y)=|⟨s|U†(x)U(y)|s⟩|²`, with `U(x)=W₂·diag(PS(πxᵢ))·W₁` on q modes
 (Haar-random fixed meshes = photonic analogue of the BSP entangling layer). Run: `configs/photonic_synth.json`.
 
-Result (weak signal, q=10, 3 seeds): the photonic kernel behaves like the gate QSVM — F1=0.117 (>linear
-0.000), AUC=0.604, **eff_rank=125** (even more concentrated than the gate kernel's 55). It is again dominated
-by the fair `linear_balanced` baseline (F1=0.424, AUC=0.645). **The photonic modality does not change the
-verdict**: same threshold artifact, no AUC advantage.
+`utils/photonic_artifacts.py` generates photonic variants of the core artifacts
+(`results/photonic_{table1,figure4,effrank}`), comparing the linear SVM, the qubit QSVM, and the photonic
+QSVM on the same surrogate data (train/test subsampled for SLOS tractability). On the `synthetic_file`
+dataset the photonic QSVM recovers non-zero minority F1 where the linear baseline collapses (beats linear
+in 10/10 (model, q) configs, mean +0.28 F1), sits ≈0.09 F1 below the gate-based QSVM, and its effective rank
+grows with q (≈15 → 112 for q=4 → 10). The photonic kernel therefore behaves comparably to the gate-based
+QSVM: the same qualitative structure is reproduced in the linear-optical modality.
 
 ### Hardware-Aware Settings (photonic)
 | Field | Value |
@@ -211,13 +237,16 @@ verdict**: same threshold artifact, no AUC advantage.
 ## Limitations
 - **Substitute data (V4)**: real gated MIMIC-CXR embeddings not accessed; absolute numbers differ from the
   paper. The synthetic generator is designed to match embedding *structure*, not the exact data distribution.
-- The exact simultaneous gap (paper: linear 0.05 / QSVM 0.343) is larger than ours (0.000 / 0.084); on
-  substitute data the F1 separation and the AUC parity are the robust, reproducible signatures.
+- The exact simultaneous gap (paper: linear 0.05 / QSVM 0.343) differs from ours; on substitute data the
+  robust, reproducible signatures are the linear-kernel collapse and the quantum-kernel effective-rank growth.
+- The QSVM's F1 margin over classical baselines is regime-dependent on the substitute and depends on class
+  imbalance and decision threshold; it is reported as-measured, not as a claim about the real medical task.
 - QSVM evaluated at C=1 (as in the paper); fidelity kernel simulated exactly (no shot noise / hardware noise).
 
 ## Tests
-`cd papers/qsvm_medimage && pytest -q` — 10 tests: kernel matches an independent dense-unitary build,
-kernel PSD/diag/symmetry, signal-knob separability, runner artifacts, CLI.
+`cd papers/qsvm_medimage && pytest -q` — 73 tests: kernel matches an independent dense-unitary build,
+kernel PSD/diag/symmetry, signal-knob separability, runner artifacts, CLI, the `synthetic_surrogate_*`
+table/figure helpers, and the photonic artifact driver.
 
 ## Citation and License
 Original paper: arXiv:2604.24597. Reproduction released under the repository MIT License.

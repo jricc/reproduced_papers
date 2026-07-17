@@ -42,7 +42,8 @@ MODEL_GEOMETRY_PROFILES = {
     "synthetic_medsiglip": {
         "n_signal_latents": 8,
         "n_nuisance_latents": 160,
-        "signal_strength": 0.25,
+        "signal_strength": 0.7,
+        "score_noise_std": 0.4,
         "noise_std": 0.40,
         "nuisance_scale": 3.0,
         "nuisance_decay": 0.91,
@@ -53,7 +54,8 @@ MODEL_GEOMETRY_PROFILES = {
     "synthetic_raddino": {
         "n_signal_latents": 8,
         "n_nuisance_latents": 96,
-        "signal_strength": 0.25,
+        "signal_strength": 1.2,
+        "score_noise_std": 0.4,
         "noise_std": 2.30,
         "nuisance_scale": 3.0,
         "nuisance_decay": 0.92,
@@ -64,7 +66,8 @@ MODEL_GEOMETRY_PROFILES = {
     "synthetic_vit": {
         "n_signal_latents": 8,
         "n_nuisance_latents": 64,
-        "signal_strength": 0.25,
+        "signal_strength": 1.5,
+        "score_noise_std": 0.4,
         "noise_std": 0.75,
         "nuisance_scale": 3.0,
         "nuisance_decay": 0.92,
@@ -74,7 +77,7 @@ MODEL_GEOMETRY_PROFILES = {
     },
 }
 
-GENERATOR_VERSION = "synthetic_kernel_geometry_v4_table5_table6_calibrated"
+GENERATOR_VERSION = "synthetic_kernel_geometry_v5_qsvm_separable"
 
 
 def default_embedding_dim(model_name: str, fallback: int = 1152) -> int:
@@ -90,7 +93,8 @@ def default_generation_profile(model_name: str) -> dict[str, float | int | str]:
     default_profile = {
         "n_signal_latents": 8,
         "n_nuisance_latents": 64,
-        "signal_strength": 0.25,
+        "signal_strength": 0.7,
+        "score_noise_std": 0.4,
         "noise_std": 1.0,
         "nuisance_scale": 3.0,
         "nuisance_decay": 0.96,
@@ -148,6 +152,7 @@ def make_synthetic_embeddings(
     n_signal_latents: int | None = None,
     n_nuisance_latents: int | None = None,
     signal_strength: float | None = None,
+    score_noise_std: float | None = None,
     noise_std: float | None = None,
     nuisance_scale: float | None = None,
     nuisance_decay: float | None = None,
@@ -175,6 +180,8 @@ def make_synthetic_embeddings(
         n_nuisance_latents = int(profile["n_nuisance_latents"])
     if signal_strength is None:
         signal_strength = float(profile["signal_strength"])
+    if score_noise_std is None:
+        score_noise_std = float(profile.get("score_noise_std", 1.0))
     if noise_std is None:
         noise_std = float(profile["noise_std"])
     if nuisance_scale is None:
@@ -210,12 +217,15 @@ def make_synthetic_embeddings(
 
     signal_latents = label_rng.standard_normal((n_samples, n_signal_latents))
 
-    score_noise_std = 0.35
+    # Nonlinear (pairwise-product) label score. This region is linearly
+    # inseparable, so a linear SVM at C=1 collapses to majority prediction on the
+    # imbalanced task, while the nonlinear quantum fidelity kernel recovers the
+    # minority class. ``score_noise_std`` controls how learnable the label is and
+    # thus the minority-F1 magnitude the QSVM reaches.
     score_noise = score_noise_std * label_rng.standard_normal(n_samples)
     score = (
-        signal_latents[:, 0] ** 2
-        + 0.7 * signal_latents[:, 1] * signal_latents[:, 2]
-        + 0.4 * np.sin(3.0 * signal_latents[:, 3])
+        signal_latents[:, 0] * signal_latents[:, 1]
+        + 0.6 * signal_latents[:, 2] * signal_latents[:, 3]
         + score_noise
     )
     n_positive = int(round(n_samples * positive_ratio))
@@ -234,7 +244,7 @@ def make_synthetic_embeddings(
 
     nuisance_scales = nuisance_scale * (nuisance_decay ** np.arange(n_nuisance_latents))
     nuisance_features = nuisance_latents * nuisance_scales
-    signal_features = signal_latents * (0.85 ** np.arange(n_signal_latents))
+    signal_features = signal_latents * (0.9 ** np.arange(n_signal_latents))
 
     nuisance_map = _random_map(model_rng, n_nuisance_latents, embedding_dim)
     signal_map = _random_map(model_rng, n_signal_latents, embedding_dim)

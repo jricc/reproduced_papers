@@ -11,8 +11,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPRO_ROOT = PROJECT_ROOT.parents[1]
+for root in (PROJECT_ROOT, REPRO_ROOT):
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
 
 from lib.quantum_kernel import fidelity_kernel
 from lib.svm_pipeline import preprocess, split_indices

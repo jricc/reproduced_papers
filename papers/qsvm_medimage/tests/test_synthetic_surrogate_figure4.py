@@ -17,11 +17,28 @@ sys.modules[SPEC.name] = figure4
 SPEC.loader.exec_module(figure4)
 
 
-def test_select_first_samples_caps_at_available_rows():
+def test_select_samples_sorted_by_class_caps_and_sorts():
     X_train = np.arange(12).reshape(6, 2)
+    y_train = np.array([1, 0, 1, 0, 1, 0])
 
-    assert figure4.select_first_samples(X_train, 3).shape == (3, 2)
-    assert figure4.select_first_samples(X_train, 99).shape == (6, 2)
+    X_sorted, y_sorted, class_counts = figure4.select_samples_sorted_by_class(X_train, y_train, 4)
+
+    # Caps at the requested count.
+    assert X_sorted.shape == (4, 2)
+    assert y_sorted.shape == (4,)
+    # Sorted by class label: all 0s come before all 1s.
+    assert list(y_sorted) == sorted(y_sorted)
+    # Class counts sum to the selected sample count.
+    assert sum(class_counts) == 4
+
+
+def test_select_samples_sorted_by_class_caps_at_available_rows():
+    X_train = np.arange(12).reshape(6, 2)
+    y_train = np.array([1, 0, 1, 0, 1, 0])
+
+    X_sorted, _, _ = figure4.select_samples_sorted_by_class(X_train, y_train, 99)
+
+    assert X_sorted.shape == (6, 2)
 
 
 def test_normalize_kernel_for_plot_trace_normalizes():
