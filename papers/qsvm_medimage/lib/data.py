@@ -15,6 +15,7 @@ We therefore provide:
    ``lib.synthetic_data.make_synthetic_embeddings``. The new generator creates a controlled
    synthetic benchmark for the kernel-collapse mechanism; it is not a medical data simulator.
 """
+
 from __future__ import annotations
 
 import glob
@@ -25,6 +26,8 @@ import numpy as np
 from .synthetic_data import (
     default_embedding_dim,
     default_n_samples,
+)
+from .synthetic_data import (
     make_synthetic_embeddings as make_synthetic_embeddings_with_metadata,
 )
 
@@ -39,15 +42,52 @@ def make_synthetic_embeddings(
     noise: float = 1.0,
     seed: int = 0,
 ):
-    """Backward-compatible synthetic generator returning only ``X, y``.
+    """
+    Generate synthetic embedding-like vectors used as a substitute for the
+    inaccessible MIMIC-CXR foundation-model embeddings.
 
-    Older reproduction scripts call this function directly with the V4 parameter
-    names. New code should prefer ``lib.synthetic_data.make_synthetic_embeddings``,
-    which returns metadata too.
+    Parameters
+    ----------
+    n_samples
+        Number of samples to generate.
+
+    ambient_dim
+        Dimension of the final embedding vectors.
+
+    latent_dim
+        Size of the latent representation used to generate the embeddings.
+        Larger values create more complex structure.
+
+    spectrum_decay
+        Legacy parameter kept for compatibility with older experiment
+        configurations. It is not used by the current generator.
+
+    minority_fraction
+        Fraction of positive samples. The default value (0.304) matches the
+        paper's Private-insurance prevalence.
+
+    signal
+        Strength of the correlation between the latent variables and the class
+        label. Larger values make the classification task easier.
+
+    noise
+        Amount of random noise added to the latent representation.
+
+    seed
+        Random seed used for reproducibility.
+
+    Returns
+    -------
+    X : ndarray
+        Synthetic embedding matrix.
+
+    y : ndarray
+        Binary labels.
     """
     del spectrum_decay  # Kept for old config compatibility.
     n_signal_latents = max(8, min(16, latent_dim // 4 if latent_dim else 8))
     n_nuisance_latents = max(latent_dim, 1)
+
     X, y, _ = make_synthetic_embeddings_with_metadata(
         n_samples=n_samples,
         embedding_dim=ambient_dim,
@@ -79,10 +119,20 @@ _SYNTHETIC_MODEL_TO_REAL_LAYOUT = {
 
 
 def load_real_embeddings(model: str, seed: int, data_root: str | None = None):
-    """Load (X, y) from a local copy of the gated MIMIC-CXR embeddings.
-
-    Layout and label match ``scripts/classical_svm_multiseed.py`` in the original repo.
     """
+    Load the original embedding dataset used by the paper.
+
+    The dataset contains frozen embeddings extracted from chest radiographs and
+    the associated binary insurance label:
+
+        0 -> Medicare / Medicaid
+        1 -> Private insurance
+
+    The directory structure and file selection logic mirror the original
+    repository so that the preprocessing and classifier pipeline can be run
+    without modification.
+    """
+
     import pandas as pd
 
     data_root = data_root or os.environ.get("QML_DATA_ROOT")
@@ -98,6 +148,9 @@ def load_real_embeddings(model: str, seed: int, data_root: str | None = None):
         raise FileNotFoundError(f"No parquet found under {base}")
     df = pd.read_parquet(files[0])
     X = np.stack(df["embedding"].values).astype(np.float64)
+    # Match the paper's convention:
+    # 0 -> Medicare / Medicaid
+    # 1 -> Private insurance
     y = (df["new_insurance_type"] == "Private").astype(int).values
     return X, y
 
@@ -147,7 +200,12 @@ def _synthetic_config(ds: dict, seed: int) -> dict:
     }
     p = {**nested, **direct}
 
-    model_name = p.get("model_name") or ds.get("model_name") or ds.get("model") or "synthetic_medsiglip"
+    model_name = (
+        p.get("model_name")
+        or ds.get("model_name")
+        or ds.get("model")
+        or "synthetic_medsiglip"
+    )
     if model_name == "medsiglip-448":
         model_name = "synthetic_medsiglip"
     elif model_name == "rad-dino":
@@ -171,18 +229,30 @@ def _synthetic_config(ds: dict, seed: int) -> dict:
     return {
         "n_samples": int(p.get("n_samples", default_n_samples(model_name))),
         "embedding_dim": int(embedding_dim),
-        "positive_ratio": float(p.get("positive_ratio", p.get("minority_fraction", 0.304))),
-        "n_signal_latents": int(n_signal_latents) if n_signal_latents is not None else None,
-        "n_nuisance_latents": int(n_nuisance_latents) if n_nuisance_latents is not None else None,
-        "signal_strength": float(signal_strength) if signal_strength is not None else None,
+        "positive_ratio": float(
+            p.get("positive_ratio", p.get("minority_fraction", 0.304))
+        ),
+        "n_signal_latents": int(n_signal_latents)
+        if n_signal_latents is not None
+        else None,
+        "n_nuisance_latents": int(n_nuisance_latents)
+        if n_nuisance_latents is not None
+        else None,
+        "signal_strength": float(signal_strength)
+        if signal_strength is not None
+        else None,
         "noise_std": float(noise_std) if noise_std is not None else None,
         "nuisance_scale": float(nuisance_scale) if nuisance_scale is not None else None,
         "nuisance_decay": float(nuisance_decay) if nuisance_decay is not None else None,
         "nuisance_distribution": p.get("nuisance_distribution"),
         "nuisance_skew_strength": (
-            float(nuisance_skew_strength) if nuisance_skew_strength is not None else None
+            float(nuisance_skew_strength)
+            if nuisance_skew_strength is not None
+            else None
         ),
-        "nuisance_skew_decay": float(nuisance_skew_decay) if nuisance_skew_decay is not None else None,
+        "nuisance_skew_decay": float(nuisance_skew_decay)
+        if nuisance_skew_decay is not None
+        else None,
         "seed": int(p.get("seed", seed)),
         "model_name": model_name,
     }
@@ -193,21 +263,31 @@ def get_dataset(cfg: dict, seed: int):
     ds = cfg.get("data") or cfg.get("dataset", {})
     source = ds.get("mode", ds.get("source", "synthetic"))
     # Explicit gated-data root: dataset.data_root, then --data-root/top-level, then env var.
-    data_root = ds.get("data_root") or cfg.get("data_root") or os.environ.get("QML_DATA_ROOT")
+    data_root = (
+        ds.get("data_root") or cfg.get("data_root") or os.environ.get("QML_DATA_ROOT")
+    )
     # "auto" only switches to real data when QML_DATA_ROOT is explicitly exported, so the
     # runtime's default repo "data/" dir does not accidentally trigger the gated path.
     env_root = os.environ.get("QML_DATA_ROOT")
 
     if source == "real":
-        return load_real_embeddings(ds.get("model", "medsiglip-448"), seed, data_root), "real"
+        return load_real_embeddings(
+            ds.get("model", "medsiglip-448"), seed, data_root
+        ), "real"
     if source in {"synthetic_file", "synthetic_npz", "generated_synthetic"}:
         if not data_root:
-            raise FileNotFoundError("data_root is required for materialized synthetic data")
+            raise FileNotFoundError(
+                "data_root is required for materialized synthetic data"
+            )
         model_name = ds.get("model_name") or ds.get("model") or "synthetic_medsiglip"
-        return load_synthetic_npz_embeddings(model_name, seed, data_root), "synthetic_file"
+        return load_synthetic_npz_embeddings(
+            model_name, seed, data_root
+        ), "synthetic_file"
     if source == "auto" and env_root:
         try:
-            return load_real_embeddings(ds.get("model", "medsiglip-448"), seed, env_root), "real"
+            return load_real_embeddings(
+                ds.get("model", "medsiglip-448"), seed, env_root
+            ), "real"
         except (FileNotFoundError, ImportError):
             pass  # fall through to synthetic substitute
 

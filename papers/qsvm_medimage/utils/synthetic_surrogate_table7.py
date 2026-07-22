@@ -249,7 +249,9 @@ def default_prefix(source: str) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("synthetic", "synthetic_file", "real"), default="synthetic")
+    parser.add_argument(
+        "--source", choices=("synthetic", "synthetic_file", "real"), default="synthetic"
+    )
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--results-dir", type=Path, default=Path("results"))
     parser.add_argument("--output-prefix", default=None)

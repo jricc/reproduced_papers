@@ -1,180 +1,225 @@
 #!/usr/bin/env python3
-"""Materialize the synthetic fallback dataset to local ``.npz`` files.
+"""Run paper-shaped artifact scripts from one explicit dataset source.
 
-The output layout mirrors the gated Hugging Face embedding dataset closely
-enough for local runners:
+This convenience wrapper invokes the dedicated scripts for Tables 1 to 10 and
+Figures 2 to 5. Every selected script receives the same data source, dataset
+root, and result directory.
 
-    <output-root>/medsiglip-448-embeddings/20-seeds/seed_0/data_type9_synthetic.npz
-    <output-root>/rad-dino-embeddings/20-seeds/seed_0/data_type9_synthetic.npz
-    <output-root>/vit-base-patch32-224-embeddings/20-seeds/seed_0/data_type9_synthetic.npz
-
-This is a synthetic kernel-geometry benchmark, not a medical dataset.
+The wrapper does not calculate scientific results itself.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
-import numpy as np
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from lib.synthetic_data import (  # noqa: E402
-    default_embedding_dim,
-    default_n_samples,
-    make_synthetic_embeddings,
-)
-
-MODEL_LAYOUT = {
-    "synthetic_medsiglip": "medsiglip-448-embeddings/20-seeds",
-    "synthetic_raddino": "rad-dino-embeddings/20-seeds",
-    "synthetic_vit": "vit-base-patch32-224-embeddings/20-seeds",
+SCRIPT_BY_NAME = {
+    "table1": "synthetic_surrogate_table1.py",
+    "table2": "synthetic_surrogate_table2.py",
+    "table3": "synthetic_surrogate_table3.py",
+    "table4": "synthetic_surrogate_table4.py",
+    "table5": "synthetic_surrogate_table5.py",
+    "table6": "synthetic_surrogate_table6.py",
+    "table7": "synthetic_surrogate_table7.py",
+    "table8": "synthetic_surrogate_table8.py",
+    "table9": "synthetic_surrogate_table9.py",
+    "table10": "synthetic_surrogate_table10.py",
+    "figure2": "synthetic_surrogate_figure2.py",
+    "figure3": "synthetic_surrogate_figure3.py",
+    "figure4": "synthetic_surrogate_figure4.py",
+    "figure5": "synthetic_surrogate_figure5.py",
 }
 
 
-def parse_ints(raw: str) -> list[int]:
-    return [int(part.strip()) for part in raw.split(",") if part.strip()]
+def parse_names(raw: str) -> list:
+    """Parse and validate the requested artifact names."""
+    names = [part.strip().lower() for part in raw.split(",") if part.strip()]
 
+    if not names:
+        raise argparse.ArgumentTypeError("At least one artifact name is required.")
 
-def parse_models(raw: str) -> list[str]:
-    models = [part.strip() for part in raw.split(",") if part.strip()]
-    for model in models:
-        if model not in MODEL_LAYOUT:
-            raise ValueError(f"unknown synthetic model: {model}")
-    return models
+    if names == ["all"]:
+        return list(SCRIPT_BY_NAME)
 
+    if "all" in names:
+        raise argparse.ArgumentTypeError(
+            "'all' cannot be combined with individual artifact names."
+        )
 
-def write_one_dataset(
-    *,
-    output_root: Path,
-    model_name: str,
-    seed: int,
-    n_samples: int | None,
-    embedding_dim: int | None,
-    positive_ratio: float,
-    n_signal_latents: int | None,
-    n_nuisance_latents: int | None,
-    signal_strength: float | None,
-    noise_std: float | None,
-    nuisance_scale: float | None,
-    nuisance_decay: float | None,
-    nuisance_distribution: str | None,
-    nuisance_skew_strength: float | None,
-    nuisance_skew_decay: float | None,
-    dtype: str,
-) -> dict[str, object]:
-    """Generate and save one model/seed split."""
-    resolved_n_samples = n_samples or default_n_samples(model_name)
-    resolved_embedding_dim = embedding_dim or default_embedding_dim(model_name)
-    X, y, metadata = make_synthetic_embeddings(
-        n_samples=resolved_n_samples,
-        embedding_dim=resolved_embedding_dim,
-        positive_ratio=positive_ratio,
-        n_signal_latents=n_signal_latents,
-        n_nuisance_latents=n_nuisance_latents,
-        signal_strength=signal_strength,
-        noise_std=noise_std,
-        nuisance_scale=nuisance_scale,
-        nuisance_decay=nuisance_decay,
-        nuisance_distribution=nuisance_distribution,
-        nuisance_skew_strength=nuisance_skew_strength,
-        nuisance_skew_decay=nuisance_skew_decay,
-        seed=seed,
-        model_name=model_name,
-    )
+    unknown_names = [name for name in names if name not in SCRIPT_BY_NAME]
 
-    seed_dir = output_root / MODEL_LAYOUT[model_name] / f"seed_{seed}"
-    seed_dir.mkdir(parents=True, exist_ok=True)
-    npz_path = seed_dir / "data_type9_synthetic.npz"
-    metadata_path = seed_dir / "data_type9_synthetic_metadata.json"
+    if unknown_names:
+        raise argparse.ArgumentTypeError(
+            "Unknown artifacts: " + ", ".join(unknown_names)
+        )
 
-    X_to_save = X.astype(np.float32 if dtype == "float32" else np.float64)
-    np.savez_compressed(npz_path, X=X_to_save, y=y.astype(np.int8))
-    metadata = {
-        **metadata,
-        "file": str(npz_path),
-        "storage_dtype": dtype,
-    }
-    metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
-    return metadata
+    if len(names) != len(set(names)):
+        raise argparse.ArgumentTypeError("Artifact names must be unique.")
 
-
-def write_dataset_index(path: Path, rows: list[dict[str, object]]) -> None:
-    index = {
-        "source": "synthetic",
-        "description": "Materialized synthetic fallback for qsvm_medimage kernel-geometry tests.",
-        "rows": rows,
-    }
-    path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
+    return names
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-root", type=Path, default=Path("data/synthetic_qml_mimic_cxr_embeddings"))
-    parser.add_argument(
-        "--models",
-        default="synthetic_medsiglip,synthetic_raddino,synthetic_vit",
-        help="Comma-separated synthetic model names.",
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
     )
-    parser.add_argument("--seeds", default="0,1,2,3,4,5,6,7,8,9")
-    parser.add_argument("--n-samples", type=int, default=None)
-    parser.add_argument("--embedding-dim", type=int, default=None)
-    parser.add_argument("--positive-ratio", type=float, default=0.304)
-    parser.add_argument("--n-signal-latents", type=int, default=None)
-    parser.add_argument("--n-nuisance-latents", type=int, default=None)
-    parser.add_argument("--signal-strength", type=float, default=None)
-    parser.add_argument("--noise-std", type=float, default=None)
-    parser.add_argument("--nuisance-scale", type=float, default=None)
-    parser.add_argument("--nuisance-decay", type=float, default=None)
+
     parser.add_argument(
-        "--nuisance-distribution",
-        choices=("normal", "uniform", "rademacher", "skewed_uniform"),
+        "--source",
+        choices=(
+            "synthetic_file",
+            "synthetic",
+            "real",
+        ),
+        default="synthetic_file",
+    )
+
+    parser.add_argument(
+        "--data-root",
+        type=Path,
         default=None,
+        help=(
+            "Dataset root. Required for synthetic_file and real "
+            "sources. Unused for in-memory synthetic data."
+        ),
     )
-    parser.add_argument("--nuisance-skew-strength", type=float, default=None)
-    parser.add_argument("--nuisance-skew-decay", type=float, default=None)
-    parser.add_argument("--dtype", choices=("float32", "float64"), default="float32")
+
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=Path("results"),
+    )
+
+    parser.add_argument(
+        "--only",
+        default="all",
+        help=(
+            "Comma-separated artifact names, for example "
+            "figure2,table6,table10, or all."
+        ),
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print commands without executing them.",
+    )
+
     return parser.parse_args()
 
 
+def validate_data_source(
+    source: str,
+    data_root: Path | None,
+) -> None:
+    """Validate the dataset root required by the selected source."""
+    if source in {"synthetic_file", "real"}:
+        if data_root is None:
+            raise ValueError(f"--data-root is required for source={source!r}.")
+
+        if not data_root.is_dir():
+            raise FileNotFoundError(f"Dataset directory not found: {data_root}")
+
+    if source == "synthetic_file":
+        index_path = data_root / "synthetic_dataset_index.json"
+
+        if not index_path.is_file():
+            raise FileNotFoundError(f"Synthetic dataset index not found: {index_path}")
+
+
+def build_command(
+    *,
+    script: Path,
+    source: str,
+    data_root: Path | None,
+    results_dir: Path,
+) -> list:
+    """Build the subprocess command for one artifact script."""
+    command = [
+        sys.executable,
+        "-B",
+        str(script),
+        "--source",
+        source,
+        "--results-dir",
+        str(results_dir),
+    ]
+
+    if data_root is not None:
+        command.extend(
+            [
+                "--data-root",
+                str(data_root),
+            ]
+        )
+
+    return command
+
+
 def main() -> None:
+    """Run every requested artifact script sequentially."""
     args = parse_args()
-    models = parse_models(args.models)
-    seeds = parse_ints(args.seeds)
 
-    rows = []
-    for model_name in models:
-        for seed in seeds:
-            rows.append(
-                write_one_dataset(
-                    output_root=args.output_root,
-                    model_name=model_name,
-                    seed=seed,
-                    n_samples=args.n_samples,
-                    embedding_dim=args.embedding_dim,
-                    positive_ratio=args.positive_ratio,
-                    n_signal_latents=args.n_signal_latents,
-                    n_nuisance_latents=args.n_nuisance_latents,
-                    signal_strength=args.signal_strength,
-                    noise_std=args.noise_std,
-                    nuisance_scale=args.nuisance_scale,
-                    nuisance_decay=args.nuisance_decay,
-                    nuisance_distribution=args.nuisance_distribution,
-                    nuisance_skew_strength=args.nuisance_skew_strength,
-                    nuisance_skew_decay=args.nuisance_skew_decay,
-                    dtype=args.dtype,
-                )
-            )
+    names = parse_names(args.only)
 
-    args.output_root.mkdir(parents=True, exist_ok=True)
-    index_path = args.output_root / "synthetic_dataset_index.json"
-    write_dataset_index(index_path, rows)
-    print(json.dumps({"files": len(rows), "index": str(index_path)}, indent=2))
+    validate_data_source(
+        args.source,
+        args.data_root,
+    )
+
+    utils_directory = Path(__file__).resolve().parent
+
+    environment = os.environ.copy()
+
+    environment.setdefault(
+        "MPLCONFIGDIR",
+        "/tmp/qsvm_medimage_matplotlib",
+    )
+
+    args.results_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    completed: list[str] = []
+
+    for name in names:
+        script = utils_directory / SCRIPT_BY_NAME[name]
+
+        if not script.is_file():
+            raise FileNotFoundError(f"Artifact script not found: {script}")
+
+        command = build_command(
+            script=script,
+            source=args.source,
+            data_root=args.data_root,
+            results_dir=args.results_dir,
+        )
+
+        print(
+            " ".join(command),
+            flush=True,
+        )
+
+        if args.dry_run:
+            continue
+
+        subprocess.run(
+            command,
+            check=True,
+            env=environment,
+        )
+
+        completed.append(name)
+
+    if args.dry_run:
+        print(f"Dry run completed for {len(names)} artifacts.")
+    else:
+        print(f"Completed {len(completed)} artifacts: " + ", ".join(completed))
 
 
 if __name__ == "__main__":

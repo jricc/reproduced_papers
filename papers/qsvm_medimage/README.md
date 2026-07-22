@@ -10,7 +10,7 @@ The MIMIC-CXR-derived embeddings require credentialed access and were not used. 
 - `StandardScaler -> PCA(q) -> MinMaxScaler[-1, 1]`;
 - linear, RBF, and precomputed-kernel SVM comparisons;
 - the original repository's BSP fidelity kernel on an exact CPU statevector simulator;
-- Tables 1-10 and Figures 2-5 on one fixed synthetic dataset;
+- Paper-shaped Tables 1-10 and Figures 2-5 on one fixed calibrated synthetic benchmark
 - kernel effective-rank diagnostics;
 - an optional MerLin photonic fidelity kernel.
 
@@ -27,6 +27,35 @@ The paper also states that the training trace scales both train and test kernels
 | Tables 8-10 and Figure 5 | original-repository square-only behavior |
 
 Classifier metrics from these groups must not be presented as one exact trace-normalized experiment. See [CONFLUENCE.md](CONFLUENCE.md) for the checked interpretation.
+
+
+### Synthetic benchmark design
+
+The synthetic dataset is a controlled, calibrated kernel benchmark. It is not
+a statistical reconstruction of the inaccessible MIMIC-CXR embeddings.
+
+The generator matches only selected properties reported by the paper:
+
+- cohort size;
+- positive-class proportion;
+- embedding dimensionality;
+- selected PCA explained-variance values;
+- selected linear-kernel moments from Tables V and VI.
+
+The latent-label rule is chosen by this reproduction and does not come from
+the paper. It uses pairwise products of hidden variables to create a
+nonlinear classification boundary. This design is useful for testing linear,
+RBF, quantum and photonic kernels, but it structurally disadvantages a linear
+classifier.
+
+Consequently:
+
+- Tables V and VI are calibration targets, not independently reproduced results;
+- synthetic classifier metrics are not estimates of performance on MIMIC-CXR;
+- Tier-1 wins on this benchmark do not validate the paper's medical-data claim;
+- comparisons among nonlinear kernels remain informative only for this
+  controlled synthetic geometry.
+
 
 ## Synthetic dataset
 

@@ -39,13 +39,18 @@ for root in (PROJECT_ROOT, REPRO_ROOT):
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
-from lib.data import (
+
+from lib.data import (  # noqa: E402
     load_real_embeddings,
     load_synthetic_npz_embeddings,
     make_synthetic_embeddings,
 )
-from lib.quantum_kernel import fidelity_kernel
-from lib.svm_pipeline import preprocess, split_indices
+from lib.quantum_kernel import fidelity_kernel  # noqa: E402
+from lib.svm_pipeline import (  # noqa: E402
+    normalize_train_test_kernels,
+    preprocess,
+    split_indices,
+)
 
 TIER1_CONFIGS: tuple[tuple[str, int], ...] = (
     ("medsiglip-448", 4),
@@ -261,13 +266,49 @@ def score_qsvm_c1(
 ) -> dict[str, object]:
     """Score the paper-style QSVM: fidelity kernel with fixed C=1."""
     K_train = fidelity_kernel(X_train)
-    K_test = fidelity_kernel(X_test, X_train)
-    svc = SVC(kernel="precomputed", C=1.0, random_state=seed)
-    svc.fit(K_train, y_train)
+
+    K_test = fidelity_kernel(
+        X_test,
+        X_train,
+    )
+
+    K_train, K_test = normalize_train_test_kernels(
+        K_train,
+        K_test,
+        method="trace",
+    )
+
+    svc = SVC(
+        kernel="precomputed",
+        C=1.0,
+        random_state=seed,
+    )
+
+    svc.fit(
+        K_train,
+        y_train,
+    )
+
     y_pred = svc.predict(K_test)
-    scores = decision_scores(svc, K_test)
-    row: dict[str, object] = {"method": "qsvm", "C": 1.0}
-    row.update(compute_metrics(y_test, y_pred, scores))
+
+    scores = decision_scores(
+        svc,
+        K_test,
+    )
+
+    row: dict[str, object] = {
+        "method": "qsvm",
+        "C": 1.0,
+    }
+
+    row.update(
+        compute_metrics(
+            y_test,
+            y_pred,
+            scores,
+        )
+    )
+
     return row
 
 

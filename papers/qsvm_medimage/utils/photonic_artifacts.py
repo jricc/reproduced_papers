@@ -1,23 +1,32 @@
 #!/usr/bin/env python3
-"""Photonic (MerLin / linear-optical) variants of the core surrogate artifacts.
+"""Generate photonic variants of selected kernel artifacts.
 
-The paper's QSVM uses a qubit gate-based fidelity kernel. This driver recomputes
-the central claims with the *photonic* fidelity kernel from ``lib.photonic_kernel``
-(a two-photon linear-optical translation of the BSP feature map) so the photonic
-and qubit kernels can be compared side by side on the same surrogate data.
+The paper evaluates a qubit fidelity kernel. This script compares that kernel
+with a native linear-optical fidelity kernel implemented with MerLin.
 
-It emits three photonic artifacts under ``results/`` (prefix ``photonic_*``):
+The photonic feature map is not a gate-by-gate translation of the BSP circuit.
+It uses:
 
-1. ``photonic_table1``      -- Tier-1 shape (Table 1): mean F1 for the collapsing
-                               linear SVM vs the qubit QSVM vs the photonic QSVM,
-                               per (model, q).
-2. ``photonic_figure4``     -- class-sorted photonic Gram matrix heatmap (Figure 4).
-3. ``photonic_effrank``     -- photonic-kernel effective rank vs q (Figure 2 / Table 5
-                               eigenspectrum claim).
+1. one fixed mode-mixing interferometer;
+2. one feature-dependent phase shift per optical mode;
+3. a fixed two-photon input state by default.
 
-Photonic SLOS simulation is O(N^2); train/test are subsampled (``--train-cap`` /
-``--test-cap``) and this is stated in every output. These are illustrative photonic
-counterparts, not paper-number reproductions (the real embeddings are gated).
+Three artifacts are generated:
+
+1. ``photonic_table1``
+   Linear SVM, qubit QSVM, and photonic QSVM minority-class F1 and ROC-AUC.
+
+2. ``photonic_figure4``
+   Class-sorted photonic fidelity Gram matrix.
+
+3. ``photonic_effrank``
+   Photonic-kernel effective rank as a function of the mode count q.
+
+Photonic kernels are evaluated on stratified subsets because Gram-matrix
+construction scales quadratically with the number of samples.
+
+Results obtained from synthetic data are controlled benchmark results. They do
+not reproduce the numerical results or medical-data claims of the paper.
 """
 
 from __future__ import annotations
@@ -30,22 +39,43 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPRO_ROOT = PROJECT_ROOT.parents[1]
-for root in (PROJECT_ROOT, REPRO_ROOT, PROJECT_ROOT / "utils"):
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
+UTILS_ROOT = PROJECT_ROOT / "utils"
 
-import matplotlib
+for root in (
+    PROJECT_ROOT,
+    REPRO_ROOT,
+    UTILS_ROOT,
+):
+    root_string = str(root)
+
+    if root_string not in sys.path:
+        sys.path.insert(0, root_string)
+
+
+import matplotlib  # noqa: E402
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-from sklearn.svm import SVC  # noqa: E402
 
-from lib.photonic_kernel import photonic_fidelity_kernels  # noqa: E402
-from lib.quantum_kernel import fidelity_kernel  # noqa: E402
-from lib.svm_pipeline import preprocess, split_indices  # noqa: E402
+import matplotlib.pyplot as plt  # noqa: E402
+from lib.photonic_kernel import (  # noqa: E402
+    photonic_fidelity_kernels,
+)
+
+# Used only for the qubit comparison in photonic_table1.
+from lib.quantum_kernel import (  # noqa: E402
+    effective_rank,
+    fidelity_kernel,
+)
+from lib.svm_pipeline import (  # noqa: E402
+    normalize_train_test_kernels,
+    preprocess,
+    split_indices,
+)
 from synthetic_surrogate_table1 import (  # noqa: E402
     SyntheticSpec,
     compute_metrics,
@@ -54,7 +84,6 @@ from synthetic_surrogate_table1 import (  # noqa: E402
     parse_ints,
 )
 
-# Photonic q-sweep per model (kept modest: two-photon SLOS over q modes).
 PHOTONIC_CONFIGS: tuple[tuple[str, int], ...] = (
     ("medsiglip-448", 4),
     ("medsiglip-448", 6),
@@ -68,6 +97,15 @@ PHOTONIC_CONFIGS: tuple[tuple[str, int], ...] = (
     ("vit-patch32-cls", 8),
 )
 
+MODEL_NAMES = (
+    "medsiglip-448",
+    "rad-dino",
+    "vit-patch32-cls",
+)
+
+# These offsets are used only for in-memory synthetic generation. Materialized
+# synthetic datasets already contain model-specific files and use the
+# requested seed directly.
 MODEL_SEED_OFFSETS = {
     "medsiglip-448": 0,
     "rad-dino": 10_000,
@@ -80,384 +118,1360 @@ PAPER_POINTERS = {
     "effrank": "https://arxiv.org/html/2604.24597v1#S4.F2",
 }
 
-
-def subsample(idx: np.ndarray, y: np.ndarray, cap: int, seed: int) -> np.ndarray:
-    """Stratified cap of an index array so photonic SLOS stays affordable."""
-    if cap <= 0 or len(idx) <= cap:
-        return idx
-    rng = np.random.default_rng(seed)
-    labels = y[idx]
-    keep: list[int] = []
-    classes, counts = np.unique(labels, return_counts=True)
-    for cls, cnt in zip(classes, counts):
-        cls_idx = idx[labels == cls]
-        take = max(1, int(round(cap * cnt / len(idx))))
-        take = min(take, len(cls_idx))
-        keep.extend(rng.choice(cls_idx, size=take, replace=False).tolist())
-    return np.array(sorted(keep))
+ARTIFACT_NAMES = {
+    "table1",
+    "figure4",
+    "effrank",
+}
 
 
-def effective_rank(kernel: np.ndarray) -> float:
-    """exp(von Neumann entropy) of the trace-normalized kernel spectrum."""
-    eig = np.linalg.eigvalsh(kernel)
-    eig = eig[eig > 1e-12]
-    if eig.size == 0:
-        return 0.0
-    p = eig / eig.sum()
-    entropy = -np.sum(p * np.log(p))
-    return float(np.exp(entropy))
+def dataset_seed(
+    *,
+    source: str,
+    model: str,
+    seed: int,
+) -> int:
+    """Return the seed used to load or generate one model dataset."""
+    if source == "synthetic":
+        return seed + MODEL_SEED_OFFSETS.get(
+            model,
+            0,
+        )
+
+    return seed
+
+
+def stratified_subsample(
+    indices: np.ndarray,
+    labels: np.ndarray,
+    cap: int,
+    seed: int,
+) -> np.ndarray:
+    """Return at most ``cap`` indices while preserving class proportions.
+
+    The returned subset has exactly ``cap`` elements when the input contains
+    more than ``cap`` elements.
+    """
+    indices = np.asarray(
+        indices,
+        dtype=int,
+    )
+
+    labels = np.asarray(
+        labels,
+        dtype=int,
+    )
+
+    if cap <= 0 or len(indices) <= cap:
+        return np.sort(indices)
+
+    selected_indices, _ = train_test_split(
+        indices,
+        train_size=cap,
+        random_state=seed,
+        stratify=labels[indices],
+    )
+
+    return np.sort(selected_indices)
 
 
 def prepare_split(
-    *, source, model, q, seed, data_root, synthetic, train_cap, test_cap
+    *,
+    source: str,
+    model: str,
+    q: int,
+    seed: int,
+    data_root: Path | None,
+    synthetic: SyntheticSpec,
+    train_cap: int,
+    test_cap: int,
 ):
+    """Load, split, subsample, and preprocess one configuration.
+
+    PCA and scalers are fitted only on the capped training subset. The
+    validation set is transformed but is not used by the fixed-C comparisons.
+    """
     X, y = load_dataset(
         source=source,
         model=model,
-        seed=seed + MODEL_SEED_OFFSETS.get(model, 0) if source == "synthetic" else seed,
+        seed=dataset_seed(
+            source=source,
+            model=model,
+            seed=seed,
+        ),
         data_root=data_root,
         synthetic=synthetic,
     )
-    idx_train, _idx_val, idx_test = split_indices(y, seed=seed)
-    idx_train = subsample(idx_train, y, train_cap, seed)
-    idx_test = subsample(idx_test, y, test_cap, seed + 1)
-    X_train, _Xv, X_test, evr = preprocess(X[idx_train], X[idx_train], X[idx_test], q)
-    return X_train, X_test, y[idx_train], y[idx_test], evr
 
-
-def score_precomputed(K_train, K_test, y_train, y_test, seed):
-    svc = SVC(kernel="precomputed", C=1.0, random_state=seed)
-    svc.fit(K_train, y_train)
-    y_pred = svc.predict(K_test)
-    scores = decision_scores(svc, K_test)
-    return compute_metrics(y_test, y_pred, scores)
-
-
-def score_linear(X_train, X_test, y_train, y_test, seed):
-    svc = SVC(kernel="linear", C=1.0, random_state=seed)
-    svc.fit(X_train, y_train)
-    y_pred = svc.predict(X_test)
-    scores = decision_scores(svc, X_test)
-    return compute_metrics(y_test, y_pred, scores)
-
-
-# --------------------------------------------------------------------------- #
-# Artifact 1: photonic Table 1 (Tier-1 shape)                                 #
-# --------------------------------------------------------------------------- #
-def build_table1(args, synthetic, seeds, meta):
-    long_rows: list[dict] = []
-    for model, q in PHOTONIC_CONFIGS:
-        for seed in seeds:
-            X_train, X_test, y_train, y_test, evr = prepare_split(
-                source=args.source, model=model, q=q, seed=seed,
-                data_root=args.data_root, synthetic=synthetic,
-                train_cap=args.train_cap, test_cap=args.test_cap,
-            )
-            base = {"model": model, "q": q, "seed": seed,
-                    "train_samples": int(len(y_train)),
-                    "test_samples": int(len(y_test)),
-                    "explained_variance_ratio": float(evr)}
-
-            lin = score_linear(X_train, X_test, y_train, y_test, seed)
-            long_rows.append({**base, "method": "linear_c1", **lin})
-
-            Kq_tr = fidelity_kernel(X_train)
-            Kq_te = fidelity_kernel(X_test, X_train)
-            q_metrics = score_precomputed(Kq_tr, Kq_te, y_train, y_test, seed)
-            long_rows.append({**base, "method": "qsvm_qubit", **q_metrics})
-
-            Kp_tr, Kp_te = photonic_fidelity_kernels(
-                X_train, X_test, q, n_photons=args.n_photons, seed=seed)
-            p_metrics = score_precomputed(Kp_tr, Kp_te, y_train, y_test, seed)
-            long_rows.append({**base, "method": "qsvm_photonic", **p_metrics})
-            print(f"[table1] {model} q={q} seed={seed} "
-                  f"lin_f1={lin['f1']:.3f} qubit_f1={q_metrics['f1']:.3f} "
-                  f"phot_f1={p_metrics['f1']:.3f}", flush=True)
-
-    # summarize per (model, q)
-    grouped = defaultdict(list)
-    for r in long_rows:
-        grouped[(r["model"], r["q"])].append(r)
-    summary = []
-    for model, q in PHOTONIC_CONFIGS:
-        rows = grouped[(model, q)]
-        def mean(method, metric):
-            vals = [r[metric] for r in rows if r["method"] == method]
-            return float(np.mean(vals)) if vals else float("nan")
-        lin_f1 = mean("linear_c1", "f1")
-        qub_f1 = mean("qsvm_qubit", "f1")
-        pho_f1 = mean("qsvm_photonic", "f1")
-        summary.append({
-            "model": model, "q": q,
-            "linear_c1_f1": lin_f1,
-            "qsvm_qubit_f1": qub_f1,
-            "qsvm_photonic_f1": pho_f1,
-            "qsvm_qubit_auc": mean("qsvm_qubit", "auc"),
-            "qsvm_photonic_auc": mean("qsvm_photonic", "auc"),
-            "photonic_vs_linear_gain": pho_f1 - lin_f1,
-            "photonic_vs_qubit_delta": pho_f1 - qub_f1,
-        })
-
-    prefix = "photonic_table1"
-    write_csv(args.results_dir / f"{prefix}_long.csv", long_rows)
-    write_csv(args.results_dir / f"{prefix}_summary.csv", summary)
-    wins = sum(1 for r in summary if r["photonic_vs_linear_gain"] > 0)
-    payload = {
-        "artifact": prefix, "paper_table": "Table 1 (photonic variant)",
-        "paper_pointer": PAPER_POINTERS["table1"],
-        "aggregate": {
-            "photonic_beats_linear": f"{wins}/{len(summary)}",
-            "mean_photonic_vs_linear_gain":
-                float(np.mean([r["photonic_vs_linear_gain"] for r in summary])),
-            "mean_photonic_vs_qubit_delta":
-                float(np.mean([r["photonic_vs_qubit_delta"] for r in summary])),
-        },
-        **meta,
-    }
-    (args.results_dir / f"{prefix}.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n")
-    write_table1_md(args.results_dir / f"{prefix}.md", summary, payload)
-    print(json.dumps(payload["aggregate"], indent=2))
-    return payload
-
-
-def write_table1_md(path, summary, payload):
-    lines = [
-        "# Photonic surrogate Table 1 (Tier-1 shape)",
-        "",
-        "Photonic (MerLin two-photon linear-optical) fidelity kernel vs the qubit "
-        "QSVM and the collapsing linear SVM, on the labelled surrogate dataset. "
-        "Not a reproduction of the paper numbers (real MIMIC-CXR embeddings are gated); "
-        f"train/test subsampled to {payload['subsampling']['train_cap']}/"
-        f"{payload['subsampling']['test_cap']} for photonic SLOS tractability.",
-        "",
-        f"Paper methodology pointer: {payload['paper_pointer']}",
-        "",
-        "| Model | q | Linear C=1 F1 | QSVM qubit F1 | QSVM photonic F1 | "
-        "Photonic AUC | Photonic − Linear | Photonic − Qubit |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ]
-    for r in summary:
-        lines.append(
-            f"| {r['model']} | {r['q']} | {r['linear_c1_f1']:.3f} | "
-            f"{r['qsvm_qubit_f1']:.3f} | {r['qsvm_photonic_f1']:.3f} | "
-            f"{r['qsvm_photonic_auc']:.3f} | {r['photonic_vs_linear_gain']:+.3f} | "
-            f"{r['photonic_vs_qubit_delta']:+.3f} |")
-    agg = payload["aggregate"]
-    lines += [
-        "",
-        f"Photonic QSVM beats the collapsing linear SVM on minority-F1 in "
-        f"**{agg['photonic_beats_linear']}** configs "
-        f"(mean gain {agg['mean_photonic_vs_linear_gain']:+.3f}). "
-        f"Mean photonic−qubit F1 delta: {agg['mean_photonic_vs_qubit_delta']:+.3f}.",
-        "",
-    ]
-    path.write_text("\n".join(lines) + "\n")
-
-
-# --------------------------------------------------------------------------- #
-# Artifact 2: photonic Figure 4 (class-sorted Gram matrix heatmap)            #
-# --------------------------------------------------------------------------- #
-def build_figure4(args, synthetic, meta):
-    model, q, seed = args.fig4_model, args.fig4_q, args.fig4_seed
-    X, y = load_dataset(
-        source=args.source, model=model,
-        seed=seed + MODEL_SEED_OFFSETS.get(model, 0) if args.source == "synthetic" else seed,
-        data_root=args.data_root, synthetic=synthetic,
+    (
+        training_indices,
+        validation_indices,
+        test_indices,
+    ) = split_indices(
+        y,
+        seed=seed,
     )
-    idx_train, _v, _t = split_indices(y, seed=seed)
-    idx_train = subsample(idx_train, y, args.fig4_samples, seed)
-    # sort selected samples by class label for block structure
-    order = np.argsort(y[idx_train], kind="stable")
-    idx_sorted = idx_train[order]
-    X_train, _Xv, _Xt, _evr = preprocess(
-        X[idx_sorted], X[idx_sorted], X[idx_sorted[:2]], q)
-    y_sorted = y[idx_sorted]
-    Kp_tr, _ = photonic_fidelity_kernels(
-        X_train, X_train[:2], q, n_photons=args.n_photons, seed=seed)
-    K = Kp_tr
-    boundary = int(np.searchsorted(y_sorted, y_sorted.max()))
 
-    fig, ax = plt.subplots(figsize=(5.4, 4.6))
-    vmax = float(np.quantile(K, 0.99))
-    vmin = float(np.quantile(K, 0.01))
-    im = ax.imshow(K, cmap="viridis", vmin=vmin, vmax=vmax)
-    if 0 < boundary < len(y_sorted):
-        ax.axhline(boundary - 0.5, color="white", lw=0.8, ls="--")
-        ax.axvline(boundary - 0.5, color="white", lw=0.8, ls="--")
-    ax.set_title(f"Photonic fidelity Gram matrix\n{model}, q={q}, "
-                 f"{len(y_sorted)} samples (class-sorted)")
-    ax.set_xlabel("sample (sorted by class)")
-    ax.set_ylabel("sample (sorted by class)")
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="K(x, y)")
-    fig.tight_layout()
-    prefix = "photonic_figure4"
-    fig.savefig(args.results_dir / f"{prefix}.png", dpi=130)
-    plt.close(fig)
-    np.savetxt(args.results_dir / f"{prefix}_kernel_matrix.csv", K, delimiter=",")
+    training_indices = stratified_subsample(
+        training_indices,
+        y,
+        train_cap,
+        seed,
+    )
 
-    payload = {
-        "artifact": prefix, "paper_figure": "Figure 4 (photonic variant)",
-        "paper_pointer": PAPER_POINTERS["figure4"],
-        "model": model, "q": q, "seed": seed,
-        "n_samples": int(len(y_sorted)),
-        "minority_count": int((y_sorted == y_sorted.max()).sum()),
-        "kernel_stats": {"min": float(K.min()), "max": float(K.max()),
-                         "mean": float(K.mean()),
-                         "offdiag_mean": float((K.sum() - np.trace(K)) /
-                                               (K.size - len(K)))},
-        **meta,
+    test_indices = stratified_subsample(
+        test_indices,
+        y,
+        test_cap,
+        seed + 1,
+    )
+
+    (
+        X_train,
+        X_validation,
+        X_test,
+        explained_variance,
+    ) = preprocess(
+        X[training_indices],
+        X[validation_indices],
+        X[test_indices],
+        q,
+    )
+
+    return {
+        "X_train": X_train,
+        "X_validation": X_validation,
+        "X_test": X_test,
+        "y_train": y[training_indices],
+        "y_validation": y[validation_indices],
+        "y_test": y[test_indices],
+        "explained_variance": explained_variance,
+        "training_indices": training_indices,
+        "validation_indices": validation_indices,
+        "test_indices": test_indices,
     }
-    (args.results_dir / f"{prefix}.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n")
-    (args.results_dir / f"{prefix}.md").write_text(
-        f"# Photonic surrogate Figure 4\n\n"
-        f"Class-sorted photonic fidelity Gram matrix ({model}, q={q}, "
-        f"{len(y_sorted)} samples). Off-diagonal block structure mirrors the "
-        f"qubit Figure 4. Paper pointer: {payload['paper_pointer']}.\n\n"
-        f"Kernel off-diagonal mean {payload['kernel_stats']['offdiag_mean']:.4f}, "
-        f"max {payload['kernel_stats']['max']:.3f}.\n")
-    print(f"[figure4] wrote {prefix}.png offdiag_mean="
-          f"{payload['kernel_stats']['offdiag_mean']:.4f}")
-    return payload
 
 
-# --------------------------------------------------------------------------- #
-# Artifact 3: photonic effective rank vs q                                     #
-# --------------------------------------------------------------------------- #
-def build_effrank(args, synthetic, seeds, meta):
-    model = args.effrank_model
-    qs = args.effrank_qs
-    rows = []
-    for q in qs:
-        vals = []
-        for seed in seeds:
-            X, y = load_dataset(
-                source=args.source, model=model,
-                seed=seed + MODEL_SEED_OFFSETS.get(model, 0) if args.source == "synthetic" else seed,
-                data_root=args.data_root, synthetic=synthetic,
-            )
-            idx_train, _v, _t = split_indices(y, seed=seed)
-            idx_train = subsample(idx_train, y, args.effrank_samples, seed)
-            X_train, _Xv, _Xt, _evr = preprocess(
-                X[idx_train], X[idx_train], X[idx_train[:2]], q)
-            Kp_tr, _ = photonic_fidelity_kernels(
-                X_train, X_train[:2], q, n_photons=args.n_photons, seed=seed)
-            vals.append(effective_rank(Kp_tr))
-        rows.append({"q": q, "model": model,
-                     "photonic_eff_rank_mean": float(np.mean(vals)),
-                     "photonic_eff_rank_std": float(np.std(vals)),
-                     "n_samples": int(len(idx_train))})
-        print(f"[effrank] q={q} eff_rank={np.mean(vals):.2f}", flush=True)
+def score_precomputed_kernel(
+    *,
+    K_train: np.ndarray,
+    K_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    seed: int,
+    c: float = 1.0,
+) -> dict[str, object]:
+    """Train and evaluate an SVM with a precomputed kernel."""
+    classifier = SVC(
+        kernel="precomputed",
+        C=c,
+        random_state=seed,
+    )
 
-    prefix = "photonic_effrank"
-    write_csv(args.results_dir / f"{prefix}_summary.csv", rows)
-    fig, ax = plt.subplots(figsize=(5.2, 3.8))
-    ax.errorbar([r["q"] for r in rows],
-                [r["photonic_eff_rank_mean"] for r in rows],
-                yerr=[r["photonic_eff_rank_std"] for r in rows],
-                marker="o", capsize=3)
-    ax.set_xlabel("qubits / modes q")
-    ax.set_ylabel("photonic kernel effective rank")
-    ax.set_title(f"Photonic fidelity-kernel effective rank vs q\n{model}")
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(args.results_dir / f"{prefix}.png", dpi=130)
-    plt.close(fig)
+    classifier.fit(
+        K_train,
+        y_train,
+    )
 
-    payload = {
-        "artifact": prefix, "paper_ref": "Figure 2 / Table 5 (photonic variant)",
-        "paper_pointer": PAPER_POINTERS["effrank"],
-        "model": model, "rows": rows, **meta,
-    }
-    (args.results_dir / f"{prefix}.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n")
-    (args.results_dir / f"{prefix}.md").write_text(
-        f"# Photonic surrogate effective rank vs q\n\n"
-        f"Effective rank (exp von-Neumann entropy) of the photonic fidelity kernel "
-        f"as q grows ({model}). Mirrors the eigenspectrum claim (Figure 2 / Table 5). "
-        f"Paper pointer: {payload['paper_pointer']}.\n\n"
-        + "\n".join(f"- q={r['q']}: eff_rank "
-                    f"{r['photonic_eff_rank_mean']:.2f} ± {r['photonic_eff_rank_std']:.2f}"
-                    for r in rows) + "\n")
-    print(f"[effrank] wrote {prefix}.png/.csv")
-    return payload
+    predictions = classifier.predict(K_test)
+
+    scores = decision_scores(
+        classifier,
+        K_test,
+    )
+
+    return compute_metrics(
+        y_test,
+        predictions,
+        scores,
+    )
 
 
-def write_csv(path: Path, rows: list[dict]) -> None:
+def score_linear_svm(
+    *,
+    X_train: np.ndarray,
+    X_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    seed: int,
+    c: float = 1.0,
+) -> dict[str, object]:
+    """Train and evaluate the Tier-1 linear SVM baseline."""
+    classifier = SVC(
+        kernel="linear",
+        C=c,
+        random_state=seed,
+    )
+
+    classifier.fit(
+        X_train,
+        y_train,
+    )
+
+    predictions = classifier.predict(X_test)
+
+    scores = decision_scores(
+        classifier,
+        X_test,
+    )
+
+    return compute_metrics(
+        y_test,
+        predictions,
+        scores,
+    )
+
+
+def compute_qubit_kernels(
+    *,
+    X_train: np.ndarray,
+    X_test: np.ndarray,
+    normalization: str,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Compute and consistently normalize the manuscript qubit kernel."""
+    K_train_raw = fidelity_kernel(X_train)
+
+    K_test_raw = fidelity_kernel(
+        X_test,
+        X_train,
+    )
+
+    rank = effective_rank(K_train_raw,psd_tolerance=1e-4,)
+
+    K_train, K_test = normalize_train_test_kernels(
+        K_train_raw,
+        K_test_raw,
+        method=normalization,
+    )
+
+    return K_train, K_test, rank
+
+
+def compute_photonic_kernels(
+    *,
+    X_train: np.ndarray,
+    X_test: np.ndarray,
+    q: int,
+    n_photons: int,
+    seed: int,
+    normalization: str,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Compute and consistently normalize the photonic fidelity kernel."""
+    K_train_raw, K_test_raw = photonic_fidelity_kernels(
+        X_train,
+        X_test,
+        q,
+        n_photons=n_photons,
+        seed=seed,
+    )
+
+    rank = effective_rank(K_train_raw,psd_tolerance=1e-4,)
+
+    K_train, K_test = normalize_train_test_kernels(
+        K_train_raw,
+        K_test_raw,
+        method=normalization,
+    )
+
+    return K_train, K_test, rank
+
+
+def mean_metric(
+    rows: list[dict[str, object]],
+    method: str,
+    metric: str,
+) -> float:
+    """Return the finite mean of one metric for one method."""
+    values = np.asarray(
+        [row[metric] for row in rows if row["method"] == method],
+        dtype=np.float64,
+    )
+
+    values = values[np.isfinite(values)]
+
+    if values.size == 0:
+        return float("nan")
+
+    return float(np.mean(values))
+
+
+def write_csv(
+    path: Path,
+    rows: list[dict[str, object]],
+) -> None:
+    """Write rows using the union of all dictionary keys."""
     if not rows:
-        raise ValueError(f"no rows to write to {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = list(rows[0].keys())
-    with path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        raise ValueError(f"No rows to write to {path}.")
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    fieldnames = sorted({key for row in rows for key in row})
+
+    with path.open(
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=fieldnames,
+            extrasaction="ignore",
+        )
+
         writer.writeheader()
         writer.writerows(rows)
 
 
+def write_json(
+    path: Path,
+    payload: dict[str, object],
+) -> None:
+    """Write one JSON artifact."""
+    path.write_text(
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def build_table1(
+    args: argparse.Namespace,
+    synthetic: SyntheticSpec,
+    seeds: list[int],
+    metadata: dict[str, object],
+) -> dict[str, object]:
+    """Generate the photonic Table 1-style comparison."""
+    long_rows: list[dict[str, object]] = []
+
+    for model, q in PHOTONIC_CONFIGS:
+        for seed in seeds:
+            split = prepare_split(
+                source=args.source,
+                model=model,
+                q=q,
+                seed=seed,
+                data_root=args.data_root,
+                synthetic=synthetic,
+                train_cap=args.train_cap,
+                test_cap=args.test_cap,
+            )
+
+            base_row = {
+                "model": model,
+                "q": q,
+                "seed": seed,
+                "train_samples": int(len(split["y_train"])),
+                "validation_samples": int(len(split["y_validation"])),
+                "test_samples": int(len(split["y_test"])),
+                "train_positive_ratio": float(np.mean(split["y_train"])),
+                "test_positive_ratio": float(np.mean(split["y_test"])),
+                "pca_explained_variance": float(split["explained_variance"]),
+                "kernel_normalization": (args.kernel_normalization),
+            }
+
+            linear_metrics = score_linear_svm(
+                X_train=split["X_train"],
+                X_test=split["X_test"],
+                y_train=split["y_train"],
+                y_test=split["y_test"],
+                seed=seed,
+            )
+
+            long_rows.append(
+                {
+                    **base_row,
+                    "method": "linear_c1",
+                    "effective_rank": effective_rank(
+                        split["X_train"] @ split["X_train"].T
+                    ),
+                    **linear_metrics,
+                }
+            )
+
+            (
+                K_qubit_train,
+                K_qubit_test,
+                qubit_rank,
+            ) = compute_qubit_kernels(
+                X_train=split["X_train"],
+                X_test=split["X_test"],
+                normalization=args.kernel_normalization,
+            )
+
+            qubit_metrics = score_precomputed_kernel(
+                K_train=K_qubit_train,
+                K_test=K_qubit_test,
+                y_train=split["y_train"],
+                y_test=split["y_test"],
+                seed=seed,
+            )
+
+            long_rows.append(
+                {
+                    **base_row,
+                    "method": "qsvm_qubit",
+                    "effective_rank": qubit_rank,
+                    **qubit_metrics,
+                }
+            )
+
+            (
+                K_photonic_train,
+                K_photonic_test,
+                photonic_rank,
+            ) = compute_photonic_kernels(
+                X_train=split["X_train"],
+                X_test=split["X_test"],
+                q=q,
+                n_photons=args.n_photons,
+                seed=seed,
+                normalization=args.kernel_normalization,
+            )
+
+            photonic_metrics = score_precomputed_kernel(
+                K_train=K_photonic_train,
+                K_test=K_photonic_test,
+                y_train=split["y_train"],
+                y_test=split["y_test"],
+                seed=seed,
+            )
+
+            long_rows.append(
+                {
+                    **base_row,
+                    "method": "qsvm_photonic",
+                    "effective_rank": photonic_rank,
+                    **photonic_metrics,
+                }
+            )
+
+            print(
+                f"[table1] {model} q={q} seed={seed} "
+                f"linear_f1={linear_metrics['f1']:.3f} "
+                f"qubit_f1={qubit_metrics['f1']:.3f} "
+                f"photonic_f1={photonic_metrics['f1']:.3f}",
+                flush=True,
+            )
+
+    grouped: dict[
+        tuple[str, int],
+        list[dict[str, object]],
+    ] = defaultdict(list)
+
+    for row in long_rows:
+        grouped[
+            (
+                str(row["model"]),
+                int(row["q"]),
+            )
+        ].append(row)
+
+    summary_rows: list[dict[str, object]] = []
+
+    for model, q in PHOTONIC_CONFIGS:
+        rows = grouped[(model, q)]
+
+        linear_f1 = mean_metric(
+            rows,
+            "linear_c1",
+            "f1",
+        )
+
+        qubit_f1 = mean_metric(
+            rows,
+            "qsvm_qubit",
+            "f1",
+        )
+
+        photonic_f1 = mean_metric(
+            rows,
+            "qsvm_photonic",
+            "f1",
+        )
+
+        summary_rows.append(
+            {
+                "model": model,
+                "q": q,
+                "seed_count": len(seeds),
+                "linear_c1_f1": linear_f1,
+                "linear_c1_auc": mean_metric(
+                    rows,
+                    "linear_c1",
+                    "auc",
+                ),
+                "qsvm_qubit_f1": qubit_f1,
+                "qsvm_qubit_auc": mean_metric(
+                    rows,
+                    "qsvm_qubit",
+                    "auc",
+                ),
+                "qsvm_qubit_effective_rank": (
+                    mean_metric(
+                        rows,
+                        "qsvm_qubit",
+                        "effective_rank",
+                    )
+                ),
+                "qsvm_photonic_f1": photonic_f1,
+                "qsvm_photonic_auc": mean_metric(
+                    rows,
+                    "qsvm_photonic",
+                    "auc",
+                ),
+                "qsvm_photonic_effective_rank": (
+                    mean_metric(
+                        rows,
+                        "qsvm_photonic",
+                        "effective_rank",
+                    )
+                ),
+                "photonic_vs_linear_f1_delta": (photonic_f1 - linear_f1),
+                "photonic_vs_qubit_f1_delta": (photonic_f1 - qubit_f1),
+            }
+        )
+
+    prefix = "photonic_table1"
+
+    long_path = args.results_dir / f"{prefix}_long.csv"
+
+    summary_path = args.results_dir / f"{prefix}_summary.csv"
+
+    write_csv(
+        long_path,
+        long_rows,
+    )
+
+    write_csv(
+        summary_path,
+        summary_rows,
+    )
+
+    strict_wins = sum(row["photonic_vs_linear_f1_delta"] > 0.0 for row in summary_rows)
+
+    ties = sum(
+        np.isclose(
+            row["photonic_vs_linear_f1_delta"],
+            0.0,
+        )
+        for row in summary_rows
+    )
+
+    aggregate = {
+        "photonic_strictly_beats_linear": (f"{strict_wins}/{len(summary_rows)}"),
+        "photonic_ties_linear": (f"{ties}/{len(summary_rows)}"),
+        "mean_photonic_vs_linear_f1_delta": float(
+            np.mean([row["photonic_vs_linear_f1_delta"] for row in summary_rows])
+        ),
+        "mean_photonic_vs_qubit_f1_delta": float(
+            np.mean([row["photonic_vs_qubit_f1_delta"] for row in summary_rows])
+        ),
+    }
+
+    payload = {
+        "artifact": prefix,
+        "paper_counterpart": "Table 1",
+        "paper_pointer": PAPER_POINTERS["table1"],
+        "interpretation": (
+            "Native photonic-kernel comparison on capped data. "
+            "Not a reproduction of paper values."
+        ),
+        "aggregate": aggregate,
+        "paths": {
+            "long_csv": str(long_path),
+            "summary_csv": str(summary_path),
+        },
+        "summary_rows": summary_rows,
+        **metadata,
+    }
+
+    write_json(
+        args.results_dir / f"{prefix}.json",
+        payload,
+    )
+
+    write_table1_markdown(
+        args.results_dir / f"{prefix}.md",
+        summary_rows,
+        payload,
+    )
+
+    print(
+        json.dumps(
+            aggregate,
+            indent=2,
+        )
+    )
+
+    return payload
+
+
+def write_table1_markdown(
+    path: Path,
+    summary_rows: list[dict[str, object]],
+    payload: dict[str, object],
+) -> None:
+    """Write the human-readable photonic Table 1 summary."""
+    lines = [
+        "# Photonic Table 1-style comparison",
+        "",
+        (
+            "This artifact compares the native photonic fidelity kernel with "
+            "the manuscript qubit fidelity kernel and the linear C=1 SVM."
+        ),
+        "",
+        (
+            "Results use capped data for photonic simulation and do not "
+            "reproduce the paper's numerical results."
+        ),
+        "",
+        f"Paper methodology pointer: {payload['paper_pointer']}",
+        "",
+        (
+            "| Model | q | Linear F1 | Qubit F1 | Photonic F1 | "
+            "Photonic AUC | Photonic rank | Photonic vs linear |"
+        ),
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+
+    for row in summary_rows:
+        lines.append(
+            f"| {row['model']} "
+            f"| {row['q']} "
+            f"| {row['linear_c1_f1']:.3f} "
+            f"| {row['qsvm_qubit_f1']:.3f} "
+            f"| {row['qsvm_photonic_f1']:.3f} "
+            f"| {row['qsvm_photonic_auc']:.3f} "
+            f"| {row['qsvm_photonic_effective_rank']:.2f} "
+            f"| {row['photonic_vs_linear_f1_delta']:+.3f} |"
+        )
+
+    aggregate = payload["aggregate"]
+
+    lines.extend(
+        [
+            "",
+            (
+                "Strict photonic wins over linear: "
+                f"{aggregate['photonic_strictly_beats_linear']}."
+            ),
+            (f"Photonic ties with linear: {aggregate['photonic_ties_linear']}."),
+            (
+                "Mean photonic versus linear F1 delta: "
+                f"{aggregate['mean_photonic_vs_linear_f1_delta']:+.3f}."
+            ),
+            (
+                "Mean photonic versus qubit F1 delta: "
+                f"{aggregate['mean_photonic_vs_qubit_f1_delta']:+.3f}."
+            ),
+        ]
+    )
+
+    path.write_text(
+        "\n".join(lines) + "\n",
+        encoding="utf-8",
+    )
+
+
+def build_figure4(
+    args: argparse.Namespace,
+    synthetic: SyntheticSpec,
+    metadata: dict[str, object],
+) -> dict[str, object]:
+    """Generate a class-sorted photonic Gram-matrix heatmap."""
+    model = args.fig4_model
+    q = args.fig4_q
+    seed = args.fig4_seed
+
+    X, y = load_dataset(
+        source=args.source,
+        model=model,
+        seed=dataset_seed(
+            source=args.source,
+            model=model,
+            seed=seed,
+        ),
+        data_root=args.data_root,
+        synthetic=synthetic,
+    )
+
+    (
+        training_indices,
+        validation_indices,
+        test_indices,
+    ) = split_indices(
+        y,
+        seed=seed,
+    )
+
+    selected_indices = stratified_subsample(
+        training_indices,
+        y,
+        args.fig4_samples,
+        seed,
+    )
+
+    # Fit preprocessing on the selected training subset before sorting.
+    (
+        X_selected,
+        _,
+        _,
+        explained_variance,
+    ) = preprocess(
+        X[selected_indices],
+        X[validation_indices],
+        X[test_indices[:2]],
+        q,
+    )
+
+    y_selected = y[selected_indices]
+
+    order = np.argsort(
+        y_selected,
+        kind="stable",
+    )
+
+    X_sorted = X_selected[order]
+
+    y_sorted = y_selected[order]
+
+    K_train_raw, _ = photonic_fidelity_kernels(
+        X_sorted,
+        X_sorted[:2],
+        q,
+        n_photons=args.n_photons,
+        seed=seed,
+    )
+
+    boundary = int(np.sum(y_sorted == 0))
+
+    lower_color_limit = float(
+        np.quantile(
+            K_train_raw,
+            0.01,
+        )
+    )
+
+    upper_color_limit = float(
+        np.quantile(
+            K_train_raw,
+            0.99,
+        )
+    )
+
+    figure, axis = plt.subplots(figsize=(5.4, 4.6))
+
+    image = axis.imshow(
+        K_train_raw,
+        cmap="viridis",
+        vmin=lower_color_limit,
+        vmax=upper_color_limit,
+    )
+
+    if 0 < boundary < len(y_sorted):
+        axis.axhline(
+            boundary - 0.5,
+            color="white",
+            linewidth=0.8,
+            linestyle="--",
+        )
+
+        axis.axvline(
+            boundary - 0.5,
+            color="white",
+            linewidth=0.8,
+            linestyle="--",
+        )
+
+    axis.set_title(
+        "Photonic fidelity Gram matrix\n"
+        f"{model}, q={q}, "
+        f"{len(y_sorted)} class-sorted samples"
+    )
+
+    axis.set_xlabel("Sample sorted by class")
+
+    axis.set_ylabel("Sample sorted by class")
+
+    figure.colorbar(
+        image,
+        ax=axis,
+        fraction=0.046,
+        pad=0.04,
+        label="Raw fidelity K(x, y)",
+    )
+
+    figure.tight_layout()
+
+    prefix = "photonic_figure4"
+
+    png_path = args.results_dir / f"{prefix}.png"
+
+    matrix_path = args.results_dir / f"{prefix}_kernel_matrix.csv"
+
+    figure.savefig(
+        png_path,
+        dpi=130,
+    )
+
+    plt.close(figure)
+
+    np.savetxt(
+        matrix_path,
+        K_train_raw,
+        delimiter=",",
+    )
+
+    off_diagonal_mask = ~np.eye(
+        len(K_train_raw),
+        dtype=bool,
+    )
+
+    off_diagonal_values = K_train_raw[off_diagonal_mask]
+
+    payload = {
+        "artifact": prefix,
+        "paper_counterpart": "Figure 4",
+        "paper_pointer": PAPER_POINTERS["figure4"],
+        "model": model,
+        "q": q,
+        "seed": seed,
+        "sample_count": int(len(y_sorted)),
+        "class_0_count": int(np.sum(y_sorted == 0)),
+        "class_1_count": int(np.sum(y_sorted == 1)),
+        "class_boundary": boundary,
+        "pca_explained_variance": float(explained_variance),
+        "kernel_effective_rank": (effective_rank(K_train_raw,psd_tolerance=1e-4,)),
+        "kernel_statistics": {
+            "minimum": float(K_train_raw.min()),
+            "maximum": float(K_train_raw.max()),
+            "mean": float(K_train_raw.mean()),
+            "off_diagonal_mean": float(off_diagonal_values.mean()),
+            "off_diagonal_std": float(off_diagonal_values.std()),
+            "trace": float(np.trace(K_train_raw)),
+        },
+        "paths": {
+            "png": str(png_path),
+            "kernel_csv": str(matrix_path),
+        },
+        **metadata,
+    }
+
+    write_json(
+        args.results_dir / f"{prefix}.json",
+        payload,
+    )
+
+    markdown = [
+        "# Photonic Figure 4-style Gram matrix",
+        "",
+        (
+            "Class-sorted raw photonic fidelity Gram matrix for "
+            f"{model}, q={q}, using {len(y_sorted)} samples."
+        ),
+        "",
+        (
+            "This is a native photonic feature-map result on capped data, "
+            "not a reproduction of the paper's numerical matrix."
+        ),
+        "",
+        f"Paper methodology pointer: {payload['paper_pointer']}",
+        "",
+        (f"Photonic effective rank: {payload['kernel_effective_rank']:.3f}."),
+        (
+            "Off-diagonal mean: "
+            f"{payload['kernel_statistics']['off_diagonal_mean']:.4f}."
+        ),
+    ]
+
+    (args.results_dir / f"{prefix}.md").write_text(
+        "\n".join(markdown) + "\n",
+        encoding="utf-8",
+    )
+
+    print(
+        f"[figure4] wrote {png_path} "
+        f"effective_rank="
+        f"{payload['kernel_effective_rank']:.2f}"
+    )
+
+    return payload
+
+
+def build_effective_rank(
+    args: argparse.Namespace,
+    synthetic: SyntheticSpec,
+    seeds: list[int],
+    metadata: dict[str, object],
+) -> dict[str, object]:
+    """Generate photonic effective rank as a function of q."""
+    model = args.effrank_model
+    rows: list[dict[str, object]] = []
+
+    for q in args.effrank_qs:
+        seed_values: list[float] = []
+        sample_counts: list[int] = []
+        positive_ratios: list[float] = []
+
+        for seed in seeds:
+            X, y = load_dataset(
+                source=args.source,
+                model=model,
+                seed=dataset_seed(
+                    source=args.source,
+                    model=model,
+                    seed=seed,
+                ),
+                data_root=args.data_root,
+                synthetic=synthetic,
+            )
+
+            (
+                training_indices,
+                validation_indices,
+                test_indices,
+            ) = split_indices(
+                y,
+                seed=seed,
+            )
+
+            selected_indices = stratified_subsample(
+                training_indices,
+                y,
+                args.effrank_samples,
+                seed,
+            )
+
+            (
+                X_train,
+                _,
+                _,
+                _,
+            ) = preprocess(
+                X[selected_indices],
+                X[validation_indices],
+                X[test_indices[:2]],
+                q,
+            )
+
+            K_train_raw, _ = photonic_fidelity_kernels(
+                X_train,
+                X_train[:2],
+                q,
+                n_photons=(args.n_photons),
+                seed=seed,
+            )
+
+            seed_values.append(effective_rank(K_train_raw,psd_tolerance=1e-4,))
+
+            sample_counts.append(len(selected_indices))
+
+            positive_ratios.append(float(np.mean(y[selected_indices])))
+
+        rows.append(
+            {
+                "model": model,
+                "q": q,
+                "seed_count": len(seeds),
+                "sample_count": int(min(sample_counts)),
+                "positive_ratio_mean": float(np.mean(positive_ratios)),
+                "photonic_effective_rank_mean": float(np.mean(seed_values)),
+                "photonic_effective_rank_std": float(np.std(seed_values)),
+                "full_training_comparison": False,
+            }
+        )
+
+        print(
+            f"[effrank] q={q} effective_rank={np.mean(seed_values):.2f}",
+            flush=True,
+        )
+
+    prefix = "photonic_effrank"
+
+    summary_path = args.results_dir / f"{prefix}_summary.csv"
+
+    png_path = args.results_dir / f"{prefix}.png"
+
+    write_csv(
+        summary_path,
+        rows,
+    )
+
+    figure, axis = plt.subplots(figsize=(5.2, 3.8))
+
+    axis.errorbar(
+        [row["q"] for row in rows],
+        [row["photonic_effective_rank_mean"] for row in rows],
+        yerr=[row["photonic_effective_rank_std"] for row in rows],
+        marker="o",
+        capsize=3,
+    )
+
+    axis.set_xlabel("Optical modes q")
+
+    axis.set_ylabel("Photonic-kernel effective rank")
+
+    axis.set_title(f"Photonic fidelity-kernel effective rank\n{model}")
+
+    axis.grid(
+        True,
+        alpha=0.3,
+    )
+
+    figure.tight_layout()
+
+    figure.savefig(
+        png_path,
+        dpi=130,
+    )
+
+    plt.close(figure)
+
+    payload = {
+        "artifact": prefix,
+        "paper_counterpart": ("Figure 2 and Table 5"),
+        "paper_pointer": PAPER_POINTERS["effrank"],
+        "model": model,
+        "interpretation": (
+            "Effective rank of a native photonic kernel on a capped, "
+            "stratified subset. Not directly comparable with full-training "
+            "paper values."
+        ),
+        "rows": rows,
+        "paths": {
+            "summary_csv": str(summary_path),
+            "png": str(png_path),
+        },
+        **metadata,
+    }
+
+    write_json(
+        args.results_dir / f"{prefix}.json",
+        payload,
+    )
+
+    markdown_lines = [
+        "# Photonic effective rank versus q",
+        "",
+        (
+            "The values below are calculated on capped, stratified subsets. "
+            "They are not directly comparable with effective ranks calculated "
+            "on the paper's complete training set."
+        ),
+        "",
+        f"Paper methodology pointer: {payload['paper_pointer']}",
+        "",
+    ]
+
+    markdown_lines.extend(
+        [
+            (
+                f"- q={row['q']}: "
+                f"{row['photonic_effective_rank_mean']:.2f} "
+                f"± {row['photonic_effective_rank_std']:.2f}"
+            )
+            for row in rows
+        ]
+    )
+
+    (args.results_dir / f"{prefix}.md").write_text(
+        "\n".join(markdown_lines) + "\n",
+        encoding="utf-8",
+    )
+
+    print(f"[effrank] wrote {png_path}")
+
+    return payload
+
+
+def parse_artifact_names(
+    raw: str,
+) -> set[str]:
+    """Parse and validate artifact names."""
+    if raw.strip().lower:
+        return set(ARTIFACT_NAMES)
+
+    names = {part.strip().lower() for part in raw.split(",") if part.strip()}
+
+    if not names:
+        raise argparse.ArgumentTypeError("At least one artifact is required.")
+
+    unknown = names - ARTIFACT_NAMES
+
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            "Unknown artifacts: " + ", ".join(sorted(unknown))
+        )
+
+    return names
+
+
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--source", choices=("synthetic", "synthetic_file"),
-                   default="synthetic_file")
-    p.add_argument("--data-root", type=Path,
-                   default=PROJECT_ROOT / "data" / "synthetic_qml_mimic_cxr_embeddings")
-    p.add_argument("--results-dir", type=Path, default=PROJECT_ROOT / "results")
-    p.add_argument("--seeds", default="0,1,2")
-    p.add_argument("--n-photons", type=int, default=2)
-    p.add_argument("--train-cap", type=int, default=220)
-    p.add_argument("--test-cap", type=int, default=100)
-    # synthetic in-memory fallback params
-    p.add_argument("--n-samples", type=int, default=600)
-    p.add_argument("--ambient-dim", type=int, default=128)
-    p.add_argument("--latent-dim", type=int, default=30)
-    p.add_argument("--minority-frac", type=float, default=0.28)
-    p.add_argument("--signal", type=float, default=0.30)
-    p.add_argument("--noise", type=float, default=1.0)
-    # figure4 params
-    p.add_argument("--fig4-model", default="medsiglip-448")
-    p.add_argument("--fig4-q", type=int, default=6)
-    p.add_argument("--fig4-seed", type=int, default=0)
-    p.add_argument("--fig4-samples", type=int, default=200)
-    # effrank params
-    p.add_argument("--effrank-model", default="medsiglip-448")
-    p.add_argument("--effrank-qs", default="4,6,8,10")
-    p.add_argument("--effrank-samples", type=int, default=200)
-    p.add_argument("--only", default="all",
-                   help="comma list of {table1,figure4,effrank} or 'all'")
-    return p.parse_args()
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+    )
+
+    parser.add_argument(
+        "--source",
+        choices=(
+            "synthetic",
+            "synthetic_file",
+        ),
+        default="synthetic_file",
+    )
+
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=(PROJECT_ROOT / "data" / "synthetic_qml_mimic_cxr_embeddings"),
+    )
+
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=(PROJECT_ROOT / "results"),
+    )
+
+    parser.add_argument(
+        "--seeds",
+        default="0,1,2",
+    )
+
+    parser.add_argument(
+        "--n-photons",
+        type=int,
+        default=2,
+    )
+
+    parser.add_argument(
+        "--kernel-normalization",
+        choices=(
+            "trace",
+            "none",
+        ),
+        default="trace",
+    )
+
+    parser.add_argument(
+        "--train-cap",
+        type=int,
+        default=220,
+    )
+
+    parser.add_argument(
+        "--test-cap",
+        type=int,
+        default=100,
+    )
+
+    # In-memory synthetic-data parameters.
+    parser.add_argument(
+        "--n-samples",
+        type=int,
+        default=600,
+    )
+
+    parser.add_argument(
+        "--ambient-dim",
+        type=int,
+        default=128,
+    )
+
+    parser.add_argument(
+        "--latent-dim",
+        type=int,
+        default=30,
+    )
+
+    parser.add_argument(
+        "--minority-frac",
+        type=float,
+        default=0.28,
+    )
+
+    parser.add_argument(
+        "--signal",
+        type=float,
+        default=0.30,
+    )
+
+    parser.add_argument(
+        "--noise",
+        type=float,
+        default=1.0,
+    )
+
+    # Figure 4 settings.
+    parser.add_argument(
+        "--fig4-model",
+        choices=MODEL_NAMES,
+        default="medsiglip-448",
+    )
+
+    parser.add_argument(
+        "--fig4-q",
+        type=int,
+        default=6,
+    )
+
+    parser.add_argument(
+        "--fig4-seed",
+        type=int,
+        default=0,
+    )
+
+    parser.add_argument(
+        "--fig4-samples",
+        type=int,
+        default=200,
+    )
+
+    # Effective-rank settings.
+    parser.add_argument(
+        "--effrank-model",
+        choices=MODEL_NAMES,
+        default="medsiglip-448",
+    )
+
+    parser.add_argument(
+        "--effrank-qs",
+        default="4,6,8,10",
+    )
+
+    parser.add_argument(
+        "--effrank-samples",
+        type=int,
+        default=200,
+    )
+
+    parser.add_argument(
+        "--only",
+        type=parse_artifact_names,
+        default=set(ARTIFACT_NAMES),
+        help=("Comma-separated subset of table1, figure4, effrank, or all."),
+    )
+
+    return parser.parse_args()
+
+
+def validate_args(
+    args: argparse.Namespace,
+) -> None:
+    """Validate argument consistency."""
+    if args.n_photons <= 0:
+        raise ValueError("--n-photons must be positive.")
+
+    if args.train_cap <= 0:
+        raise ValueError("--train-cap must be positive.")
+
+    if args.test_cap <= 0:
+        raise ValueError("--test-cap must be positive.")
+
+    if args.fig4_q <= 0:
+        raise ValueError("--fig4-q must be positive.")
+
+    if args.fig4_samples <= 0:
+        raise ValueError("--fig4-samples must be positive.")
+
+    if args.effrank_samples <= 0:
+        raise ValueError("--effrank-samples must be positive.")
+
+    if any(q <= 0 for q in args.effrank_qs):
+        raise ValueError("All effective-rank q values must be positive.")
+
+    if args.source == "synthetic_file":
+        if not args.data_root.is_dir():
+            raise FileNotFoundError(f"Dataset root does not exist: {args.data_root}")
+
+        index_path = args.data_root / "synthetic_dataset_index.json"
+
+        if not index_path.is_file():
+            raise FileNotFoundError(f"Synthetic dataset index not found: {index_path}")
 
 
 def main() -> None:
+    """Generate the selected photonic artifacts."""
     args = parse_args()
+
     args.effrank_qs = parse_ints(args.effrank_qs)
+
     seeds = parse_ints(args.seeds)
+
+    validate_args(args)
+
     synthetic = SyntheticSpec(
-        n_samples=args.n_samples, ambient_dim=args.ambient_dim,
-        latent_dim=args.latent_dim, minority_frac=args.minority_frac,
-        signal=args.signal, noise=args.noise,
+        n_samples=args.n_samples,
+        ambient_dim=args.ambient_dim,
+        latent_dim=args.latent_dim,
+        minority_frac=args.minority_frac,
+        signal=args.signal,
+        noise=args.noise,
     )
-    args.results_dir.mkdir(parents=True, exist_ok=True)
-    meta = {
-        "kernel": "photonic (MerLin two-photon linear-optical fidelity)",
-        "n_photons": args.n_photons,
+
+    args.results_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    metadata = {
+        "kernel": {
+            "type": "native photonic fidelity kernel",
+            "backend": "MerLin",
+            "n_photons": args.n_photons,
+            "gate_by_gate_bsp_translation": False,
+            "kernel_normalization": (args.kernel_normalization),
+        },
         "data": {
             "source": args.source,
             "synthetic_surrogate": True,
-            "data_root": str(args.data_root) if args.source == "synthetic_file" else None,
+            "data_root": (
+                str(args.data_root) if args.source == "synthetic_file" else None
+            ),
             "seeds": seeds,
+            "medical_semantics": False,
         },
-        "subsampling": {"train_cap": args.train_cap, "test_cap": args.test_cap,
-                        "reason": "photonic SLOS Gram matrix is O(N^2)"},
+        "subsampling": {
+            "train_cap": args.train_cap,
+            "test_cap": args.test_cap,
+            "reason": (
+                "Photonic Gram-matrix construction scales quadratically "
+                "with the number of samples."
+            ),
+        },
     }
-    which = ({"table1", "figure4", "effrank"} if args.only == "all"
-             else set(s.strip() for s in args.only.split(",")))
-    if "table1" in which:
-        build_table1(args, synthetic, seeds, meta)
-    if "figure4" in which:
-        build_figure4(args, synthetic, meta)
-    if "effrank" in which:
-        build_effrank(args, synthetic, seeds, meta)
-    print("photonic artifacts done")
+
+    if "table1" in args.only:
+        build_table1(
+            args,
+            synthetic,
+            seeds,
+            metadata,
+        )
+
+    if "figure4" in args.only:
+        build_figure4(
+            args,
+            synthetic,
+            metadata,
+        )
+
+    if "effrank" in args.only:
+        build_effective_rank(
+            args,
+            synthetic,
+            seeds,
+            metadata,
+        )
+
+    print("Photonic artifacts completed.")
 
 
 if __name__ == "__main__":

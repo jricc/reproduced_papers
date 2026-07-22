@@ -49,7 +49,9 @@ MODEL_DISPLAY = {
 }
 
 
-def normalize_kernel_like_original(kernel: np.ndarray, normalization: str) -> np.ndarray:
+def normalize_kernel_like_original(
+    kernel: np.ndarray, normalization: str
+) -> np.ndarray:
     """Match the original qml-medimage QSVM normalization helpers."""
     if normalization == "none":
         return kernel.copy()
@@ -351,7 +353,9 @@ def default_prefix(source: str) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("synthetic", "synthetic_file", "real"), default="synthetic")
+    parser.add_argument(
+        "--source", choices=("synthetic", "synthetic_file", "real"), default="synthetic"
+    )
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--results-dir", type=Path, default=Path("results"))
     parser.add_argument("--output-prefix", default=None)
@@ -360,7 +364,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--q-reference", type=int, default=8)
     parser.add_argument("--reps", type=int, default=1)
     parser.add_argument("--c-grid", default="0.01,0.1,1,10,100")
-    parser.add_argument("--kernel-normalization", choices=("trace", "none"), default="trace")
+    parser.add_argument(
+        "--kernel-normalization", choices=("trace", "none"), default="trace"
+    )
     parser.add_argument("--n-samples", type=int, default=300)
     parser.add_argument("--ambient-dim", type=int, default=128)
     parser.add_argument("--latent-dim", type=int, default=30)
@@ -433,7 +439,11 @@ def main() -> None:
     json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     write_markdown(md_path, payload=payload)
 
-    print(json.dumps({"rows": len(summary_rows), "tuning_rows": len(tuning_rows)}, indent=2))
+    print(
+        json.dumps(
+            {"rows": len(summary_rows), "tuning_rows": len(tuning_rows)}, indent=2
+        )
+    )
     print(f"Wrote {summary_path}")
     print(f"Wrote {tuning_path}")
     print(f"Wrote {json_path}")

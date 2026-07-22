@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 MODEL_EMBEDDING_DIMS = {
-    "synthetic_medsiglip": 1152,
+    "synthetic_medsiglip": 448,
     "synthetic_raddino": 768,
     "synthetic_vit": 768,
 }
@@ -80,7 +80,7 @@ MODEL_GEOMETRY_PROFILES = {
 GENERATOR_VERSION = "synthetic_kernel_geometry_v5_qsvm_separable"
 
 
-def default_embedding_dim(model_name: str, fallback: int = 1152) -> int:
+def default_embedding_dim(model_name: str, fallback: int = 448) -> int:
     return MODEL_EMBEDDING_DIMS.get(model_name, fallback)
 
 
@@ -173,7 +173,7 @@ def make_synthetic_embeddings(
     if n_samples is None:
         n_samples = default_n_samples(model_name)
     if embedding_dim is None:
-        embedding_dim = default_embedding_dim(model_name, fallback=1152)
+        embedding_dim = default_embedding_dim(model_name, fallback=448)
     if n_signal_latents is None:
         n_signal_latents = int(profile["n_signal_latents"])
     if n_nuisance_latents is None:
@@ -230,7 +230,9 @@ def make_synthetic_embeddings(
     )
     n_positive = int(round(n_samples * positive_ratio))
     n_positive = min(max(n_positive, 1), n_samples - 1)
-    positive_idx = np.argpartition(score, n_samples - n_positive)[n_samples - n_positive :]
+    positive_idx = np.argpartition(score, n_samples - n_positive)[
+        n_samples - n_positive :
+    ]
     y = np.zeros(n_samples, dtype=int)
     y[positive_idx] = 1
 
@@ -277,7 +279,7 @@ def make_synthetic_embeddings(
         "nuisance_skew_decay": nuisance_skew_decay,
         "score_noise_std": score_noise_std,
         "score_threshold": float(np.min(score[positive_idx])),
-        "score_formula": "z0^2 + 0.7*z1*z2 + 0.4*sin(3*z3) + eps",
+        "score_formula": "z0*z1 + 0.6*z2*z3 + eps",
         "label_semantics": "synthetic positive class; not medical or insurance metadata",
         "positive_count": int(np.sum(y == 1)),
         "negative_count": int(np.sum(y == 0)),
