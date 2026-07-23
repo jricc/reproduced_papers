@@ -1,4 +1,14 @@
-# QML-MedImage: Quantum Advantage in Medical Insurance Classification
+# QML-MedImage — reproduction adaptation
+
+> [!IMPORTANT]
+> This directory is an adapted copy of the original
+> [`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage) repository,
+> maintained in a fork of
+> [`merlinquantum/reproduced_papers`](https://github.com/merlinquantum/reproduced_papers).
+> The local changes provide a macOS/CPU execution path and support for the
+> public PneumoniaMNIST alternative dataset. They do not claim to reproduce the
+> paper's original MIMIC-CXR results. See [NOTICE.md](NOTICE.md) for attribution
+> and modification details.
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
@@ -296,7 +306,9 @@ See [docs/contributing.md](docs/contributing.md) for guidelines.
 
 ## Citation
 
-If you use this code or dataset, please cite:
+This adaptation is based on the original
+[`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage) repository.
+If you use this code, cite the original repository and paper:
 
 ```bibtex
 @article{cajas2026qml,
@@ -314,3 +326,6 @@ If you use this code or dataset, please cite:
 ```
 
 Based on [QuantumVE](https://github.com/sebasmos/QuantumVE).
+
+The repository is distributed under the original CC BY-NC-SA 4.0 license.
+See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).

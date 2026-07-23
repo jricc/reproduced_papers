@@ -216,4 +216,5 @@ For feature requests, describe:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the
+CC BY-NC-SA 4.0 license in the repository's [LICENSE](../LICENSE) file.

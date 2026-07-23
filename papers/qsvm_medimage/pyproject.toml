@@ -1,7 +1,7 @@
 [project]
 name = "qml-medimage"
 version = "0.1.0"
-description = "Embedding-Aware Quantum-Classical SVMs for Scalable Quantum Machine Learning"
+description = "CPU-compatible reproduction adaptation of the QML-MedImage research code"
 authors = [{ name = "Sebastian Cajas", email = "sebasmos@mit.edu" }]
 dependencies = [
     "scikit-learn==1.6.1",
@@ -37,10 +37,12 @@ classifiers = [
 keywords = ["quantum machine learning", "vector embeddings", "SVM"]
 
 [project.urls]
-Repository = "https://github.com/sebasmos/qml-medimage"
+Repository = "https://github.com/merlinquantum/reproduced_papers"
+"Original Repository" = "https://github.com/sebasmos/qml-medimage"
+"Reproduction Collection" = "https://github.com/merlinquantum/reproduced_papers"
 Paper = "https://arxiv.org/abs/2604.24597"
 Dataset = "https://huggingface.co/datasets/MITCriticalData/qml-mimic-cxr-embeddings"
-"Bug Tracker" = "https://github.com/sebasmos/qml-medimage/issues"
+"Original Bug Tracker" = "https://github.com/sebasmos/qml-medimage/issues"
 
 [project.optional-dependencies]
 dev = ["ruff", "pytest>=7.0"]
