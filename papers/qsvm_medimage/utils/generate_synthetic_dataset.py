@@ -1,65 +1,364 @@
 #!/usr/bin/env python3
-"""Run paper-shaped artifact scripts from one explicit dataset source.
+"""Materialize the synthetic benchmark as local NPZ files.
 
-This convenience wrapper invokes the dedicated scripts for Tables 1 to 10 and
-Figures 2 to 5. Every selected script receives the same data source, dataset
-root, and result directory.
+The output directory mirrors the layout expected by the real-data loader:
 
-The wrapper does not calculate scientific results itself.
+    <output-root>/
+        medsiglip-448-embeddings/
+            20-seeds/
+                seed_0/
+                    data_type9_synthetic.npz
+                    data_type9_synthetic_metadata.json
+
+        rad-dino-embeddings/
+            20-seeds/
+                seed_0/
+                    data_type9_synthetic.npz
+                    data_type9_synthetic_metadata.json
+
+        vit-base-patch32-224-embeddings/
+            20-seeds/
+                seed_0/
+                    data_type9_synthetic.npz
+                    data_type9_synthetic_metadata.json
+
+The generated data form a controlled and calibrated kernel benchmark.
+
+They do not reconstruct the distribution of the inaccessible medical
+embeddings and have no medical or insurance semantics.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
-import subprocess
+import json
 import sys
 from pathlib import Path
 
-SCRIPT_BY_NAME = {
-    "table1": "synthetic_surrogate_table1.py",
-    "table2": "synthetic_surrogate_table2.py",
-    "table3": "synthetic_surrogate_table3.py",
-    "table4": "synthetic_surrogate_table4.py",
-    "table5": "synthetic_surrogate_table5.py",
-    "table6": "synthetic_surrogate_table6.py",
-    "table7": "synthetic_surrogate_table7.py",
-    "table8": "synthetic_surrogate_table8.py",
-    "table9": "synthetic_surrogate_table9.py",
-    "table10": "synthetic_surrogate_table10.py",
-    "figure2": "synthetic_surrogate_figure2.py",
-    "figure3": "synthetic_surrogate_figure3.py",
-    "figure4": "synthetic_surrogate_figure4.py",
-    "figure5": "synthetic_surrogate_figure5.py",
+import numpy as np
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+project_root_string = str(PROJECT_ROOT)
+
+if project_root_string not in sys.path:
+    sys.path.insert(
+        0,
+        project_root_string,
+    )
+
+
+from lib.synthetic_data import (  # noqa: E402
+    default_embedding_dim,
+    default_n_samples,
+    make_synthetic_embeddings,
+)
+
+MODEL_LAYOUT = {
+    "synthetic_medsiglip": ("medsiglip-448-embeddings/20-seeds"),
+    "synthetic_raddino": ("rad-dino-embeddings/20-seeds"),
+    "synthetic_vit": ("vit-base-patch32-224-embeddings/20-seeds"),
 }
 
+DEFAULT_MODELS = "synthetic_medsiglip,synthetic_raddino,synthetic_vit"
 
-def parse_names(raw: str) -> list:
-    """Parse and validate the requested artifact names."""
-    names = [part.strip().lower() for part in raw.split(",") if part.strip()]
+DEFAULT_SEEDS = "0,1,2,3,4,5,6,7,8,9"
 
-    if not names:
-        raise argparse.ArgumentTypeError("At least one artifact name is required.")
 
-    if names == ["all"]:
-        return list(SCRIPT_BY_NAME)
-
-    if "all" in names:
+def parse_ints(
+    raw: str,
+) -> list:
+    """Parse a non-empty comma-separated list of unique integers."""
+    try:
+        values = [int(part.strip()) for part in raw.split(",") if part.strip()]
+    except ValueError as error:
         raise argparse.ArgumentTypeError(
-            "'all' cannot be combined with individual artifact names."
+            "Expected a comma-separated list of integers."
+        ) from error
+
+    if not values:
+        raise argparse.ArgumentTypeError("At least one integer is required.")
+
+    if len(values) != len(set(values)):
+        raise argparse.ArgumentTypeError("Values must be unique.")
+
+    return values
+
+
+def parse_models(
+    raw: str,
+) -> list:
+    """Parse and validate synthetic model names."""
+    models = [part.strip() for part in raw.split(",") if part.strip()]
+
+    if not models:
+        raise argparse.ArgumentTypeError("At least one model is required.")
+
+    unknown_models = [model for model in models if model not in MODEL_LAYOUT]
+
+    if unknown_models:
+        raise argparse.ArgumentTypeError(
+            "Unknown synthetic models: " + ", ".join(unknown_models)
         )
 
-    unknown_names = [name for name in names if name not in SCRIPT_BY_NAME]
+    if len(models) != len(set(models)):
+        raise argparse.ArgumentTypeError("Model names must be unique.")
 
-    if unknown_names:
-        raise argparse.ArgumentTypeError(
-            "Unknown artifacts: " + ", ".join(unknown_names)
+    return models
+
+
+def validate_generated_dataset(
+    X: np.ndarray,
+    y: np.ndarray,
+    *,
+    expected_n_samples: int,
+    expected_embedding_dim: int,
+    model_name: str,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Validate one generated feature matrix and label vector."""
+    features = np.asarray(X)
+
+    labels = np.asarray(y)
+
+    if features.ndim != 2:
+        raise ValueError(
+            "Generated features must be two-dimensional for "
+            f"model={model_name}, seed={seed}."
         )
 
-    if len(names) != len(set(names)):
-        raise argparse.ArgumentTypeError("Artifact names must be unique.")
+    if labels.ndim != 1:
+        raise ValueError(
+            "Generated labels must be one-dimensional for "
+            f"model={model_name}, seed={seed}."
+        )
 
-    return names
+    if len(features) != len(labels):
+        raise ValueError(
+            "Generated features and labels have different sample counts "
+            f"for model={model_name}, seed={seed}."
+        )
+
+    expected_shape = (
+        expected_n_samples,
+        expected_embedding_dim,
+    )
+
+    if features.shape != expected_shape:
+        raise ValueError(
+            "Generated feature shape is inconsistent. "
+            f"Expected {expected_shape}, received {features.shape}, "
+            f"model={model_name}, seed={seed}."
+        )
+
+    if not np.all(np.isfinite(features)):
+        raise ValueError(
+            "Generated features contain non-finite values for "
+            f"model={model_name}, seed={seed}."
+        )
+
+    unique_labels = np.unique(labels)
+
+    if not np.all(
+        np.isin(
+            unique_labels,
+            np.array(
+                [
+                    0,
+                    1,
+                ]
+            ),
+        )
+    ):
+        raise ValueError(
+            "Generated labels must contain only 0 and 1 for "
+            f"model={model_name}, seed={seed}."
+        )
+
+    if unique_labels.size != 2:
+        raise ValueError(
+            "Generated labels must contain both classes for "
+            f"model={model_name}, seed={seed}."
+        )
+
+    return (
+        features,
+        labels,
+    )
+
+
+def write_one_dataset(
+    *,
+    output_root: Path,
+    model_name: str,
+    seed: int,
+    n_samples: int | None,
+    embedding_dim: int | None,
+    positive_ratio: float,
+    n_signal_latents: int | None,
+    n_nuisance_latents: int | None,
+    signal_strength: float | None,
+    score_noise_std: float | None,
+    noise_std: float | None,
+    nuisance_scale: float | None,
+    nuisance_decay: float | None,
+    nuisance_distribution: str | None,
+    nuisance_skew_strength: float | None,
+    nuisance_skew_decay: float | None,
+    dtype: str,
+    overwrite: bool,
+) -> dict[str, object]:
+    """Generate and save one synthetic model and seed combination."""
+    resolved_n_samples = (
+        default_n_samples(model_name) if n_samples is None else n_samples
+    )
+
+    resolved_embedding_dim = (
+        default_embedding_dim(model_name) if embedding_dim is None else embedding_dim
+    )
+
+    if resolved_n_samples <= 0:
+        raise ValueError("n_samples must be positive.")
+
+    if resolved_embedding_dim <= 0:
+        raise ValueError("embedding_dim must be positive.")
+
+    if not 0.0 < positive_ratio < 1.0:
+        raise ValueError("positive_ratio must be in the interval (0, 1).")
+
+    seed_directory = output_root / MODEL_LAYOUT[model_name] / f"seed_{seed}"
+
+    npz_path = seed_directory / "data_type9_synthetic.npz"
+
+    metadata_path = seed_directory / "data_type9_synthetic_metadata.json"
+
+    if not overwrite and (npz_path.exists() or metadata_path.exists()):
+        raise FileExistsError(
+            "Synthetic dataset already exists for "
+            f"model={model_name}, seed={seed}. "
+            "Use --overwrite to replace it."
+        )
+
+    (
+        X,
+        y,
+        metadata,
+    ) = make_synthetic_embeddings(
+        n_samples=resolved_n_samples,
+        embedding_dim=resolved_embedding_dim,
+        positive_ratio=positive_ratio,
+        n_signal_latents=n_signal_latents,
+        n_nuisance_latents=n_nuisance_latents,
+        signal_strength=signal_strength,
+        score_noise_std=score_noise_std,
+        noise_std=noise_std,
+        nuisance_scale=nuisance_scale,
+        nuisance_decay=nuisance_decay,
+        nuisance_distribution=(nuisance_distribution),
+        nuisance_skew_strength=(nuisance_skew_strength),
+        nuisance_skew_decay=(nuisance_skew_decay),
+        seed=seed,
+        model_name=model_name,
+    )
+
+    (
+        X,
+        y,
+    ) = validate_generated_dataset(
+        X,
+        y,
+        expected_n_samples=(resolved_n_samples),
+        expected_embedding_dim=(resolved_embedding_dim),
+        model_name=model_name,
+        seed=seed,
+    )
+
+    seed_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    if dtype == "float32":
+        storage_dtype = np.float32
+    else:
+        storage_dtype = np.float64
+
+    X_to_save = X.astype(
+        storage_dtype,
+        copy=False,
+    )
+
+    y_to_save = y.astype(
+        np.int8,
+        copy=False,
+    )
+
+    np.savez_compressed(
+        npz_path,
+        X=X_to_save,
+        y=y_to_save,
+    )
+
+    complete_metadata = dict(metadata)
+
+    complete_metadata.update(
+        {
+            "file": str(npz_path),
+            "metadata_file": str(metadata_path),
+            "storage_dtype": dtype,
+            "stored_shape": list(X_to_save.shape),
+            "stored_label_shape": list(y_to_save.shape),
+            "stored_class_0": int(np.sum(y_to_save == 0)),
+            "stored_class_1": int(np.sum(y_to_save == 1)),
+        }
+    )
+
+    metadata_path.write_text(
+        json.dumps(
+            complete_metadata,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    return complete_metadata
+
+
+def write_dataset_index(
+    path: Path,
+    rows: list[dict[str, object]],
+) -> None:
+    """Write the index describing every generated file."""
+    if not rows:
+        raise ValueError("At least one generated dataset is required.")
+
+    index = {
+        "source": "synthetic",
+        "description": (
+            "Materialized calibrated synthetic benchmark for "
+            "qsvm_medimage kernel and pipeline tests."
+        ),
+        "medical_semantics": False,
+        "files": len(rows),
+        "rows": rows,
+    }
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path.write_text(
+        json.dumps(
+            index,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -69,157 +368,280 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--source",
-        choices=(
-            "synthetic_file",
-            "synthetic",
-            "real",
-        ),
-        default="synthetic_file",
+        "--output-root",
+        type=Path,
+        default=Path("data/synthetic_qml_mimic_cxr_embeddings"),
     )
 
     parser.add_argument(
-        "--data-root",
-        type=Path,
+        "--models",
+        default=DEFAULT_MODELS,
+        help=(
+            "Comma-separated synthetic model names. "
+            "Valid names are: " + ", ".join(MODEL_LAYOUT) + "."
+        ),
+    )
+
+    parser.add_argument(
+        "--seeds",
+        default=DEFAULT_SEEDS,
+    )
+
+    parser.add_argument(
+        "--n-samples",
+        type=int,
         default=None,
-        help=(
-            "Dataset root. Required for synthetic_file and real "
-            "sources. Unused for in-memory synthetic data."
+    )
+
+    parser.add_argument(
+        "--embedding-dim",
+        type=int,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--positive-ratio",
+        type=float,
+        default=0.304,
+    )
+
+    parser.add_argument(
+        "--n-signal-latents",
+        type=int,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--n-nuisance-latents",
+        type=int,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--signal-strength",
+        type=float,
+        default=None,
+        help=("Weight of label-related latent variables in the final embeddings."),
+    )
+
+    parser.add_argument(
+        "--score-noise-std",
+        type=float,
+        default=None,
+        help=("Standard deviation of noise added to the latent label score."),
+    )
+
+    parser.add_argument(
+        "--noise-std",
+        type=float,
+        default=None,
+        help=("Standard deviation of noise added to the final embedding vectors."),
+    )
+
+    parser.add_argument(
+        "--nuisance-scale",
+        type=float,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--nuisance-decay",
+        type=float,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--nuisance-distribution",
+        choices=(
+            "normal",
+            "uniform",
+            "rademacher",
+            "skewed_uniform",
         ),
+        default=None,
     )
 
     parser.add_argument(
-        "--results-dir",
-        type=Path,
-        default=Path("results"),
+        "--nuisance-skew-strength",
+        type=float,
+        default=None,
     )
 
     parser.add_argument(
-        "--only",
-        default="all",
-        help=(
-            "Comma-separated artifact names, for example "
-            "figure2,table6,table10, or all."
+        "--nuisance-skew-decay",
+        type=float,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--dtype",
+        choices=(
+            "float32",
+            "float64",
         ),
+        default="float32",
     )
 
     parser.add_argument(
-        "--dry-run",
+        "--overwrite",
         action="store_true",
-        help="Print commands without executing them.",
+        help=("Replace existing NPZ and metadata files."),
     )
 
     return parser.parse_args()
 
 
-def validate_data_source(
-    source: str,
-    data_root: Path | None,
+def validate_args(
+    args: argparse.Namespace,
+    models: list[str],
+    seeds: list[int],
 ) -> None:
-    """Validate the dataset root required by the selected source."""
-    if source in {"synthetic_file", "real"}:
-        if data_root is None:
-            raise ValueError(f"--data-root is required for source={source!r}.")
+    """Validate command-line arguments."""
+    if not models:
+        raise ValueError("At least one model is required.")
 
-        if not data_root.is_dir():
-            raise FileNotFoundError(f"Dataset directory not found: {data_root}")
+    if not seeds:
+        raise ValueError("At least one seed is required.")
 
-    if source == "synthetic_file":
-        index_path = data_root / "synthetic_dataset_index.json"
+    if args.n_samples is not None and args.n_samples <= 0:
+        raise ValueError("--n-samples must be positive.")
 
-        if not index_path.is_file():
-            raise FileNotFoundError(f"Synthetic dataset index not found: {index_path}")
+    if args.embedding_dim is not None and args.embedding_dim <= 0:
+        raise ValueError("--embedding-dim must be positive.")
 
+    if not 0.0 < args.positive_ratio < 1.0:
+        raise ValueError("--positive-ratio must be in the interval (0, 1).")
 
-def build_command(
-    *,
-    script: Path,
-    source: str,
-    data_root: Path | None,
-    results_dir: Path,
-) -> list:
-    """Build the subprocess command for one artifact script."""
-    command = [
-        sys.executable,
-        "-B",
-        str(script),
-        "--source",
-        source,
-        "--results-dir",
-        str(results_dir),
-    ]
+    if args.n_signal_latents is not None and args.n_signal_latents <= 0:
+        raise ValueError("--n-signal-latents must be positive.")
 
-    if data_root is not None:
-        command.extend(
-            [
-                "--data-root",
-                str(data_root),
-            ]
-        )
+    if args.n_nuisance_latents is not None and args.n_nuisance_latents < 0:
+        raise ValueError("--n-nuisance-latents must be non-negative.")
 
-    return command
+    optional_non_negative_values = (
+        (
+            "--signal-strength",
+            args.signal_strength,
+        ),
+        (
+            "--score-noise-std",
+            args.score_noise_std,
+        ),
+        (
+            "--noise-std",
+            args.noise_std,
+        ),
+        (
+            "--nuisance-scale",
+            args.nuisance_scale,
+        ),
+        (
+            "--nuisance-skew-strength",
+            args.nuisance_skew_strength,
+        ),
+    )
+
+    for (
+        option_name,
+        option_value,
+    ) in optional_non_negative_values:
+        if option_value is not None and option_value < 0.0:
+            raise ValueError(f"{option_name} must be non-negative.")
+
+    optional_positive_values = (
+        (
+            "--nuisance-decay",
+            args.nuisance_decay,
+        ),
+        (
+            "--nuisance-skew-decay",
+            args.nuisance_skew_decay,
+        ),
+    )
+
+    for (
+        option_name,
+        option_value,
+    ) in optional_positive_values:
+        if option_value is not None and option_value <= 0.0:
+            raise ValueError(f"{option_name} must be positive.")
 
 
 def main() -> None:
-    """Run every requested artifact script sequentially."""
+    """Generate all requested model and seed combinations."""
     args = parse_args()
 
-    names = parse_names(args.only)
+    models = parse_models(args.models)
 
-    validate_data_source(
-        args.source,
-        args.data_root,
+    seeds = parse_ints(args.seeds)
+
+    validate_args(
+        args,
+        models,
+        seeds,
     )
 
-    utils_directory = Path(__file__).resolve().parent
-
-    environment = os.environ.copy()
-
-    environment.setdefault(
-        "MPLCONFIGDIR",
-        "/tmp/qsvm_medimage_matplotlib",
-    )
-
-    args.results_dir.mkdir(
+    args.output_root.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    completed: list[str] = []
+    rows: list[dict[str, object]] = []
 
-    for name in names:
-        script = utils_directory / SCRIPT_BY_NAME[name]
+    for model_name in models:
+        for seed in seeds:
+            metadata = write_one_dataset(
+                output_root=args.output_root,
+                model_name=model_name,
+                seed=seed,
+                n_samples=args.n_samples,
+                embedding_dim=args.embedding_dim,
+                positive_ratio=(args.positive_ratio),
+                n_signal_latents=(args.n_signal_latents),
+                n_nuisance_latents=(args.n_nuisance_latents),
+                signal_strength=(args.signal_strength),
+                score_noise_std=(args.score_noise_std),
+                noise_std=args.noise_std,
+                nuisance_scale=(args.nuisance_scale),
+                nuisance_decay=(args.nuisance_decay),
+                nuisance_distribution=(args.nuisance_distribution),
+                nuisance_skew_strength=(args.nuisance_skew_strength),
+                nuisance_skew_decay=(args.nuisance_skew_decay),
+                dtype=args.dtype,
+                overwrite=args.overwrite,
+            )
 
-        if not script.is_file():
-            raise FileNotFoundError(f"Artifact script not found: {script}")
+            rows.append(metadata)
 
-        command = build_command(
-            script=script,
-            source=args.source,
-            data_root=args.data_root,
-            results_dir=args.results_dir,
+            print(
+                "[synthetic-dataset] "
+                f"model={model_name} "
+                f"seed={seed} "
+                f"shape={metadata['stored_shape']} "
+                f"dtype={args.dtype}",
+                flush=True,
+            )
+
+    index_path = args.output_root / "synthetic_dataset_index.json"
+
+    write_dataset_index(
+        index_path,
+        rows,
+    )
+
+    summary = {
+        "files": len(rows),
+        "models": models,
+        "seeds": seeds,
+        "index": str(index_path),
+    }
+
+    print(
+        json.dumps(
+            summary,
+            indent=2,
         )
-
-        print(
-            " ".join(command),
-            flush=True,
-        )
-
-        if args.dry_run:
-            continue
-
-        subprocess.run(
-            command,
-            check=True,
-            env=environment,
-        )
-
-        completed.append(name)
-
-    if args.dry_run:
-        print(f"Dry run completed for {len(names)} artifacts.")
-    else:
-        print(f"Completed {len(completed)} artifacts: " + ", ".join(completed))
+    )
 
 
 if __name__ == "__main__":

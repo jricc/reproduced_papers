@@ -19,8 +19,8 @@ The two feature maps are:
 
 The 1-DOF circuit receives q PCA components.
 
-The 3-DOF circuit receives 3*q PCA components, providing three independent
-input angles per qubit.
+The 3-DOF circuit receives 3 times q PCA components, providing three
+independent input angles per qubit.
 
 When synthetic data are used, this script reproduces the structure of the
 Table 8 experiment, not the numerical results obtained from the inaccessible
@@ -29,11 +29,7 @@ MIMIC-CXR-derived embeddings.
 
 from __future__ import annotations
 
-import argparse
-import csv
-import json
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -42,25 +38,31 @@ from sklearn.svm import SVC
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPRO_ROOT = PROJECT_ROOT.parents[1]
 
-for root in (PROJECT_ROOT, REPRO_ROOT):
+for root in (
+    PROJECT_ROOT,
+    REPRO_ROOT,
+):
     root_string = str(root)
 
     if root_string not in sys.path:
-        sys.path.insert(0, root_string)
+        sys.path.insert(
+            0,
+            root_string,
+        )
 
 
-from lib.quantum_kernel import (
+from lib.quantum_kernel import (  # noqa: E402
     _apply_cnot,
     _apply_single_qubit_gate,
     _ry,
     fidelity_kernel,
 )
-from lib.svm_pipeline import (
+from lib.svm_pipeline import (  # noqa: E402
     normalize_train_test_kernels,
     preprocess,
     split_indices,
 )
-from synthetic_surrogate_table1 import (
+from synthetic_surrogate_table1 import (  # noqa: E402
     SyntheticSpec,
     compute_metrics,
     load_dataset,
@@ -68,13 +70,13 @@ from synthetic_surrogate_table1 import (
 
 PAPER_TABLE8_POINTER = "https://arxiv.org/html/2604.24597v1#S4.T8"
 
-TABLE8_MODELS: tuple[str, ...] = (
+TABLE8_MODELS = (
     "medsiglip-448",
     "rad-dino",
     "vit-patch32-cls",
 )
 
-TABLE8_CIRCUITS: tuple[str, ...] = (
+TABLE8_CIRCUITS = (
     "1-DOF",
     "3-DOF",
 )
@@ -86,7 +88,9 @@ MODEL_DISPLAY = {
 }
 
 
-def _rz(theta: float) -> np.ndarray:
+def _rz(
+    theta: float,
+) -> np.ndarray:
     """Return the Rz gate used only by the 3-DOF ablation."""
     return np.array(
         [
@@ -107,21 +111,7 @@ def pca_dim_for_circuit(
     q: int,
     circuit: str,
 ) -> int:
-    """Return the number of PCA components required by each circuit.
-
-    The 1-DOF circuit uses one input angle per qubit.
-
-    The 3-DOF circuit uses three independent input angles per qubit:
-
-        first q values:
-            first Rz layer;
-
-        next q values:
-            Ry layer;
-
-        final q values:
-            second Rz layer.
-    """
+    """Return the number of PCA components required by each circuit."""
     if q <= 0:
         raise ValueError("q must be positive.")
 
@@ -181,17 +171,10 @@ def bsp_3dof_statevector(
 
         x[d]
         x[d + q]
-        x[d + 2*q]
+        x[d + 2 times q]
 
-    One repetition applies:
-
-        Rz(x[d])
-        Ry(x[d + q])
-        Rz(x[d + 2*q])
-
-    on every qubit, followed by the same CNOT ring used by the 1-DOF circuit.
-
-    No Hadamard gate is used.
+    One repetition applies the three rotations to every qubit, followed by
+    the same CNOT ring used by the 1-DOF circuit.
     """
     features = _validate_3dof_features(
         x,
@@ -199,17 +182,21 @@ def bsp_3dof_statevector(
         reps,
     )
 
+    state_dimension = 1 << q
+
     state = np.zeros(
-        2**q,
+        state_dimension,
         dtype=np.complex128,
     )
+
     state[0] = 1.0
 
     for _ in range(reps):
-        # Apply three independent encoding rotations per qubit.
         for qubit in range(q):
             first_rz_angle = float(features[qubit])
+
             ry_angle = float(features[qubit + q])
+
             second_rz_angle = float(features[qubit + 2 * q])
 
             state = _apply_single_qubit_gate(
@@ -233,7 +220,6 @@ def bsp_3dof_statevector(
                 q,
             )
 
-        # Connect neighbouring qubits.
         for control in range(q - 1):
             state = _apply_cnot(
                 state,
@@ -242,7 +228,6 @@ def bsp_3dof_statevector(
                 q,
             )
 
-        # Close the chain into a ring.
         if q > 1:
             state = _apply_cnot(
                 state,
@@ -259,14 +244,14 @@ def _validate_3dof_dataset(
     q: int,
     name: str,
 ) -> np.ndarray:
-    """Validate a matrix of 3*q-dimensional inputs."""
+    """Validate a matrix of 3 times q dimensional inputs."""
     samples = np.asarray(
         data,
         dtype=np.float64,
     )
 
     if samples.ndim != 2:
-        raise ValueError(f"{name} must have shape (n_samples, 3*q).")
+        raise ValueError(f"{name} must be a two-dimensional matrix.")
 
     if samples.shape[0] == 0:
         raise ValueError(f"{name} must contain at least one sample.")
@@ -276,7 +261,7 @@ def _validate_3dof_dataset(
     if samples.shape[1] != expected_dimension:
         raise ValueError(
             f"{name} has {samples.shape[1]} features, "
-            f"but the 3-DOF circuit requires "
+            "but the 3-DOF circuit requires "
             f"{expected_dimension} for q={q}."
         )
 
@@ -293,7 +278,7 @@ def fidelity_kernel_3dof(
     reps: int,
     data2: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Compute the fidelity kernel for the 3-DOF ablation.
+    """Compute the fidelity kernel for the 3-DOF circuit.
 
     If data2 is omitted, return a square training Gram matrix.
 
@@ -318,9 +303,9 @@ def fidelity_kernel_3dof(
 
     if data2 is None:
         overlaps = states1.conj() @ states1.T
-        kernel = np.abs(overlaps) ** 2
 
-        # Remove small numerical asymmetries.
+        kernel = np.square(np.abs(overlaps))
+
         kernel = 0.5 * (kernel + kernel.T)
 
         diagonal_error = float(np.max(np.abs(np.diag(kernel) - 1.0)))
@@ -359,7 +344,8 @@ def fidelity_kernel_3dof(
     )
 
     overlaps = states1.conj() @ states2.T
-    kernel = np.abs(overlaps) ** 2
+
+    kernel = np.square(np.abs(overlaps))
 
     return np.asarray(
         kernel,
@@ -381,6 +367,31 @@ def score_qsvm_circuit(
     kernel_normalization: str,
 ) -> dict[str, object]:
     """Train and evaluate one fixed-C QSVM circuit."""
+    expected_dimension = pca_dim_for_circuit(
+        q,
+        circuit,
+    )
+
+    if X_train.ndim != 2:
+        raise ValueError("X_train must be two-dimensional.")
+
+    if X_test.ndim != 2:
+        raise ValueError("X_test must be two-dimensional.")
+
+    if X_train.shape[1] != expected_dimension:
+        raise ValueError(
+            f"X_train has {X_train.shape[1]} features, "
+            f"but circuit {circuit!r} requires "
+            f"{expected_dimension}."
+        )
+
+    if X_test.shape[1] != expected_dimension:
+        raise ValueError(
+            f"X_test has {X_test.shape[1]} features, "
+            f"but circuit {circuit!r} requires "
+            f"{expected_dimension}."
+        )
+
     if circuit == "1-DOF":
         training_kernel_raw = fidelity_kernel(
             X_train,
@@ -410,7 +421,10 @@ def score_qsvm_circuit(
     else:
         raise ValueError(f"Unknown circuit: {circuit!r}.")
 
-    training_kernel, test_kernel = normalize_train_test_kernels(
+    (
+        training_kernel,
+        test_kernel,
+    ) = normalize_train_test_kernels(
         training_kernel_raw,
         test_kernel_raw,
         method=kernel_normalization,
@@ -431,11 +445,32 @@ def score_qsvm_circuit(
 
     decision_scores = classifier.decision_function(test_kernel)
 
-    return compute_metrics(
+    metrics = compute_metrics(
         y_test,
         predictions,
         decision_scores,
     )
+
+    result: dict[str, object] = dict(metrics)
+
+    predicted_class_0 = int(np.sum(predictions == 0))
+
+    predicted_class_1 = int(np.sum(predictions == 1))
+
+    result["predicted_class_0"] = predicted_class_0
+
+    result["predicted_class_1"] = predicted_class_1
+
+    result["collapse"] = bool(predicted_class_1 == 0)
+
+    result["zero_f1"] = bool(
+        np.isclose(
+            float(metrics["f1"]),
+            0.0,
+        )
+    )
+
+    return result
 
 
 def compute_table8_rows(
@@ -459,6 +494,15 @@ def compute_table8_rows(
         synthetic=synthetic,
     )
 
+    maximum_required_dimension = 3 * q
+
+    if maximum_required_dimension > X.shape[1]:
+        raise ValueError(
+            "The 3-DOF circuit requires "
+            f"{maximum_required_dimension} raw features for q={q}, "
+            f"but model {model!r} provides {X.shape[1]}."
+        )
+
     (
         training_indices,
         validation_indices,
@@ -468,7 +512,22 @@ def compute_table8_rows(
         seed=seed,
     )
 
+    maximum_pca_dimension = min(
+        len(training_indices),
+        X.shape[1],
+    )
+
+    if maximum_required_dimension > maximum_pca_dimension:
+        raise ValueError(
+            "The 3-DOF circuit requires PCA dimension "
+            f"{maximum_required_dimension}, but the maximum supported "
+            f"dimension is {maximum_pca_dimension} for model {model!r}."
+        )
+
     y_train = y[training_indices]
+
+    y_validation = y[validation_indices]
+
     y_test = y[test_indices]
 
     rows: list[dict[str, object]] = []
@@ -481,7 +540,7 @@ def compute_table8_rows(
 
         (
             X_train,
-            _,
+            X_validation,
             X_test,
             explained_variance_ratio,
         ) = preprocess(
@@ -490,6 +549,9 @@ def compute_table8_rows(
             X[test_indices],
             pca_dimension,
         )
+
+        if X_validation.shape[1] != pca_dimension:
+            raise RuntimeError("The processed validation dimension is inconsistent.")
 
         metrics = score_qsvm_circuit(
             X_train=X_train,
@@ -501,30 +563,40 @@ def compute_table8_rows(
             reps=reps,
             c=c,
             seed=seed,
-            kernel_normalization=kernel_normalization,
+            kernel_normalization=(kernel_normalization),
         )
 
         rows.append(
             {
                 "source": source,
-                "synthetic_surrogate": source != "real",
+                "synthetic_surrogate": (source != "real"),
                 "model": model,
-                "model_display": MODEL_DISPLAY[model],
+                "model_display": (MODEL_DISPLAY[model]),
                 "circuit": circuit,
                 "q": q,
-                "pca_dim": pca_dimension,
+                "pca_dim": (pca_dimension),
                 "reps": reps,
                 "C": c,
                 "seed": seed,
-                "kernel_normalization": kernel_normalization,
+                "kernel_normalization": (kernel_normalization),
+                "raw_feature_dimension": int(X.shape[1]),
                 "train_samples": int(len(y_train)),
+                "val_samples": int(len(y_validation)),
                 "test_samples": int(len(y_test)),
+                "train_class_0": int(np.sum(y_train == 0)),
+                "train_class_1": int(np.sum(y_train == 1)),
+                "val_class_0": int(np.sum(y_validation == 0)),
+                "val_class_1": int(np.sum(y_validation == 1)),
                 "test_class_0": int(np.sum(y_test == 0)),
                 "test_class_1": int(np.sum(y_test == 1)),
-                "pca_variance_percent": (100.0 * float(explained_variance_ratio)),
-                "accuracy": metrics["accuracy"],
-                "auc": metrics["auc"],
-                "f1": metrics["f1"],
+                "pca_variance_percent": float(100.0 * explained_variance_ratio),
+                "accuracy": float(metrics["accuracy"]),
+                "auc": float(metrics["auc"]),
+                "f1": float(metrics["f1"]),
+                "predicted_class_0": int(metrics["predicted_class_0"]),
+                "predicted_class_1": int(metrics["predicted_class_1"]),
+                "collapse": bool(metrics["collapse"]),
+                "zero_f1": bool(metrics["zero_f1"]),
             }
         )
 
@@ -543,347 +615,3 @@ def write_csv(
         parents=True,
         exist_ok=True,
     )
-
-    with path.open(
-        "w",
-        newline="",
-    ) as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=list(rows[0].keys()),
-        )
-
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def format_metric(
-    value: float,
-) -> str:
-    """Format one metric with three decimal places."""
-    return f"{value:.3f}"
-
-
-def write_markdown(
-    path: Path,
-    *,
-    payload: dict[str, object],
-) -> None:
-    """Write the human-readable Table 8 summary."""
-    lines = [
-        "# Synthetic surrogate Table 8 pipeline",
-        "",
-        (
-            "This artifact follows the Table 8 protocol on the selected "
-            "data source. Results obtained with synthetic data do not reproduce "
-            "the numerical results obtained with the gated MIMIC-CXR-derived "
-            "embeddings."
-        ),
-        "",
-        (
-            "The 1-DOF circuit uses Ry encoding and a CNOT ring. "
-            "The 3-DOF ablation uses Rz-Ry-Rz encoding and the same CNOT ring."
-        ),
-        "",
-        (
-            "The 1-DOF circuit uses q PCA components. "
-            "The 3-DOF circuit uses 3*q PCA components."
-        ),
-        "",
-        f"Paper methodology pointer: {PAPER_TABLE8_POINTER}",
-        "",
-        "| Model | Circuit | PCA dim | Acc | AUC | F1 |",
-        "| --- | --- | ---: | ---: | ---: | ---: |",
-    ]
-
-    summary_rows = payload["summary_rows"]
-
-    if not isinstance(summary_rows, list):
-        raise TypeError("payload['summary_rows'] must be a list.")
-
-    for row in summary_rows:
-        if not isinstance(row, dict):
-            raise TypeError("Each summary row must be a dictionary.")
-
-        lines.append(
-            "| {model} | {circuit} | {pca_dim} | {accuracy} | {auc} | {f1} |".format(
-                model=row["model_display"],
-                circuit=row["circuit"],
-                pca_dim=row["pca_dim"],
-                accuracy=format_metric(float(row["accuracy"])),
-                auc=format_metric(float(row["auc"])),
-                f1=format_metric(float(row["f1"])),
-            )
-        )
-
-    lines.extend(
-        [
-            "",
-            "Data and protocol metadata:",
-            "",
-            "```json",
-            json.dumps(
-                payload["data"],
-                indent=2,
-                sort_keys=True,
-            ),
-            "```",
-        ]
-    )
-
-    path.write_text(
-        "\n".join(lines) + "\n",
-        encoding="utf-8",
-    )
-
-
-def default_prefix(
-    source: str,
-) -> str:
-    """Return the output prefix associated with the data source."""
-    if source == "synthetic":
-        return "synthetic_surrogate_table8"
-
-    if source == "synthetic_file":
-        return "synthetic_file_table8"
-
-    return "real_table8"
-
-
-def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-    )
-
-    parser.add_argument(
-        "--source",
-        choices=(
-            "synthetic",
-            "synthetic_file",
-            "real",
-        ),
-        default="synthetic",
-    )
-
-    parser.add_argument(
-        "--data-root",
-        type=Path,
-        default=None,
-    )
-
-    parser.add_argument(
-        "--results-dir",
-        type=Path,
-        default=Path("results"),
-    )
-
-    parser.add_argument(
-        "--output-prefix",
-        default=None,
-    )
-
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=0,
-    )
-
-    parser.add_argument(
-        "--q",
-        type=int,
-        default=8,
-    )
-
-    parser.add_argument(
-        "--reps",
-        type=int,
-        default=1,
-    )
-
-    parser.add_argument(
-        "--C",
-        type=float,
-        default=1.0,
-    )
-
-    parser.add_argument(
-        "--kernel-normalization",
-        choices=(
-            "trace",
-            "none",
-        ),
-        default="trace",
-    )
-
-    # Parameters used only when data are generated in memory.
-    parser.add_argument(
-        "--n-samples",
-        type=int,
-        default=300,
-    )
-
-    parser.add_argument(
-        "--ambient-dim",
-        type=int,
-        default=128,
-    )
-
-    parser.add_argument(
-        "--latent-dim",
-        type=int,
-        default=30,
-    )
-
-    parser.add_argument(
-        "--minority-frac",
-        type=float,
-        default=0.20,
-    )
-
-    parser.add_argument(
-        "--signal",
-        type=float,
-        default=1.0,
-    )
-
-    parser.add_argument(
-        "--noise",
-        type=float,
-        default=1.0,
-    )
-
-    return parser.parse_args()
-
-
-def main() -> None:
-    """Generate the Table 8 CSV, JSON, and Markdown artifacts."""
-    args = parse_args()
-
-    if args.q <= 0:
-        raise ValueError("--q must be positive.")
-
-    if args.reps < 1:
-        raise ValueError("--reps must be at least 1.")
-
-    if args.C <= 0.0:
-        raise ValueError("--C must be positive.")
-
-    if args.source in {"synthetic_file", "real"} and args.data_root is None:
-        raise ValueError(f"--data-root is required for source={args.source!r}.")
-
-    synthetic = SyntheticSpec(
-        n_samples=args.n_samples,
-        ambient_dim=args.ambient_dim,
-        latent_dim=args.latent_dim,
-        minority_frac=args.minority_frac,
-        signal=args.signal,
-        noise=args.noise,
-    )
-
-    summary_rows: list[dict[str, object]] = []
-
-    for model in TABLE8_MODELS:
-        summary_rows.extend(
-            compute_table8_rows(
-                source=args.source,
-                model=model,
-                q=args.q,
-                reps=args.reps,
-                c=args.C,
-                seed=args.seed,
-                data_root=args.data_root,
-                synthetic=synthetic,
-                kernel_normalization=(args.kernel_normalization),
-            )
-        )
-
-    prefix = args.output_prefix or default_prefix(args.source)
-
-    args.results_dir.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    summary_path = args.results_dir / f"{prefix}_summary.csv"
-
-    json_path = args.results_dir / f"{prefix}.json"
-
-    markdown_path = args.results_dir / f"{prefix}.md"
-
-    write_csv(
-        summary_path,
-        summary_rows,
-    )
-
-    payload: dict[str, object] = {
-        "artifact": prefix,
-        "paper_table": "Table 8",
-        "paper_pointer": PAPER_TABLE8_POINTER,
-        "paths": {
-            "summary_csv": str(summary_path),
-            "json": str(json_path),
-            "markdown": str(markdown_path),
-        },
-        "data": {
-            "source": args.source,
-            "synthetic_surrogate": (args.source != "real"),
-            "synthetic_spec": (
-                asdict(synthetic) if args.source == "synthetic" else None
-            ),
-            "data_root": (str(args.data_root) if args.data_root else None),
-            "seed": args.seed,
-            "q": args.q,
-            "reps": args.reps,
-            "C": args.C,
-            "kernel_normalization": (args.kernel_normalization),
-            "split": ("80/10/10 stratified via lib.svm_pipeline.split_indices"),
-            "models": list(TABLE8_MODELS),
-            "circuits": list(TABLE8_CIRCUITS),
-            "circuit_definition": {
-                "1-DOF": {
-                    "encoding": "Ry",
-                    "pca_dimension": "q",
-                    "entanglement": "CNOT ring",
-                },
-                "3-DOF": {
-                    "encoding": "Rz-Ry-Rz",
-                    "pca_dimension": "3*q",
-                    "entanglement": "CNOT ring",
-                },
-            },
-        },
-        "summary_rows": summary_rows,
-    }
-
-    json_path.write_text(
-        json.dumps(
-            payload,
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n"
-    )
-
-    write_markdown(
-        markdown_path,
-        payload=payload,
-    )
-
-    print(
-        json.dumps(
-            {
-                "rows": len(summary_rows),
-                "seed": args.seed,
-            },
-            indent=2,
-        )
-    )
-
-    print(f"Wrote {summary_path}")
-    print(f"Wrote {json_path}")
-    print(f"Wrote {markdown_path}")
-
-
-if __name__ == "__main__":
-    main()
