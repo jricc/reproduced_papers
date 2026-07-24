@@ -8,7 +8,6 @@ from urllib.request import urlopen
 import numpy as np
 import pandas as pd
 
-
 DATASET_URL = (
     "https://zenodo.org/records/10519652/files/"
     "pneumoniamnist.npz?download=1"

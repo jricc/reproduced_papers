@@ -91,6 +91,26 @@ The converter uses the official training split and stores normalized 28×28
 pixels as features. CPU statevector simulation and kernel construction become
 expensive as the number of qubits or samples increases.
 
+### Adapted Table I
+
+The launcher compares CPU QSVM runs with an untuned linear SVM and a
+validation-tuned RBF SVM for `q=2,4,6` and five paired seeds:
+
+```bash
+bash scripts/run_table1_adaptation.sh
+```
+
+The defaults can be changed with environment variables:
+
+```bash
+Q_VALUES=2,4 SEEDS=0,1 MAX_SAMPLES=100 \
+  bash scripts/run_table1_adaptation.sh
+```
+
+For each `q`, results are averaged over paired seeds before counting a
+minority-class F1 win. This remains an adaptation with one dataset, not a
+reproduction of the paper's original multi-model counts.
+
 ### Example 1: QSVM on MedSigLIP-448 (q=11, Tier-1 paper result)
 
 ```bash

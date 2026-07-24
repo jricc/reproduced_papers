@@ -22,3 +22,30 @@ MIMIC-CXR embedding experiments.
 
 The original CC BY-NC-SA 4.0 license is preserved in [LICENSE](LICENSE).
 The changes in this adapted copy are distributed under the same license.
+
+## PneumoniaMNIST
+
+<https://zenodo.org/records/10519652>
+
+```bibtex
+@article{medmnistv2,
+    title={MedMNIST v2-A large-scale lightweight benchmark for 2D and 3D biomedical image classification},
+    author={Yang, Jiancheng and Shi, Rui and Wei, Donglai and Liu, Zequan and Zhao, Lin and Ke, Bilian and Pfister, Hanspeter and Ni, Bingbing},
+    journal={Scientific Data},
+    volume={10},
+    number={1},
+    pages={41},
+    year={2023},
+    publisher={Nature Publishing Group UK London}
+}
+@inproceedings{medmnistv1,
+    title={MedMNIST Classification Decathlon: A Lightweight AutoML Benchmark for Medical Image Analysis},
+    author={Yang, Jiancheng and Shi, Rui and Ni, Bingbing},
+    booktitle={IEEE 18th International Symposium on Biomedical Imaging (ISBI)},
+    pages={191--195},
+    year={2021}
+}
+```
+The MedMNIST dataset is licensed under Creative Commons Attribution 4.0 International (CC BY 4.0), except DermaMNIST under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+
+The code is under Apache-2.0 License.

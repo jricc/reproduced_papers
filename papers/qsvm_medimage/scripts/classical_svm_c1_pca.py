@@ -1,241 +1,293 @@
 #!/usr/bin/env python3
-"""
-Classical SVM C=1 baseline at PCA-9/10/11/12 for MedSigLIP-448 DT9.
+"""Run CPU classical SVM baselines with the QSVM preprocessing."""
 
-Reproduces the EXACT preprocessing from the QSVM pipeline:
-  1. 80/10/10 stratified split with random_state=seed
-  2. StandardScaler (fit on train)
-  3. PCA(n_components=q) (fit on train)
-  4. MinMaxScaler([-1,1]) (fit on train+test combined — legacy behavior)
-  5. SVM with C=1.0, kernel={linear, rbf}
-
-This validates the Tier 1 claim: QSVM q=11 acc=0.769 > classical ?
-
-Output: tests/c1_forced_extended/svm/medsiglip-448/data_type9/pca_{q}/metrics_summary.csv
-"""
-
-import os
+import argparse
+import json
 import sys
 import time
-import json
-from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
-from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
 from sklearn.metrics import (
-    accuracy_score, f1_score, recall_score, precision_score, roc_auc_score
+    accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
 )
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.svm import SVC
 
-# ── Configuration ──────────────────────────────────────────────────────────
-# Set QML_DATA_ROOT to the root of your local qml-mimic-cxr-embeddings download,
-# e.g. export QML_DATA_ROOT=/path/to/qml-mimic-cxr-embeddings
-_data_root = os.environ.get(
-    'QML_DATA_ROOT',
-    '/orcd/pool/006/lceli_shared/DATASET/qml-mimic-cxr-embeddings'
-)
-DATA_PATH = os.path.join(
-    _data_root,
-    'medsiglip-448-embeddings/20-seeds/seed_0/data_type9_n2371.parquet'
-)
-SEED = 0
-PCA_DIMS = [9, 10, 11, 12]
-KERNELS = ["linear", "rbf"]
-C_VALUE = 1.0
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUTPUT_BASE = os.path.join(PROJECT_ROOT, "tests", "c1_forced_extended", "svm", "medsiglip-448", "data_type9")
+from qve.process import data_prepare_cv
 
 
-def data_prepare_cv(n_dim, sample_train, sample_test):
-    """
-    Exact replica of qve.process.data_prepare_cv with default flags
-    (fix_leakage=False, pi_angles=False).
-    """
-    std_scale = StandardScaler().fit(sample_train)
-    sample_train = std_scale.transform(sample_train)
-    sample_test = std_scale.transform(sample_test)
-
-    pca = PCA(n_components=n_dim, svd_solver="auto").fit(sample_train)
-    sample_train = pca.transform(sample_train)
-    sample_test = pca.transform(sample_test)
-
-    # Legacy behavior: MinMaxScaler fit on BOTH train + test
-    samples = np.append(sample_train, sample_test, axis=0)
-    minmax_scale = MinMaxScaler(feature_range=(-1, 1)).fit(samples)
-    sample_train = minmax_scale.transform(sample_train)
-    sample_test = minmax_scale.transform(sample_test)
-
-    return sample_train, sample_test
+TARGET_COLUMNS = [
+    "target",
+    "label",
+    "new_insurance_type",
+    "insurance",
+    "insurance_type",
+]
 
 
-def load_and_prepare():
-    """Load parquet, extract embeddings and labels."""
-    print(f"Loading: {DATA_PATH}")
-    df = pd.read_parquet(DATA_PATH)
-    print(f"  Loaded {len(df)} samples")
+def parse_values(value, cast):
+    return [cast(item.strip()) for item in value.split(",") if item.strip()]
 
-    df["emb_array"] = df["embedding"].apply(lambda x: np.array(x, dtype=np.float32))
 
-    # Find insurance column
-    for col in ["new_insurance_type", "insurance", "insurance_type"]:
-        if col in df.columns:
-            insurance_col = col
-            break
+def load_data(data_path):
+    if data_path.suffix in {".pkl", ".pickle"}:
+        dataframe = pd.read_pickle(data_path)
+    elif data_path.suffix == ".parquet":
+        dataframe = pd.read_parquet(data_path)
     else:
-        raise ValueError("No insurance column found")
+        raise ValueError("Data must be a .pkl, .pickle, or .parquet file")
 
-    df = df.dropna(subset=[insurance_col, "emb_array"]).copy()
-    print(f"  After cleaning: {len(df)} samples")
-
-    le = LabelEncoder()
-    y = le.fit_transform(df[insurance_col].astype(str).values)
-    class_names = le.classes_.tolist()
-    assert len(class_names) == 2, f"Expected binary, got {class_names}"
-    print(f"  Classes: {class_names}")
-    print(f"  Distribution: {dict(zip(*np.unique(y, return_counts=True)))}")
-
-    X = np.stack(df["emb_array"].values).reshape(len(df), -1).astype(np.float32)
-    print(f"  Feature shape: {X.shape}")
-
-    return X, y, class_names
-
-
-def split_data(X, y):
-    """80/10/10 stratified split — identical to QSVM pipeline."""
-    indices = np.arange(len(X))
-
-    X_train, X_temp, y_train, y_temp, idx_train, idx_temp = train_test_split(
-        X, y, indices, test_size=0.2, stratify=y, random_state=SEED
+    target_column = next(
+        (column for column in TARGET_COLUMNS if column in dataframe.columns),
+        None,
     )
-    X_val, X_test, y_val, y_test, idx_val, idx_test = train_test_split(
-        X_temp, y_temp, idx_temp, test_size=0.5, stratify=y_temp, random_state=SEED
+    if target_column is None or "embedding" not in dataframe.columns:
+        raise ValueError("Data must contain 'embedding' and a supported target column")
+
+    dataframe = dataframe.dropna(subset=[target_column, "embedding"])
+    features = np.stack(
+        dataframe["embedding"].map(lambda value: np.asarray(value, dtype=np.float64))
+    ).reshape(len(dataframe), -1)
+    label_encoder = LabelEncoder()
+    labels = label_encoder.fit_transform(dataframe[target_column].astype(str))
+    if len(np.unique(labels)) != 2:
+        raise ValueError("This baseline expects binary labels")
+    label_counts = np.bincount(labels)
+    minority_label = int(np.argmin(label_counts))
+    return features, labels, minority_label, label_encoder.classes_.tolist()
+
+
+def split_data(features, labels, seed, max_samples):
+    if max_samples and max_samples < len(features):
+        indices = np.random.RandomState(seed).permutation(len(features))[:max_samples]
+        features = features[indices]
+        labels = labels[indices]
+
+    train_x, temporary_x, train_y, temporary_y = train_test_split(
+        features,
+        labels,
+        test_size=0.2,
+        stratify=labels,
+        random_state=seed,
     )
+    validation_x, test_x, validation_y, test_y = train_test_split(
+        temporary_x,
+        temporary_y,
+        test_size=0.5,
+        stratify=temporary_y,
+        random_state=seed,
+    )
+    return train_x, validation_x, test_x, train_y, validation_y, test_y
 
-    print(f"  Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
-    return X_train, X_val, X_test, y_train, y_val, y_test
 
-
-def run_svm(X_train, y_train, X_test, y_test, kernel, C):
-    """Train SVM and return metrics dict."""
-    t0 = time.time()
-    clf = SVC(kernel=kernel, C=C, probability=True, random_state=SEED)
-    clf.fit(X_train, y_train)
-    train_time = time.time() - t0
-
-    t0 = time.time()
-    y_pred = clf.predict(X_test)
-    y_proba = clf.predict_proba(X_test)[:, 1]
-    infer_time = time.time() - t0
-
+def evaluate(model, features, labels, prefix, minority_label):
+    predictions = model.predict(features)
+    probabilities = model.predict_proba(features)[:, 1]
     return {
-        "accuracy": float(accuracy_score(y_test, y_pred)),
-        "f1": float(f1_score(y_test, y_pred)),
-        "recall": float(recall_score(y_test, y_pred)),
-        "precision": float(precision_score(y_test, y_pred)),
-        "auc": float(roc_auc_score(y_test, y_proba)),
-        "train_time_sec": train_time,
-        "infer_time_sec": infer_time,
+        f"{prefix}_accuracy": float(accuracy_score(labels, predictions)),
+        f"{prefix}_f1": float(f1_score(labels, predictions, zero_division=0)),
+        f"{prefix}_minority_f1": float(
+            f1_score(
+                labels,
+                predictions,
+                pos_label=minority_label,
+                zero_division=0,
+            )
+        ),
+        f"{prefix}_precision": float(
+            precision_score(labels, predictions, zero_division=0)
+        ),
+        f"{prefix}_recall": float(recall_score(labels, predictions, zero_division=0)),
+        f"{prefix}_auc": float(roc_auc_score(labels, probabilities)),
     }
 
 
+def select_c(
+    train_x,
+    train_y,
+    validation_x,
+    validation_y,
+    kernel,
+    c_values,
+    seed,
+    minority_label,
+):
+    best_c = c_values[0]
+    best_f1 = -1.0
+    for c_value in c_values:
+        model = SVC(
+            kernel=kernel,
+            C=c_value,
+            probability=True,
+            random_state=seed,
+        )
+        model.fit(train_x, train_y)
+        validation_f1 = f1_score(
+            validation_y,
+            model.predict(validation_x),
+            pos_label=minority_label,
+            zero_division=0,
+        )
+        if validation_f1 > best_f1:
+            best_c = c_value
+            best_f1 = validation_f1
+    return best_c
+
+
+def run_configuration(
+    features,
+    labels,
+    seed,
+    pca_dim,
+    kernel,
+    c_values,
+    max_samples,
+    minority_label,
+):
+    train_x, validation_x, test_x, train_y, validation_y, test_y = split_data(
+        features,
+        labels,
+        seed,
+        max_samples,
+    )
+    train_for_validation, validation_pca = data_prepare_cv(
+        pca_dim,
+        train_x,
+        validation_x,
+        svd_solver="full",
+    )
+    train_for_test, test_pca = data_prepare_cv(
+        pca_dim,
+        train_x,
+        test_x,
+        svd_solver="full",
+    )
+
+    best_c = select_c(
+        train_for_validation,
+        train_y,
+        validation_pca,
+        validation_y,
+        kernel,
+        c_values,
+        seed,
+        minority_label,
+    )
+
+    started = time.time()
+    model = SVC(
+        kernel=kernel,
+        C=best_c,
+        probability=True,
+        random_state=seed,
+    )
+    model.fit(train_for_test, train_y)
+    train_time = time.time() - started
+
+    row = {
+        "seed": seed,
+        "pca_dim": pca_dim,
+        "kernel": kernel,
+        "best_c": best_c,
+        "c_values": ",".join(str(value) for value in c_values),
+        "train_samples": len(train_y),
+        "val_samples": len(validation_y),
+        "test_samples": len(test_y),
+        "train_time_sec": train_time,
+    }
+    row.update(evaluate(model, train_for_test, train_y, "train", minority_label))
+    row.update(evaluate(model, test_pca, test_y, "test", minority_label))
+
+    validation_model = SVC(
+        kernel=kernel,
+        C=best_c,
+        probability=True,
+        random_state=seed,
+    )
+    validation_model.fit(train_for_validation, train_y)
+    row.update(
+        evaluate(
+            validation_model,
+            validation_pca,
+            validation_y,
+            "val",
+            minority_label,
+        )
+    )
+    return row
+
+
 def main():
-    print("=" * 80)
-    print("CLASSICAL SVM C=1 BASELINE — PCA-9/10/11/12")
-    print("=" * 80)
-    print(f"Seed: {SEED}")
-    print(f"C: {C_VALUE}")
-    print(f"Kernels: {KERNELS}")
-    print(f"PCA dims: {PCA_DIMS}")
-    print()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data_path", type=Path, required=True)
+    parser.add_argument("--output_dir", type=Path, required=True)
+    parser.add_argument("--pca_dims", default="2")
+    parser.add_argument("--kernels", default="linear")
+    parser.add_argument("--c_values", default="1.0")
+    parser.add_argument("--seeds", default="42")
+    parser.add_argument("--max_samples", type=int, default=100)
+    args = parser.parse_args()
 
-    X, y, class_names = load_and_prepare()
-    X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
+    pca_dims = parse_values(args.pca_dims, int)
+    kernels = parse_values(args.kernels, str)
+    c_values = parse_values(args.c_values, float)
+    seeds = parse_values(args.seeds, int)
+    if not pca_dims or not kernels or not c_values or not seeds:
+        raise ValueError("PCA dimensions, kernels, C values, and seeds cannot be empty")
 
-    all_results = []
+    features, labels, minority_label, class_names = load_data(args.data_path)
+    rows = []
+    for seed in seeds:
+        for pca_dim in pca_dims:
+            for kernel in kernels:
+                row = run_configuration(
+                    features,
+                    labels,
+                    seed,
+                    pca_dim,
+                    kernel,
+                    c_values,
+                    args.max_samples,
+                    minority_label,
+                )
+                rows.append(row)
+                print(
+                    f"seed={seed} q={pca_dim} kernel={kernel} "
+                    f"C={row['best_c']} "
+                    f"minority_f1={row['test_minority_f1']:.4f}"
+                )
 
-    for q in PCA_DIMS:
-        print(f"\n--- PCA-{q} ---")
-
-        # Apply preprocessing (same as QSVM)
-        # For val evaluation:
-        train_pca_val, val_pca = data_prepare_cv(q, X_train, X_val)
-        # For test evaluation:
-        train_pca_test, test_pca = data_prepare_cv(q, X_train, X_test)
-
-        out_dir = os.path.join(OUTPUT_BASE, f"pca_{q}")
-        os.makedirs(out_dir, exist_ok=True)
-
-        rows = []
-        for kernel in KERNELS:
-            print(f"  kernel={kernel}, C={C_VALUE}")
-
-            # Train metrics
-            train_metrics = run_svm(train_pca_test, y_train, train_pca_test, y_train, kernel, C_VALUE)
-            # Val metrics
-            val_metrics = run_svm(train_pca_val, y_train, val_pca, y_val, kernel, C_VALUE)
-            # Test metrics
-            test_metrics = run_svm(train_pca_test, y_train, test_pca, y_test, kernel, C_VALUE)
-
-            row = {"kernel": kernel, "C": C_VALUE, "pca_dim": q}
-            for prefix, m in [("train", train_metrics), ("val", val_metrics), ("test", test_metrics)]:
-                for k, v in m.items():
-                    row[f"{prefix}_{k}"] = v
-
-            rows.append(row)
-
-            print(f"    test_acc={test_metrics['accuracy']:.4f}  "
-                  f"test_f1={test_metrics['f1']:.4f}  "
-                  f"test_auc={test_metrics['auc']:.4f}")
-
-            all_results.append(row)
-
-        df_out = pd.DataFrame(rows)
-        csv_path = os.path.join(out_dir, "metrics_summary.csv")
-        df_out.to_csv(csv_path, index=False)
-        print(f"  Saved: {csv_path}")
-
-        # Save dataset info
-        info = {
-            "experiment": {
-                "type": "Classical SVM C=1",
-                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "pca_components": q,
-                "C": C_VALUE,
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = args.output_dir / "metrics_summary.csv"
+    pd.DataFrame(rows).to_csv(output_path, index=False)
+    with (args.output_dir / "dataset_info.json").open("w") as file:
+        json.dump(
+            {
+                "data_path": str(args.data_path.resolve()),
+                "features": features.shape[1],
+                "classes": int(len(np.unique(labels))),
+                "class_names": class_names,
+                "minority_class": class_names[minority_label],
+                "max_samples": args.max_samples,
+                "seeds": seeds,
+                "pca_dims": pca_dims,
+                "kernels": kernels,
+                "c_values": c_values,
             },
-            "data": {
-                "source_path": DATA_PATH,
-            },
-            "seed": SEED,
-            "samples": {
-                "total": len(X_train) + len(X_val) + len(X_test),
-                "train": len(X_train),
-                "val": len(X_val),
-                "test": len(X_test),
-            },
-            "classes": class_names,
-        }
-        with open(os.path.join(out_dir, "dataset_info.json"), "w") as f:
-            json.dump(info, f, indent=2)
-
-    # Print summary comparison table
-    print("\n" + "=" * 80)
-    print("SUMMARY: Classical SVM C=1 vs QSVM")
-    print("=" * 80)
-    print(f"{'PCA':>4} {'Kernel':>8} {'Test Acc':>10} {'Test F1':>10} {'Test AUC':>10}")
-    print("-" * 50)
-    for r in all_results:
-        print(f"{r['pca_dim']:>4} {r['kernel']:>8} "
-              f"{r['test_accuracy']:>10.4f} {r['test_f1']:>10.4f} {r['test_auc']:>10.4f}")
-
-    # Save combined results
-    combined_path = os.path.join(OUTPUT_BASE, "all_pca_dims_summary.csv")
-    pd.DataFrame(all_results).to_csv(combined_path, index=False)
-    print(f"\nCombined results: {combined_path}")
+            file,
+            indent=2,
+        )
+    print(f"Saved: {output_path}")
 
 
 if __name__ == "__main__":

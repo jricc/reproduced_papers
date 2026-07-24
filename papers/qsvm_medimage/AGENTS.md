@@ -40,6 +40,16 @@
 - If the task is complex, propose a short plan first.
 - Work iteratively: analyze, plan, answer, verify, summarize when needed.
 
+## Experiment execution
+
+- Do not launch training, evaluation, dataset download, result generation, or
+  figure generation commands.
+- Prepare and validate source code and launch scripts only. The user launches
+  all experiment runs.
+- Do not infer permission to launch an experiment from a request to implement
+  or fix its code. Run an experiment only when the user explicitly asks for
+  that execution in the same request.
+
 ## Code
 - Keep it simple, readable, and robust.
 - Prefer direct and idiomatic solutions.

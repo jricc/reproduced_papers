@@ -32,25 +32,28 @@ mpirun -np 4 python scripts/qsvm_cuda_embeddings_insurance.py \
 """
 
 import os
+
 os.environ["CUQUANTUM_LOG_LEVEL"] = "OFF"
 
+import argparse
+import json
+import re
 import sys
 import time
-import re
-import json
-import argparse
-from typing import Optional, Tuple, List
+from typing import List, Optional, Tuple
 
+import matplotlib
 import numpy as np
 import pandas as pd
-import matplotlib
+
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import joblib
+import matplotlib.pyplot as plt
 
 try:
     from mpi4py import MPI
 except ImportError:
+
     class _SerialComm:
         def Get_rank(self):
             return 0
@@ -69,49 +72,48 @@ except ImportError:
 
     MPI = _SerialMPI()
 
-from sklearn.svm import SVC
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.metrics import (
-    accuracy_score, precision_score, f1_score, recall_score,
-    roc_auc_score, confusion_matrix, classification_report
-)
-from sklearn.metrics.pairwise import rbf_kernel, polynomial_kernel, linear_kernel
-
-from qiskit import QuantumCircuit
-from qiskit.circuit import ParameterVector
-
 from itertools import combinations, product
+
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.metrics.pairwise import linear_kernel, polynomial_kernel, rbf_kernel
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.svm import SVC
 
 # Add parent directory to path for qve imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from qve import (
-    set_seed,
-    data_prepare_cv,
-    make_bsp,
-    make_bsp_reps,
-    make_bsp_3dof,
-    make_zz_featuremap,
-    compute_zz_kernel_entries,
-    compute_cpu_kernel_entries,
     build_qsvm_qc,
+    compute_cpu_kernel_entries,
+    compute_zz_kernel_entries,
     data_partition,
+    data_prepare_cv,
     data_to_operand,
     data_to_operand_reps,
-    operand_to_amp,
     get_kernel_matrix,
-    normalize_kernel_trace,
-    normalize_kernel_frobenius,
+    make_bsp,
+    make_bsp_3dof,
+    make_bsp_reps,
+    make_zz_featuremap,
     normalize_kernel_cosine,
+    normalize_kernel_frobenius,
+    normalize_kernel_trace,
+    operand_to_amp,
 )
 from qve.core import get_hybrid_kernel_matrix
-
 
 # -----------------------------
 # Helpers: discovery / loading
 # -----------------------------
+
 
 def extract_seed_from_name(path: str) -> Optional[int]:
     """Extract seed from filename (e.g. seed10) or parent dir (e.g. seed_4/)."""
@@ -137,7 +139,9 @@ def list_input_files(data_path: str, data_type_filter: str = None) -> List[str]:
         return [data_path]
 
     if not os.path.isdir(data_path):
-        raise FileNotFoundError(f"--data_path is neither a file nor a directory: {data_path}")
+        raise FileNotFoundError(
+            f"--data_path is neither a file nor a directory: {data_path}"
+        )
 
     files = []
     filter_parts = data_type_filter.split("+") if data_type_filter else []
@@ -207,7 +211,9 @@ def get_target_column(df: pd.DataFrame) -> str:
     )
 
 
-def plot_confusion_matrix(cm: np.ndarray, class_names: List[str], out_path: str, title: str):
+def plot_confusion_matrix(
+    cm: np.ndarray, class_names: List[str], out_path: str, title: str
+):
     plt.figure(figsize=(6, 5))
     plt.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
     plt.title(title)
@@ -221,8 +227,14 @@ def plot_confusion_matrix(cm: np.ndarray, class_names: List[str], out_path: str,
     for i in range(cm.shape[0]):
         for j in range(cm.shape[1]):
             v = cm[i, j]
-            plt.text(j, i, str(v), ha="center", va="center",
-                     color="white" if v > thresh else "black")
+            plt.text(
+                j,
+                i,
+                str(v),
+                ha="center",
+                va="center",
+                color="white" if v > thresh else "black",
+            )
 
     plt.ylabel("True label")
     plt.xlabel("Predicted label")
@@ -234,6 +246,7 @@ def plot_confusion_matrix(cm: np.ndarray, class_names: List[str], out_path: str,
 # -----------------------------
 # QSVM Training / Evaluation
 # -----------------------------
+
 
 def run_qsvm_splits(
     X: np.ndarray,
@@ -266,6 +279,8 @@ def run_qsvm_splits(
     80/10/10 train/val/test split for QSVM.
     Returns metrics dict with train/val/test results + timing.
     """
+    minority_label = int(np.argmin(np.bincount(y)))
+
     # Create indices for tracking samples
     indices = np.arange(len(X))
 
@@ -280,7 +295,9 @@ def run_qsvm_splits(
     )
 
     if rank == 0:
-        print(f"  Split sizes - Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
+        print(
+            f"  Split sizes - Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}"
+        )
 
     # Apply PCA and scaling
     pca_dim = n_qubits * 3 if three_dof else n_qubits
@@ -318,7 +335,9 @@ def run_qsvm_splits(
     # Build index lists for kernel computation
     list_train = list(combinations(range(1, len(data_train) + 1), 2))
     list_val = list(product(range(1, len(data_val) + 1), range(1, len(data_train) + 1)))
-    list_test = list(product(range(1, len(data_test) + 1), range(1, len(data_train_full) + 1)))
+    list_test = list(
+        product(range(1, len(data_test) + 1), range(1, len(data_train_full) + 1))
+    )
 
     # Partition for distributed processing
     list_train_partition = data_partition(list_train, size, rank)
@@ -326,28 +345,32 @@ def run_qsvm_splits(
     list_test_partition = data_partition(list_test, size, rank)
 
     if rank == 0:
-        print(f"  Building quantum circuit...")
+        print("  Building quantum circuit...")
     t0 = time.time()
-    _use_slow_path = (circuit == "zz")
+    _use_slow_path = circuit == "zz"
     _use_reps_fast_path = (reps > 1) and (circuit != "zz")
     if circuit == "zz":
         feat_qc = make_zz_featuremap(n_qubits)
         if rank == 0:
-            print(f"  Using ZZFeatureMap circuit (n_dim={n_qubits}) — assign_parameters path (no renew_operand)")
+            print(
+                f"  Using ZZFeatureMap circuit (n_dim={n_qubits}) — assign_parameters path (no renew_operand)"
+            )
     elif reps > 1:
         feat_qc = make_bsp_reps(n_qubits, reps)
         if rank == 0:
-            print(f"  Using BSP reps={reps} circuit (n_dim={n_qubits}) — renew_operand_reps fast path")
+            print(
+                f"  Using BSP reps={reps} circuit (n_dim={n_qubits}) — renew_operand_reps fast path"
+            )
     elif three_dof:
         feat_qc = make_bsp_3dof(n_qubits)
     else:
         feat_qc = make_bsp(n_qubits)
     if backend == "cuda":
         import cupy as cp
-        from cuquantum.cutensornet import Network, NetworkOptions, CircuitToEinsum
+        from cuquantum.cutensornet import CircuitToEinsum, Network, NetworkOptions
 
         kernel_qc = build_qsvm_qc(feat_qc, n_qubits, data_train[0], data_train[0])
-        converter = CircuitToEinsum(kernel_qc, dtype='complex128', backend='cupy')
+        converter = CircuitToEinsum(kernel_qc, dtype="complex128", backend="cupy")
         a = str(0).zfill(n_qubits)
         exp, oper = converter.amplitude(a)
     circuit_time = time.time() - t0
@@ -366,7 +389,11 @@ def run_qsvm_splits(
             feat_qc, n_qubits, list_val_partition, data_val, data_train
         )
         amp_train_full = compute_cpu_kernel_entries(
-            feat_qc, n_qubits, list_train_full_partition, data_train_full, data_train_full
+            feat_qc,
+            n_qubits,
+            list_train_full_partition,
+            data_train_full,
+            data_train_full,
         )
         amp_test = compute_cpu_kernel_entries(
             feat_qc, n_qubits, list_test_partition, data_test, data_train_full
@@ -380,11 +407,31 @@ def run_qsvm_splits(
         amp_data_test = comm_mpi.gather(np.asarray(amp_test), root=0)
     elif _use_slow_path:
         # ZZ: use assign_parameters path (renew_operand does not support ZZ)
-        oper_train = compute_zz_kernel_entries(feat_qc, n_qubits, list_train_partition, data_train, data_train, device_id)
-        oper_val = compute_zz_kernel_entries(feat_qc, n_qubits, list_val_partition, data_val, data_train, device_id)
-        list_train_full_partition = data_partition(list(combinations(range(1, len(data_train_full) + 1), 2)), size, rank)
-        oper_train_full = compute_zz_kernel_entries(feat_qc, n_qubits, list_train_full_partition, data_train_full, data_train_full, device_id)
-        oper_test = compute_zz_kernel_entries(feat_qc, n_qubits, list_test_partition, data_test, data_train_full, device_id)
+        oper_train = compute_zz_kernel_entries(
+            feat_qc, n_qubits, list_train_partition, data_train, data_train, device_id
+        )
+        oper_val = compute_zz_kernel_entries(
+            feat_qc, n_qubits, list_val_partition, data_val, data_train, device_id
+        )
+        list_train_full_partition = data_partition(
+            list(combinations(range(1, len(data_train_full) + 1), 2)), size, rank
+        )
+        oper_train_full = compute_zz_kernel_entries(
+            feat_qc,
+            n_qubits,
+            list_train_full_partition,
+            data_train_full,
+            data_train_full,
+            device_id,
+        )
+        oper_test = compute_zz_kernel_entries(
+            feat_qc,
+            n_qubits,
+            list_test_partition,
+            data_test,
+            data_train_full,
+            device_id,
+        )
         operand_time = time.time() - t0
 
         # Gather from all ranks
@@ -397,16 +444,30 @@ def run_qsvm_splits(
         amplitude_time = operand_time
     elif _use_reps_fast_path:
         # BSP reps>1: use renew_operand_reps fast path (generalised renew_operand)
-        oper_train = data_to_operand_reps(n_qubits, reps, oper, data_train, data_train, list_train_partition)
-        oper_val = data_to_operand_reps(n_qubits, reps, oper, data_val, data_train, list_val_partition)
+        oper_train = data_to_operand_reps(
+            n_qubits, reps, oper, data_train, data_train, list_train_partition
+        )
+        oper_val = data_to_operand_reps(
+            n_qubits, reps, oper, data_val, data_train, list_val_partition
+        )
         # For test, use full training data
-        oper_train_full = data_to_operand_reps(n_qubits, reps, oper, data_train_full, data_train_full,
-                                               data_partition(list(combinations(range(1, len(data_train_full) + 1), 2)), size, rank))
-        oper_test = data_to_operand_reps(n_qubits, reps, oper, data_test, data_train_full, list_test_partition)
+        oper_train_full = data_to_operand_reps(
+            n_qubits,
+            reps,
+            oper,
+            data_train_full,
+            data_train_full,
+            data_partition(
+                list(combinations(range(1, len(data_train_full) + 1), 2)), size, rank
+            ),
+        )
+        oper_test = data_to_operand_reps(
+            n_qubits, reps, oper, data_test, data_train_full, list_test_partition
+        )
         operand_time = time.time() - t0
 
         if rank == 0:
-            print(f"  Setting up tensor network...")
+            print("  Setting up tensor network...")
         t0 = time.time()
         options = NetworkOptions(blocking="auto", device_id=device_id)
         network = Network(exp, *oper, options=options)
@@ -415,7 +476,7 @@ def run_qsvm_splits(
         path_time = time.time() - t0
 
         if rank == 0:
-            print(f"  Computing amplitudes...")
+            print("  Computing amplitudes...")
         t0 = time.time()
 
         len_train = len(oper_train)
@@ -427,13 +488,13 @@ def run_qsvm_splits(
         amp_all = operand_to_amp(oper_all, network)
 
         idx = 0
-        amp_train = amp_all[idx:idx + len_train]
+        amp_train = amp_all[idx : idx + len_train]
         idx += len_train
-        amp_val = amp_all[idx:idx + len_val]
+        amp_val = amp_all[idx : idx + len_val]
         idx += len_val
-        amp_train_full = amp_all[idx:idx + len_train_full]
+        amp_train_full = amp_all[idx : idx + len_train_full]
         idx += len_train_full
-        amp_test = amp_all[idx:idx + len_test]
+        amp_test = amp_all[idx : idx + len_test]
 
         amp_data_train = comm_mpi.gather(cp.array(amp_train), root=0)
         amp_data_val = comm_mpi.gather(cp.array(amp_val), root=0)
@@ -444,15 +505,28 @@ def run_qsvm_splits(
 
     else:
         # BSP reps=1: use renew_operand fast path
-        oper_train = data_to_operand(n_qubits, oper, data_train, data_train, list_train_partition)
-        oper_val = data_to_operand(n_qubits, oper, data_val, data_train, list_val_partition)
-        oper_train_full = data_to_operand(n_qubits, oper, data_train_full, data_train_full,
-                                          data_partition(list(combinations(range(1, len(data_train_full) + 1), 2)), size, rank))
-        oper_test = data_to_operand(n_qubits, oper, data_test, data_train_full, list_test_partition)
+        oper_train = data_to_operand(
+            n_qubits, oper, data_train, data_train, list_train_partition
+        )
+        oper_val = data_to_operand(
+            n_qubits, oper, data_val, data_train, list_val_partition
+        )
+        oper_train_full = data_to_operand(
+            n_qubits,
+            oper,
+            data_train_full,
+            data_train_full,
+            data_partition(
+                list(combinations(range(1, len(data_train_full) + 1), 2)), size, rank
+            ),
+        )
+        oper_test = data_to_operand(
+            n_qubits, oper, data_test, data_train_full, list_test_partition
+        )
         operand_time = time.time() - t0
 
         if rank == 0:
-            print(f"  Setting up tensor network...")
+            print("  Setting up tensor network...")
         t0 = time.time()
         options = NetworkOptions(blocking="auto", device_id=device_id)
         network = Network(exp, *oper, options=options)
@@ -461,7 +535,7 @@ def run_qsvm_splits(
         path_time = time.time() - t0
 
         if rank == 0:
-            print(f"  Computing amplitudes...")
+            print("  Computing amplitudes...")
         t0 = time.time()
 
         len_train = len(oper_train)
@@ -473,13 +547,13 @@ def run_qsvm_splits(
         amp_all = operand_to_amp(oper_all, network)
 
         idx = 0
-        amp_train = amp_all[idx:idx + len_train]
+        amp_train = amp_all[idx : idx + len_train]
         idx += len_train
-        amp_val = amp_all[idx:idx + len_val]
+        amp_val = amp_all[idx : idx + len_val]
         idx += len_val
-        amp_train_full = amp_all[idx:idx + len_train_full]
+        amp_train_full = amp_all[idx : idx + len_train_full]
         idx += len_train_full
-        amp_test = amp_all[idx:idx + len_test]
+        amp_test = amp_all[idx : idx + len_test]
 
         amp_data_train = comm_mpi.gather(cp.array(amp_train), root=0)
         amp_data_val = comm_mpi.gather(cp.array(amp_val), root=0)
@@ -492,20 +566,35 @@ def run_qsvm_splits(
     if rank == 0:
         print("  Building kernel matrices...")
         # Compute raw quantum kernels (GPU step — done ONCE regardless of alpha sweep)
-        K_quantum_train = get_kernel_matrix(data_train, data_train, amp_data_train, list_train, mode='train')
+        K_quantum_train = get_kernel_matrix(
+            data_train, data_train, amp_data_train, list_train, mode="train"
+        )
         K_quantum_val = get_kernel_matrix(data_val, data_train, amp_data_val, list_val)
-        K_quantum_train_full = get_kernel_matrix(data_train_full, data_train_full, amp_data_train_full,
-                                                 list(combinations(range(1, len(data_train_full) + 1), 2)), mode='train')
-        K_quantum_test = get_kernel_matrix(data_test, data_train_full, amp_data_test, list_test)
+        K_quantum_train_full = get_kernel_matrix(
+            data_train_full,
+            data_train_full,
+            amp_data_train_full,
+            list(combinations(range(1, len(data_train_full) + 1), 2)),
+            mode="train",
+        )
+        K_quantum_test = get_kernel_matrix(
+            data_test, data_train_full, amp_data_test, list_test
+        )
 
         cw = "balanced" if balanced else None
 
         if save_kernels:
-            kern_dir = os.path.join(output_dir, f"seed_{seed}", "kernels") if output_dir else os.path.join("kernels")
+            kern_dir = (
+                os.path.join(output_dir, f"seed_{seed}", "kernels")
+                if output_dir
+                else os.path.join("kernels")
+            )
             os.makedirs(kern_dir, exist_ok=True)
             np.save(os.path.join(kern_dir, "K_quantum_train.npy"), K_quantum_train)
             np.save(os.path.join(kern_dir, "K_quantum_val.npy"), K_quantum_val)
-            np.save(os.path.join(kern_dir, "K_quantum_train_full.npy"), K_quantum_train_full)
+            np.save(
+                os.path.join(kern_dir, "K_quantum_train_full.npy"), K_quantum_train_full
+            )
             np.save(os.path.join(kern_dir, "K_quantum_test.npy"), K_quantum_test)
             np.save(os.path.join(kern_dir, "y_train.npy"), y_train)
             np.save(os.path.join(kern_dir, "y_val.npy"), y_val)
@@ -526,8 +615,12 @@ def run_qsvm_splits(
             elif classical_kernel == "poly":
                 K_classical_train = polynomial_kernel(data_train, data_train, degree=3)
                 K_classical_val = polynomial_kernel(data_val, data_train, degree=3)
-                K_classical_train_full = polynomial_kernel(data_train_full, data_train_full, degree=3)
-                K_classical_test = polynomial_kernel(data_test, data_train_full, degree=3)
+                K_classical_train_full = polynomial_kernel(
+                    data_train_full, data_train_full, degree=3
+                )
+                K_classical_test = polynomial_kernel(
+                    data_test, data_train_full, degree=3
+                )
             else:  # linear
                 K_classical_train = linear_kernel(data_train, data_train)
                 K_classical_val = linear_kernel(data_val, data_train)
@@ -546,21 +639,40 @@ def run_qsvm_splits(
             for a in alpha_values:
                 print(f"\n  --- α={a:.4f} ---")
                 # Combine kernels classically (no GPU needed)
-                hybrid_K_train = get_hybrid_kernel_matrix(K_classical_train, K_quantum_train, a,
-                                                          normalize_method=normalize_method)
-                hybrid_K_val = get_hybrid_kernel_matrix(K_classical_val, K_quantum_val, a,
-                                                        normalize_method=normalize_method)
-                hybrid_K_train_full = get_hybrid_kernel_matrix(K_classical_train_full, K_quantum_train_full, a,
-                                                               normalize_method=normalize_method)
-                hybrid_K_test = get_hybrid_kernel_matrix(K_classical_test, K_quantum_test, a,
-                                                         normalize_method=normalize_method)
+                hybrid_K_train = get_hybrid_kernel_matrix(
+                    K_classical_train,
+                    K_quantum_train,
+                    a,
+                    normalize_method=normalize_method,
+                )
+                hybrid_K_val = get_hybrid_kernel_matrix(
+                    K_classical_val, K_quantum_val, a, normalize_method=normalize_method
+                )
+                hybrid_K_train_full = get_hybrid_kernel_matrix(
+                    K_classical_train_full,
+                    K_quantum_train_full,
+                    a,
+                    normalize_method=normalize_method,
+                )
+                hybrid_K_test = get_hybrid_kernel_matrix(
+                    K_classical_test,
+                    K_quantum_test,
+                    a,
+                    normalize_method=normalize_method,
+                )
 
                 # C-grid search on val
                 best_c_a, best_val_acc_a = _c_values[0], -1.0
                 if len(_c_values) > 1:
                     print(f"    C-grid search over {_c_values}...")
                     for c in _c_values:
-                        svc_tmp = SVC(kernel="precomputed", C=c, probability=False, random_state=seed, class_weight=cw)
+                        svc_tmp = SVC(
+                            kernel="precomputed",
+                            C=c,
+                            probability=False,
+                            random_state=seed,
+                            class_weight=cw,
+                        )
                         svc_tmp.fit(hybrid_K_train, y_train)
                         val_acc_c = svc_tmp.score(hybrid_K_val, y_val)
                         print(f"      C={c}: val_acc={val_acc_c:.4f}")
@@ -569,14 +681,26 @@ def run_qsvm_splits(
                     print(f"    Best C={best_c_a} (val_acc={best_val_acc_a:.4f})")
                 else:
                     # Evaluate single C to get val accuracy
-                    svc_tmp = SVC(kernel="precomputed", C=_c_values[0], probability=False, random_state=seed, class_weight=cw)
+                    svc_tmp = SVC(
+                        kernel="precomputed",
+                        C=_c_values[0],
+                        probability=False,
+                        random_state=seed,
+                        class_weight=cw,
+                    )
                     svc_tmp.fit(hybrid_K_train, y_train)
                     best_val_acc_a = svc_tmp.score(hybrid_K_val, y_val)
                     best_c_a = _c_values[0]
 
                 # Fit final train model
                 t_train_start = time.time()
-                svc_a = SVC(kernel="precomputed", C=best_c_a, probability=True, random_state=seed, class_weight=cw)
+                svc_a = SVC(
+                    kernel="precomputed",
+                    C=best_c_a,
+                    probability=True,
+                    random_state=seed,
+                    class_weight=cw,
+                )
                 svc_a.fit(hybrid_K_train, y_train)
                 train_time_a = time.time() - t_train_start
 
@@ -593,8 +717,14 @@ def run_qsvm_splits(
                 infer_val_time_a = time.time() - t_infer_val
 
                 # Retrain on full train, eval on test
-                print(f"    Retraining on full train for test evaluation...")
-                svc_full_a = SVC(kernel="precomputed", C=best_c_a, probability=True, random_state=seed, class_weight=cw)
+                print("    Retraining on full train for test evaluation...")
+                svc_full_a = SVC(
+                    kernel="precomputed",
+                    C=best_c_a,
+                    probability=True,
+                    random_state=seed,
+                    class_weight=cw,
+                )
                 svc_full_a.fit(hybrid_K_train_full, y_train)
 
                 t_infer_test = time.time()
@@ -608,13 +738,25 @@ def run_qsvm_splits(
                         f"{prefix}_precision": float(precision_score(y_true, y_pred)),
                         f"{prefix}_recall": float(recall_score(y_true, y_pred)),
                         f"{prefix}_f1": float(f1_score(y_true, y_pred)),
+                        f"{prefix}_minority_f1": float(
+                            f1_score(
+                                y_true,
+                                y_pred,
+                                pos_label=minority_label,
+                                zero_division=0,
+                            )
+                        ),
                         f"{prefix}_auc": float(roc_auc_score(y_true, y_proba)),
                     }
 
                 row = {"alpha": float(a)}
-                row.update(compute_metrics_a(y_train, y_train_pred_a, y_train_proba_a, "train"))
+                row.update(
+                    compute_metrics_a(y_train, y_train_pred_a, y_train_proba_a, "train")
+                )
                 row.update(compute_metrics_a(y_val, y_val_pred_a, y_val_proba_a, "val"))
-                row.update(compute_metrics_a(y_test, y_test_pred_a, y_test_proba_a, "test"))
+                row.update(
+                    compute_metrics_a(y_test, y_test_pred_a, y_test_proba_a, "test")
+                )
                 row["train_time_sec"] = train_time_a
                 row["infer_train_time_sec"] = infer_train_time_a
                 row["infer_val_time_sec"] = infer_val_time_a
@@ -640,8 +782,10 @@ def run_qsvm_splits(
                         "test": confusion_matrix(y_test, y_test_pred_a),
                     }
 
-            print(f"\n  Best α={best_alpha_row['alpha']:.4f} "
-                  f"(val_acc={best_alpha_val_acc:.4f})")
+            print(
+                f"\n  Best α={best_alpha_row['alpha']:.4f} "
+                f"(val_acc={best_alpha_val_acc:.4f})"
+            )
 
             # Add a 'hybrid_best' row (copy of best alpha row, labelled)
             best_row_labelled = dict(best_alpha_row)
@@ -669,12 +813,24 @@ def run_qsvm_splits(
             # Single-α path (backward compatible)
             # ---------------------------------------------------------------
             kernel_train, kernel_valid = apply_hybrid_kernel(
-                K_quantum_train, K_quantum_val, data_train, data_val,
-                use_hybrid, alpha, classical_kernel, normalize_method=normalize_method
+                K_quantum_train,
+                K_quantum_val,
+                data_train,
+                data_val,
+                use_hybrid,
+                alpha,
+                classical_kernel,
+                normalize_method=normalize_method,
             )
             kernel_train_full, kernel_test = apply_hybrid_kernel(
-                K_quantum_train_full, K_quantum_test, data_train_full, data_test,
-                use_hybrid, alpha, classical_kernel, normalize_method=normalize_method
+                K_quantum_train_full,
+                K_quantum_test,
+                data_train_full,
+                data_test,
+                use_hybrid,
+                alpha,
+                classical_kernel,
+                normalize_method=normalize_method,
             )
 
             # Training
@@ -684,7 +840,13 @@ def run_qsvm_splits(
             if len(_c_values) > 1:
                 print(f"  C-grid search over {_c_values}...")
                 for c in _c_values:
-                    svc_tmp = SVC(kernel="precomputed", C=c, probability=False, random_state=seed, class_weight=cw)
+                    svc_tmp = SVC(
+                        kernel="precomputed",
+                        C=c,
+                        probability=False,
+                        random_state=seed,
+                        class_weight=cw,
+                    )
                     svc_tmp.fit(kernel_train, y_train)
                     val_acc = svc_tmp.score(kernel_valid, y_val)
                     print(f"    C={c}: val_acc={val_acc:.4f}")
@@ -692,7 +854,13 @@ def run_qsvm_splits(
                         best_c, best_val_acc = c, val_acc
                 print(f"  Best C={best_c} (val_acc={best_val_acc:.4f})")
             t_train_start = time.time()
-            svc = SVC(kernel="precomputed", C=best_c, probability=True, random_state=seed, class_weight=cw)
+            svc = SVC(
+                kernel="precomputed",
+                C=best_c,
+                probability=True,
+                random_state=seed,
+                class_weight=cw,
+            )
             svc.fit(kernel_train, y_train)
             train_time = time.time() - t_train_start
 
@@ -710,7 +878,13 @@ def run_qsvm_splits(
 
             # Test set evaluation (retrain on full train for final test)
             print("  Retraining on full train for test evaluation...")
-            svc_full = SVC(kernel="precomputed", C=best_c, probability=True, random_state=seed, class_weight=cw)
+            svc_full = SVC(
+                kernel="precomputed",
+                C=best_c,
+                probability=True,
+                random_state=seed,
+                class_weight=cw,
+            )
             svc_full.fit(kernel_train_full, y_train)
 
             t_infer_test = time.time()
@@ -727,11 +901,21 @@ def run_qsvm_splits(
                     f"{prefix}_precision": float(precision_score(y_true, y_pred)),
                     f"{prefix}_recall": float(recall_score(y_true, y_pred)),
                     f"{prefix}_f1": float(f1_score(y_true, y_pred)),
+                    f"{prefix}_minority_f1": float(
+                        f1_score(
+                            y_true,
+                            y_pred,
+                            pos_label=minority_label,
+                            zero_division=0,
+                        )
+                    ),
                     f"{prefix}_auc": float(roc_auc_score(y_true, y_proba)),
                 }
 
             results = {}
-            results.update(compute_metrics(y_train, y_train_pred, y_train_proba, "train"))
+            results.update(
+                compute_metrics(y_train, y_train_pred, y_train_proba, "train")
+            )
             results.update(compute_metrics(y_val, y_val_pred, y_val_proba, "val"))
             results.update(compute_metrics(y_test, y_test_pred, y_test_proba, "test"))
 
@@ -754,28 +938,40 @@ def run_qsvm_splits(
             results["confusion_matrices"] = {
                 "train": cm_train,
                 "val": cm_val,
-                "test": cm_test
+                "test": cm_test,
             }
             results["model"] = svc_full
             results["predictions"] = {
-                "test": {"y_true": y_test, "y_pred": y_test_pred, "y_proba": y_test_proba}
+                "test": {
+                    "y_true": y_test,
+                    "y_pred": y_test_pred,
+                    "y_proba": y_test_proba,
+                }
             }
             # Store split data for saving
             results["split_data"] = {
                 "train": {"X": X_train, "y": y_train, "indices": idx_train},
                 "val": {"X": X_val, "y": y_val, "indices": idx_val},
-                "test": {"X": X_test, "y": y_test, "indices": idx_test}
+                "test": {"X": X_test, "y": y_test, "indices": idx_test},
             }
 
     return results
 
 
-def save_seed_outputs(out_dir, results, seed, n_qubits, class_names, original_shape=None, data_path=None):
+def save_seed_outputs(
+    out_dir, results, seed, n_qubits, class_names, original_shape=None, data_path=None
+):
     """Save per-seed outputs."""
     os.makedirs(out_dir, exist_ok=True)
 
     # Metrics CSV
-    _skip_keys = {"confusion_matrices", "model", "predictions", "split_data", "alpha_sweep_rows"}
+    _skip_keys = {
+        "confusion_matrices",
+        "model",
+        "predictions",
+        "split_data",
+        "alpha_sweep_rows",
+    }
     if "alpha_sweep_rows" in results:
         # α-sweep: write all per-α rows (already includes the 'best' labelled row)
         pd.DataFrame(results["alpha_sweep_rows"]).to_csv(
@@ -783,15 +979,23 @@ def save_seed_outputs(out_dir, results, seed, n_qubits, class_names, original_sh
         )
     else:
         metrics_dict = {k: v for k, v in results.items() if k not in _skip_keys}
-        pd.DataFrame([metrics_dict]).to_csv(os.path.join(out_dir, "metrics_summary.csv"), index=False)
+        pd.DataFrame([metrics_dict]).to_csv(
+            os.path.join(out_dir, "metrics_summary.csv"), index=False
+        )
 
     # Confusion matrices
     for split, cm in results["confusion_matrices"].items():
         cm_path = os.path.join(out_dir, f"confusion_matrix_{split}.png")
-        plot_confusion_matrix(cm, class_names, cm_path, f"Seed {seed} - {split.upper()} - {n_qubits} Qubits")
-        pd.DataFrame(cm,
-                    index=[f"true_{c}" for c in class_names],
-                    columns=[f"pred_{c}" for c in class_names]
+        plot_confusion_matrix(
+            cm,
+            class_names,
+            cm_path,
+            f"Seed {seed} - {split.upper()} - {n_qubits} Qubits",
+        )
+        pd.DataFrame(
+            cm,
+            index=[f"true_{c}" for c in class_names],
+            columns=[f"pred_{c}" for c in class_names],
         ).to_csv(os.path.join(out_dir, f"confusion_matrix_{split}.csv"))
 
     # Save model
@@ -805,18 +1009,23 @@ def save_seed_outputs(out_dir, results, seed, n_qubits, class_names, original_sh
         # Save each split as pickle (preserves numpy arrays)
         for split_name, split_info in split_data.items():
             split_file = os.path.join(out_dir, f"samples_{split_name}.pkl")
-            joblib.dump({
-                "X": split_info["X"],
-                "y": split_info["y"],
-                "indices": split_info["indices"]
-            }, split_file)
+            joblib.dump(
+                {
+                    "X": split_info["X"],
+                    "y": split_info["y"],
+                    "indices": split_info["indices"],
+                },
+                split_file,
+            )
 
         # Save dataset info as JSON
         n_train = len(split_data["train"]["y"])
         n_val = len(split_data["val"]["y"])
         n_test = len(split_data["test"]["y"])
         n_total = n_train + n_val + n_test
-        n_features_original = original_shape[1] if original_shape else split_data["train"]["X"].shape[1]
+        n_features_original = (
+            original_shape[1] if original_shape else split_data["train"]["X"].shape[1]
+        )
         n_features_after_pca = n_qubits
 
         from datetime import datetime
@@ -825,15 +1034,13 @@ def save_seed_outputs(out_dir, results, seed, n_qubits, class_names, original_sh
             "experiment": {
                 "type": "QSVM",
                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "qubits": n_qubits
+                "qubits": n_qubits,
             },
             "data": {
                 "source_path": os.path.abspath(data_path) if data_path else None,
-                "source_filename": os.path.basename(data_path) if data_path else None
+                "source_filename": os.path.basename(data_path) if data_path else None,
             },
-            "output": {
-                "path": os.path.abspath(out_dir)
-            },
+            "output": {"path": os.path.abspath(out_dir)},
             "seed": seed,
             "qubits": n_qubits,
             "samples": {
@@ -841,36 +1048,43 @@ def save_seed_outputs(out_dir, results, seed, n_qubits, class_names, original_sh
                 "train": n_train,
                 "val": n_val,
                 "test": n_test,
-                "split_ratio": "80/10/10"
+                "split_ratio": "80/10/10",
             },
             "features": {
                 "original": n_features_original,
-                "after_pca": n_features_after_pca
+                "after_pca": n_features_after_pca,
             },
             "classes": class_names,
             "class_distribution": {
                 "train": {
                     class_names[0]: int(np.sum(split_data["train"]["y"] == 0)),
-                    class_names[1]: int(np.sum(split_data["train"]["y"] == 1))
+                    class_names[1]: int(np.sum(split_data["train"]["y"] == 1)),
                 },
                 "val": {
                     class_names[0]: int(np.sum(split_data["val"]["y"] == 0)),
-                    class_names[1]: int(np.sum(split_data["val"]["y"] == 1))
+                    class_names[1]: int(np.sum(split_data["val"]["y"] == 1)),
                 },
                 "test": {
                     class_names[0]: int(np.sum(split_data["test"]["y"] == 0)),
-                    class_names[1]: int(np.sum(split_data["test"]["y"] == 1))
-                }
-            }
+                    class_names[1]: int(np.sum(split_data["test"]["y"] == 1)),
+                },
+            },
         }
 
         with open(os.path.join(out_dir, "dataset_info.json"), "w") as f:
             json.dump(dataset_info, f, indent=2)
 
 
-def apply_hybrid_kernel(kernel_train, kernel_valid, data_train, data_valid,
-                        use_hybrid=False, alpha=0.5, classical_kernel="rbf",
-                        normalize_method="trace"):
+def apply_hybrid_kernel(
+    kernel_train,
+    kernel_valid,
+    data_train,
+    data_valid,
+    use_hybrid=False,
+    alpha=0.5,
+    classical_kernel="rbf",
+    normalize_method="trace",
+):
     """
     Apply hybrid kernel combination if enabled; optionally normalize quantum kernel.
 
@@ -916,10 +1130,12 @@ def apply_hybrid_kernel(kernel_train, kernel_valid, data_train, data_valid,
 
     # Combine kernels (normalize_method applied inside get_hybrid_kernel_matrix)
     print(f"  Combining with α={alpha:.2f} (Quantum) + {1 - alpha:.2f} (Classical)")
-    hybrid_K_train = get_hybrid_kernel_matrix(classical_K_train, kernel_train, alpha,
-                                              normalize_method=normalize_method)
-    hybrid_K_valid = get_hybrid_kernel_matrix(classical_K_valid, kernel_valid, alpha,
-                                              normalize_method=normalize_method)
+    hybrid_K_train = get_hybrid_kernel_matrix(
+        classical_K_train, kernel_train, alpha, normalize_method=normalize_method
+    )
+    hybrid_K_valid = get_hybrid_kernel_matrix(
+        classical_K_valid, kernel_valid, alpha, normalize_method=normalize_method
+    )
 
     return hybrid_K_train, hybrid_K_valid
 
@@ -928,91 +1144,132 @@ def apply_hybrid_kernel(kernel_train, kernel_valid, data_train, data_valid,
 # Main
 # -----------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(description="QSVM Insurance Classification (80/10/10 split, multi-seed)")
-    parser.add_argument("--data_path", type=str, required=True,
-                        help="Path to 20-seeds directory or a single data file")
-    parser.add_argument("--data_type_filter", type=str, default=None,
-                        help="Select only files containing this string (e.g. 'data_type5')")
-    parser.add_argument("--num_seeds", type=int, default=10,
-                        help="Max number of seed files to process (default: 10, 0=all)")
-    parser.add_argument("--output_dir", type=str, required=True,
-                        help="Directory to save results")
-    parser.add_argument("--qubits", type=int, default=2,
-                        help="Number of qubits (PCA components)")
-    parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed for splitting (fallback if not in filename)")
-    parser.add_argument("--max_samples", type=int, default=None,
-                        help="Maximum samples to use (default: all)")
-    parser.add_argument("--single_mode", action="store_true",
-                        help="Single file mode: save all outputs directly in output_dir (no seed/global subdirs)")
+    parser = argparse.ArgumentParser(
+        description="QSVM Insurance Classification"
+    )
     parser.add_argument(
-        "--use_hybrid",
+        "--data_path",
+        type=str,
+        required=True,
+        help="Path to 20-seeds directory or a single data file",
+    )
+    parser.add_argument(
+        "--data_type_filter",
+        type=str,
+        default=None,
+        help="Select only files containing this string (e.g. 'data_type5')",
+    )
+    parser.add_argument(
+        "--num_seeds",
+        type=int,
+        default=10,
+        help="Max number of seed files to process (default: 10, 0=all)",
+    )
+    parser.add_argument(
+        "--output_dir", type=str, required=True, help="Directory to save results"
+    )
+    parser.add_argument(
+        "--qubits", type=int, default=2, help="Number of qubits (PCA components)"
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for splitting (fallback if not in filename)",
+    )
+    parser.add_argument(
+        "--max_samples",
+        type=int,
+        default=None,
+        help="Maximum samples to use (default: all)",
+    )
+    parser.add_argument(
+        "--single_mode",
         action="store_true",
-        help="Use hybrid quantum-classical kernel"
+        help="Single file mode: save all outputs directly in output_dir (no seed/global subdirs)",
+    )
+    parser.add_argument(
+        "--use_hybrid", action="store_true", help="Use hybrid quantum-classical kernel"
     )
     parser.add_argument(
         "--alpha",
         type=float,
         default=0.5,
-        help="Hybrid kernel mixing parameter (0=classical, 1=quantum)"
+        help="Hybrid kernel mixing parameter (0=classical, 1=quantum)",
     )
     parser.add_argument(
         "--alpha_values",
         type=str,
         default=None,
         help="Comma-separated α values to sweep (e.g. '0.1,0.3,0.5,0.7,0.9,1.0'). "
-             "Requires --use_hybrid. Overrides --alpha. Best α selected by val accuracy."
+        "Requires --use_hybrid. Overrides --alpha. Best α selected by val accuracy.",
     )
     parser.add_argument(
         "--classical_kernel",
         type=str,
         default="rbf",
         choices=["rbf", "linear", "poly"],
-        help="Classical kernel type for hybrid approach"
+        help="Classical kernel type for hybrid approach",
     )
     parser.add_argument(
         "--fix_leakage",
         action="store_true",
-        help="Fit MinMaxScaler on train only (default off — preserves legacy behavior)"
+        help="Fit MinMaxScaler on train only (default off — preserves legacy behavior)",
     )
     parser.add_argument(
         "--pi_angles",
         action="store_true",
-        help="Scale features to [-pi, pi] instead of [-1, 1] (default off — preserves legacy behavior)"
+        help="Scale features to [-pi, pi] instead of [-1, 1] (default off — preserves legacy behavior)",
     )
     parser.add_argument(
         "--normalize_method",
         type=str,
         default="trace",
         choices=["cosine", "trace", "frobenius", "none"],
-        help="Kernel normalization method (default: trace)"
+        help="Kernel normalization method (default: trace)",
     )
     parser.add_argument(
         "--balanced",
         action="store_true",
-        help="Use class_weight='balanced' in SVC to handle class imbalance (default off)"
+        help="Use class_weight='balanced' in SVC to handle class imbalance (default off)",
     )
     parser.add_argument(
         "--three_dof",
         action="store_true",
-        help="Use 3-DOF circuit (make_bsp_3dof): 3 distinct angles per qubit, PCA to 3*n_qubits (default off)"
+        help="Use 3-DOF circuit (make_bsp_3dof): 3 distinct angles per qubit, PCA to 3*n_qubits (default off)",
     )
-    parser.add_argument("--bandwidth", type=float, default=1.0,
-                        help="Feature bandwidth multiplier applied after PCA+MinMaxScaler (default: 1.0)")
+    parser.add_argument(
+        "--bandwidth",
+        type=float,
+        default=1.0,
+        help="Feature bandwidth multiplier applied after PCA+MinMaxScaler (default: 1.0)",
+    )
     parser.add_argument(
         "--circuit",
         type=str,
         default="bsp",
         choices=["bsp", "zz"],
-        help="Feature map circuit: bsp (default, preserves existing behavior) or zz (ZZFeatureMap, Havlíček et al. 2019)"
+        help="Feature map circuit: bsp (default, preserves existing behavior) or zz (ZZFeatureMap, Havlíček et al. 2019)",
     )
-    parser.add_argument("--reps", type=int, default=1,
-                        help="Data re-uploading repetitions for BSP circuit (default: 1). reps>1 uses assign_parameters path.")
-    parser.add_argument("--c_values", type=str, default="1.0",
-                        help="Comma-separated C values for SVC grid search (default: 1.0)")
-    parser.add_argument("--save_kernels", action="store_true",
-                        help="Save kernel matrices as .npy files for post-hoc analysis")
+    parser.add_argument(
+        "--reps",
+        type=int,
+        default=1,
+        help="Data re-uploading repetitions for BSP circuit (default: 1). reps>1 uses assign_parameters path.",
+    )
+    parser.add_argument(
+        "--c_values",
+        type=str,
+        default="1.0",
+        help="Comma-separated C values for SVC grid search (default: 1.0)",
+    )
+    parser.add_argument(
+        "--save_kernels",
+        action="store_true",
+        help="Save kernel matrices as .npy files for post-hoc analysis",
+    )
     parser.add_argument(
         "--backend",
         choices=["cpu", "cuda"],
@@ -1038,7 +1295,7 @@ def main():
         try:
             import cupy as cp
             from cupy.cuda.runtime import getDeviceCount
-            from cuquantum.cutensornet import Network, NetworkOptions, CircuitToEinsum
+            from cuquantum.cutensornet import CircuitToEinsum, Network, NetworkOptions
         except ImportError as exc:
             raise RuntimeError(
                 "CUDA backend unavailable. Install qml-medimage[gpu] on a supported "
@@ -1056,7 +1313,7 @@ def main():
         if not files:
             raise FileNotFoundError(f"No data files found in: {args.data_path}")
         if args.num_seeds > 0:
-            files = files[:args.num_seeds]
+            files = files[: args.num_seeds]
         print(f"Found {len(files)} seed files")
     else:
         files = None
@@ -1084,29 +1341,43 @@ def main():
                 df, fmt = load_data(fp)
                 df = process_embeddings(df, fmt)
                 target_col = get_target_column(df)
-                df = df[[target_col, "emb_array"]].dropna(subset=[target_col, "emb_array"]).copy()
+                df = (
+                    df[[target_col, "emb_array"]]
+                    .dropna(subset=[target_col, "emb_array"])
+                    .copy()
+                )
 
                 le = LabelEncoder()
                 y = le.fit_transform(df[target_col].astype(str).values)
                 class_names = le.classes_.tolist()
 
                 if len(class_names) != 2:
-                    raise ValueError(f"Binary classification expected. Found {len(class_names)}: {class_names}")
+                    raise ValueError(
+                        f"Binary classification expected. Found {len(class_names)}: {class_names}"
+                    )
 
                 if global_class_names is None:
                     global_class_names = class_names
                 elif class_names != global_class_names:
-                    raise ValueError(f"Class mismatch. Expected: {global_class_names}, Found: {class_names}")
+                    raise ValueError(
+                        f"Class mismatch. Expected: {global_class_names}, Found: {class_names}"
+                    )
 
                 input_dtype = np.float64 if args.backend == "cpu" else np.float32
-                X = np.stack(df["emb_array"].values).reshape(len(df), -1).astype(input_dtype)
+                X = (
+                    np.stack(df["emb_array"].values)
+                    .reshape(len(df), -1)
+                    .astype(input_dtype)
+                )
                 original_shape = X.shape
                 print(f"  Feature shape: {X.shape}")
 
                 # Subsample if max_samples specified
                 if args.max_samples is not None and args.max_samples < len(X):
                     print(f"  Subsampling from {len(X)} to {args.max_samples} samples")
-                    indices = np.random.RandomState(seed).permutation(len(X))[:args.max_samples]
+                    indices = np.random.RandomState(seed).permutation(len(X))[
+                        : args.max_samples
+                    ]
                     X = X[indices]
                     y = y[indices]
             else:
@@ -1119,61 +1390,109 @@ def main():
             original_shape = comm_mpi.bcast(original_shape, root=0)
 
             # Train
-            results = run_qsvm_splits(X, y, args.qubits, seed, device_id, comm_mpi, rank, size, class_names,
-                                      args.use_hybrid, args.alpha, args.classical_kernel,
-                                      fix_leakage=args.fix_leakage, pi_angles=args.pi_angles,
-                                      balanced=args.balanced, three_dof=args.three_dof,
-                                      normalize_method=args.normalize_method,
-                                      bandwidth=args.bandwidth,
-                                      circuit=args.circuit,
-                                      reps=args.reps,
-                                      c_values=[float(c) for c in args.c_values.split(",")],
-                                      save_kernels=args.save_kernels,
-                                      output_dir=args.output_dir,
-                                      alpha_values=alpha_values_list,
-                                      backend=args.backend)
+            results = run_qsvm_splits(
+                X,
+                y,
+                args.qubits,
+                seed,
+                device_id,
+                comm_mpi,
+                rank,
+                size,
+                class_names,
+                args.use_hybrid,
+                args.alpha,
+                args.classical_kernel,
+                fix_leakage=args.fix_leakage,
+                pi_angles=args.pi_angles,
+                balanced=args.balanced,
+                three_dof=args.three_dof,
+                normalize_method=args.normalize_method,
+                bandwidth=args.bandwidth,
+                circuit=args.circuit,
+                reps=args.reps,
+                c_values=[float(c) for c in args.c_values.split(",")],
+                save_kernels=args.save_kernels,
+                output_dir=args.output_dir,
+                alpha_values=alpha_values_list,
+                backend=args.backend,
+            )
 
             if rank == 0:
                 if args.single_mode:
                     # Single mode: save directly in output_dir (no subdirs)
-                    save_seed_outputs(args.output_dir, results, seed, args.qubits, class_names, original_shape, data_path=fp)
+                    save_seed_outputs(
+                        args.output_dir,
+                        results,
+                        seed,
+                        args.qubits,
+                        class_names,
+                        original_shape,
+                        data_path=fp,
+                    )
                 else:
                     # Multi-seed mode: save in seed subdirectory
                     seed_dir = os.path.join(args.output_dir, f"seed_{seed}")
-                    save_seed_outputs(seed_dir, results, seed, args.qubits, class_names, original_shape, data_path=fp)
+                    save_seed_outputs(
+                        seed_dir,
+                        results,
+                        seed,
+                        args.qubits,
+                        class_names,
+                        original_shape,
+                        data_path=fp,
+                    )
 
                     # Collect for global aggregation
-                    _global_skip = {"confusion_matrices", "model", "predictions", "split_data", "alpha_sweep_rows"}
-                    metrics_row = {k: v for k, v in results.items() if k not in _global_skip}
+                    _global_skip = {
+                        "confusion_matrices",
+                        "model",
+                        "predictions",
+                        "split_data",
+                        "alpha_sweep_rows",
+                    }
+                    metrics_row = {
+                        k: v for k, v in results.items() if k not in _global_skip
+                    }
                     metrics_row["seed"] = seed
                     global_rows.append(metrics_row)
 
                     # Collect test predictions
-                    global_test_preds["y_true"].extend(results["predictions"]["test"]["y_true"].tolist())
-                    global_test_preds["y_pred"].extend(results["predictions"]["test"]["y_pred"].tolist())
-                    global_test_preds["y_proba"].extend(results["predictions"]["test"]["y_proba"].tolist())
+                    global_test_preds["y_true"].extend(
+                        results["predictions"]["test"]["y_true"].tolist()
+                    )
+                    global_test_preds["y_pred"].extend(
+                        results["predictions"]["test"]["y_pred"].tolist()
+                    )
+                    global_test_preds["y_proba"].extend(
+                        results["predictions"]["test"]["y_proba"].tolist()
+                    )
 
-                    summary_rows.append({
-                        "file": fp,
-                        "seed_from_filename": seed_from_file,
-                        "seed_used": seed,
-                        "samples_total": len(X),
-                        "qubits": args.qubits,
-                        "status": "OK"
-                    })
+                    summary_rows.append(
+                        {
+                            "file": fp,
+                            "seed_from_filename": seed_from_file,
+                            "seed_used": seed,
+                            "samples_total": len(X),
+                            "qubits": args.qubits,
+                            "status": "OK",
+                        }
+                    )
 
         except Exception as e:
             if rank == 0:
                 print(f"[ERROR] {repr(e)}")
                 if not args.single_mode:
-                    summary_rows.append({
-                        "file": fp,
-                        "seed_from_filename": seed_from_file,
-                        "seed_used": seed,
-                        "samples_total": None,
-                        "qubits": args.qubits,
-                        "status": f"FAIL: {repr(e)}"
-                    })
+                    summary_rows.append(
+                        {
+                            "file": fp,
+                            "seed_from_filename": seed_from_file,
+                            "seed_used": seed,
+                            "samples_total": None,
+                            "qubits": args.qubits,
+                            "status": f"FAIL: {repr(e)}",
+                        }
+                    )
 
     # Global aggregation (skip in single mode)
     if rank == 0:
@@ -1190,12 +1509,16 @@ def main():
             global_root = os.path.join(args.output_dir, "global")
             os.makedirs(global_root, exist_ok=True)
 
-            pd.DataFrame(summary_rows).to_csv(os.path.join(args.output_dir, "summary_runs.csv"), index=False)
+            pd.DataFrame(summary_rows).to_csv(
+                os.path.join(args.output_dir, "summary_runs.csv"), index=False
+            )
 
             if global_rows:
                 all_metrics = pd.DataFrame(global_rows)
                 # Only aggregate numeric columns (exclude seed and non-numeric columns like classical_kernel)
-                numeric_cols = all_metrics.select_dtypes(include=[np.number]).columns.tolist()
+                numeric_cols = all_metrics.select_dtypes(
+                    include=[np.number]
+                ).columns.tolist()
                 metric_cols = [c for c in numeric_cols if c != "seed"]
                 agg = all_metrics[metric_cols].agg(["mean", "std"]).T
                 agg.to_csv(os.path.join(global_root, "metrics_over_seeds.csv"))
@@ -1203,27 +1526,30 @@ def main():
                 # Timing summary
                 timing_cols = [c for c in metric_cols if "time" in c]
                 timing = all_metrics[["seed"] + timing_cols].copy()
-                timing.to_csv(os.path.join(global_root, "timing_summary.csv"), index=False)
+                timing.to_csv(
+                    os.path.join(global_root, "timing_summary.csv"), index=False
+                )
 
                 # Global test confusion matrix
                 yt = np.array(global_test_preds["y_true"], dtype=int)
                 yp = np.array(global_test_preds["y_pred"], dtype=int)
                 cm_global = confusion_matrix(yt, yp)
-                plot_confusion_matrix(cm_global, global_class_names,
-                                    os.path.join(global_root, "confusion_matrix_global_test.png"),
-                                    f"GLOBAL - Test Set - {args.qubits} Qubits")
-                pd.DataFrame(cm_global,
-                            index=[f"true_{c}" for c in global_class_names],
-                            columns=[f"pred_{c}" for c in global_class_names]
+                plot_confusion_matrix(
+                    cm_global,
+                    global_class_names,
+                    os.path.join(global_root, "confusion_matrix_global_test.png"),
+                    f"GLOBAL - Test Set - {args.qubits} Qubits",
+                )
+                pd.DataFrame(
+                    cm_global,
+                    index=[f"true_{c}" for c in global_class_names],
+                    columns=[f"pred_{c}" for c in global_class_names],
                 ).to_csv(os.path.join(global_root, "confusion_matrix_global_test.csv"))
 
             print("\n" + "=" * 80)
             print("DONE")
             print(f"Outputs written to: {args.output_dir}")
             print("=" * 80)
-
-
-
 
 
 if __name__ == "__main__":
