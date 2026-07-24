@@ -1,0 +1,9 @@
+- Finish to adapt table 1
+- Define other interesting artifacts to reproduce
+- Reproduce other interesting artifacts
+- Add a MerLin version
+- Create a pedagogical notebook
+- Document the link with the original repo and the paper
+- Uniformizes, document and comment all files (.md and code)
+- Remove all unnecessary files
+- Refactor as defined in: <https://github.com/jricc/reproduced_papers/blob/qsvm_medimage/AGENTS.md>
