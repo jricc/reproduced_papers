@@ -13,8 +13,15 @@ It belongs to a fork of
 ## Reference and attribution
 
 - Paper: [*Quantum Kernel Advantage over Classical Collapse in Medical
-  Foundation Model Embeddings*](https://arxiv.org/abs/2604.24597)
+  Foundation Model Embeddings*](https://arxiv.org/abs/2604.24597v1)
+- Authors: Sebastián Andrés Cajas Ordóñez, Felipe Ocampo Osorio, Dax Enshan Koh,
+  Rafi Al Attrach, Aldo Marzullo, Ariel Guerra-Adames, J. Alejandro Andrade,
+  Siong Thye Goh, Chi-Yu Chen, Rahul Gorijavolu, Xue Yang, Noah Dane Hebdon,
+  and Leo Anthony Celi
+- Publication: arXiv preprint `arXiv:2604.24597v1`, 2026,
+  [doi:10.48550/arXiv.2604.24597](https://doi.org/10.48550/arXiv.2604.24597)
 - Original code: [`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage)
+- Imported upstream revision: `9e80037305d683b0e70c94b8fa7dd648e1bac82b`
 - Local changes and attribution: [NOTICE.md](NOTICE.md)
 - Detailed scientific audit: [AUDIT.md](AUDIT.md)
 - Current roadmap: [PLAN.md](PLAN.md)
@@ -53,7 +60,7 @@ Conda is not required. From this directory:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install -r requirements.txt
 ```
 
 The combined environment pins MerLin 0.4.0 and a compatible scikit-learn
@@ -62,20 +69,59 @@ environment uses scikit-learn 1.9.0.
 
 ## Data
 
-Prepare the official PneumoniaMNIST training split:
+The catalogue default downloads the official PneumoniaMNIST archive when it is
+missing, verifies its checksum, and prepares the training split. To prepare it
+explicitly:
 
 ```bash
-python scripts/prepare_pneumoniamnist.py
+python scripts/prepare_pneumoniamnist.py \
+  --download_path ../../data/qsvm_medimage/pneumoniamnist.npz \
+  --output_path ../../data/qsvm_medimage/pneumoniamnist_train.pkl
 ```
 
-This creates `data/pneumoniamnist_train.pkl`. Each 28×28 image is flattened to
-784 normalized pixels. The labels are `normal` and `pneumonia`; `normal` is the
-minority class in the experiments below.
+This creates `data/qsvm_medimage/pneumoniamnist_train.pkl` under the repository
+data root. Each 28×28 image is flattened to 784 normalized pixels. The labels
+are `normal` and `pneumonia`; `normal` is the minority class in the experiments
+below.
 
 These pixels are accepted by the upstream `embedding` input field for
 compatibility, but they are not frozen medical foundation-model embeddings.
 
-## How to run
+## Catalogue runtime
+
+The paper is discoverable through the repository-wide runtime. From this paper
+directory, with the virtual environment activated:
+
+```bash
+python ../../implementation.py --list-papers
+python ../../implementation.py --help
+python ../../implementation.py
+```
+
+The last command runs the small CPU MerLin default from
+[`configs/defaults.json`](configs/defaults.json). From the repository root, the
+equivalent explicit command is:
+
+```bash
+python implementation.py --paper qsvm_medimage
+```
+
+Each run writes its resolved configuration, log, metrics, and dataset metadata
+under:
+
+```text
+outdir/run_YYYYMMDD-HHMMSS/
+|-- config_snapshot.json
+|-- run.log
+|-- metrics_summary.csv
+`-- dataset_info.json
+```
+
+Paper-specific CLI options are declared in [`cli.json`](cli.json). Global
+options such as `--config`, `--outdir`, `--seed`, `--device`, `--dtype`, and
+`--data-root` are provided by the shared runtime.
+
+## Direct experiment scripts
 
 ### CPU QSVM and classical baselines
 
@@ -85,7 +131,7 @@ The following reproduces the reviewed `q=4`, ten-seed surrogate comparison:
 Q_VALUES=4 \
 SEEDS=0,1,2,3,4,5,6,7,8,9 \
 MAX_SAMPLES=100 \
-RESULT_ROOT=results/q4-seed-stability \
+RESULT_ROOT=outdir/q4-seed-stability \
 bash scripts/run_table1_adaptation.sh
 ```
 
@@ -102,7 +148,7 @@ XDG_DATA_HOME=/tmp/qsvm-merlin-data \
 MPLCONFIGDIR=/tmp/qsvm-merlin-mpl \
 PYTHONDONTWRITEBYTECODE=1 \
 .venv/bin/python scripts/merlin_fidelity_kernel.py \
-  --output_dir results/merlin/q_2/seed_0 \
+  --output_dir outdir/merlin/pca_2/seed_0 \
   --pca_dim 2 \
   --seed 0 \
   --circuit_seed 0 \
@@ -139,7 +185,7 @@ RBF. Paired against the linear SVM, it records one win, eight ties and one loss.
 This small raw-pixel surrogate therefore does not reproduce the paper's broad
 QSVM-advantage claim.
 
-### MerLin q=2 smoke, seed 0
+### MerLin smoke at PCA dimension 2, seed 0
 
 | Split | Accuracy | Minority F1 | AUC |
 |---|---:|---:|---:|
@@ -155,8 +201,8 @@ The classifier nevertheless predicted only the majority class. The test AUC
 of 1.0 means its scores ranked the two normal examples correctly, but its hard
 decision threshold detected neither one. With only ten test images and one
 seed, this is a technical smoke, not evidence for or against a photonic
-advantage. No matching local q=2 seed-0 qubit/classical artifact remains for an
-exact paired comparison.
+advantage. No matching local two-component, seed-0 qubit/classical artifact
+remains for an exact paired comparison.
 
 Small, sanitized values used by this README are kept in
 [`results/curated_results.csv`](results/curated_results.csv) and
@@ -187,17 +233,25 @@ kernel calculation and can therefore be read or executed quickly on CPU.
 
 ## Tests and verification
 
-The MerLin script was checked for syntax and import/CLI construction. The
-documented q=2 command was then run by the user and produced the reported
+The MerLin script was checked for syntax and import/CLI construction. The same
+PCA-dimension-2 settings were run by the user and produced the reported
 artifacts. Full QSVM grids are intentionally user-run because exact kernel
 construction becomes expensive with sample count and qubit count.
 
-## Legacy files and cleanup
+Fast local checks can be run from this directory:
 
-The original HPC, SLURM, preprocessing notebooks and generated documentation
-remain present for provenance. They are not part of the supported CPU/MerLin
-path. They will only be removed after review and explicit approval of an exact
-file list.
+```bash
+python -m pytest -q tests
+python ../../implementation.py --paper qsvm_medimage --help
+```
+
+## Legacy code
+
+Obsolete HPC launchers, generated documentation, and private-path notebooks
+were removed after an explicit inventory. The remaining upstream scientific and
+analysis scripts are retained for provenance. Some still contain original HPC
+path defaults and are unsupported; they are not used by the catalogue runner.
+The supported quick paths are the CPU/MerLin commands documented above.
 
 ## Citation and license
 
@@ -205,7 +259,12 @@ file list.
 @article{cajas2026qml,
   title   = {Quantum Kernel Advantage over Classical Collapse in Medical
              Foundation Model Embeddings},
-  author  = {Cajas Ord\'{o}\~{n}ez, Sebasti\'{a}n A. and others},
+  author  = {Cajas Ord\'{o}\~{n}ez, Sebasti\'{a}n Andr\'{e}s and
+             Ocampo Osorio, Felipe and
+             Koh, Dax Enshan and Al Attrach, Rafi and Marzullo, Aldo and
+             Guerra-Adames, Ariel and Andrade, J. Alejandro and Goh, Siong Thye
+             and Chen, Chi-Yu and Gorijavolu, Rahul and Yang, Xue and
+             Hebdon, Noah Dane and Celi, Leo Anthony},
   journal = {arXiv preprint arXiv:2604.24597},
   year    = {2026},
   url     = {https://arxiv.org/abs/2604.24597}

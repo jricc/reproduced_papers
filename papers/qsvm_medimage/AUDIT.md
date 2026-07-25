@@ -85,16 +85,17 @@ grid. They must not be reused for a smaller surrogate experiment.
 ## Current local state
 
 - The branch is `qsvm_medimage`.
-- The authors' Qiskit/MPI/cuQuantum files, HPC launchers, notebooks, tests, and
-  generated documentation are present.
+- The authors' Qiskit/MPI/cuQuantum scientific code is retained, while obsolete
+  HPC launchers, private-path notebooks, and generated documentation were
+  removed after approval.
 - Local changes already add optional GPU imports, a serial MPI fallback, and an
   exact Qiskit statevector CPU path.
 - Local data support prepares PneumoniaMNIST and maps it to the upstream
   `target`/`embedding` schema.
 - A bounded Table 1 adaptation launcher covers `q = 2, 4, 6`, five seeds, and at
   most 200 samples, with linear and tuned-RBF baselines.
-- No current MerLin implementation or curated local scientific result is
-  present.
+- A MerLin 0.4 fidelity-kernel smoke, curated local results, and a thin shared
+  catalogue runner are present.
 - The previous Git history contains a synthetic shared-runtime/MerLin prototype,
   but it should not be restored wholesale. Its photonic kernel was an analogue,
   its dependency declaration was incomplete, and its historical results are not
@@ -204,49 +205,51 @@ reproduction, or both as explicitly named modes.
 
 ## Catalogue integration observations
 
-- `configs/defaults.json`, paper-root `cli.json`, and `lib/runner.py` are absent,
-  so the shared runtime cannot discover this paper.
+- At the initial audit, `configs/defaults.json`, paper-root `cli.json`, and
+  `lib/runner.py` were absent. They are now present as a thin adapter around the
+  separate MerLin entry point, and the shared runtime discovers this paper.
 - These markers existed in earlier local history but belonged to a much larger
   synthetic implementation. Restore only a minimal wrapper, not the old
   framework.
-- The wrapper should invoke the preserved upstream path rather than move or
-  rewrite its scientific logic.
+- The implemented wrapper invokes the separate MerLin entry point without
+  moving or rewriting the preserved upstream scientific scripts.
 - Catalogue data belong under `data/qsvm_medimage/`; raw runs belong under
   `outdir/run_*`; only small sanitized artifacts belong under `results/`.
 - Existing direct scripts may remain as upstream-compatible entry points.
 
 ## Tests and dependencies
 
-- Several tests depend on absolute `/orcd/...` paths, skip without the original
-  data/GPU, or refer to a missing `scripts/qsvm_hybrid_insurance.py`.
-- Some files called tests are manual diagnostics rather than collected pytest
-  tests.
+- Tests tied to absolute HPC paths, unavailable data/GPU resources, and the
+  missing `scripts/qsvm_hybrid_insurance.py` were removed after approval.
 - There is no focused local coverage for the CPU kernel path, dataset adapter,
   cross-kernel normalization behavior, preprocessing behavior, run failure, or
-  Table 1 grid completeness.
-- Requirements and `pyproject.toml` diverge; `memory-profiler` is duplicated and
-  Torch is imported by the package without a clear minimal CPU dependency
-  contract.
-- MerLin 0.4 has a newer Python/NumPy/scikit-learn stack that may need an
-  isolated or reconciled environment.
+  Table 1 grid completeness. A fast shared-runtime contract test is present.
+- Runtime dependencies are synchronized between `requirements.txt` and
+  `pyproject.toml`, including CPU Torch. `requirements.txt` also includes
+  pytest for the catalogue smoke; pyproject declares it in the `dev` extra.
+- MerLin 0.4 uses a newer Python/NumPy/scikit-learn stack than the original
+  environment; the reconciled historical virtual environment worked for the
+  reviewed smoke, but portability still requires user validation.
 
 Initial tests should characterize the preserved upstream behavior on a tiny
-offline fixture. Tests for a corrected scientific protocol should be added only
-to a separately approved mode; they must not silently change what the baseline
-means.
+prepared-data smoke. Tests for a corrected scientific protocol should be added
+only to a separately approved mode; they must not silently change what the
+baseline means.
 
 ## Provenance, documentation, and data safety
 
-- NOTICE/README name the upstream repository but do not yet pin the imported
-  revision or enumerate all substantive local changes.
+- NOTICE/README name the upstream repository, pin the imported revision, and
+  summarize the substantive local changes.
 - The paper and repository use non-MIT content/licenses inside a catalogue whose
   root license differs. Attribution and scope must be clarified without making
   unsupported legal conclusions.
 - The gated dataset naming appears inconsistent with the paper's DT9/DT11
   terminology. Verify it before documenting a mapping.
-- README and generated docs reference missing scripts/directories and upstream
-  HPC results not reproduced locally.
-- Notebooks and commands contain personal/HPC paths and executed metadata.
+- Obsolete generated documentation and private-path notebooks were removed
+  after approval; the supported README commands now use the shared data root.
+- Some retained upstream analysis and preprocessing utilities still contain
+  `/orcd/...` defaults. They are unsupported provenance code and are not used by
+  the catalogue runner.
 - Upstream result serialization may include raw embeddings and absolute paths.
   Curated artifacts should instead contain identifiers, labels, checksums,
   relative paths, configs, and aggregate metrics.
@@ -255,10 +258,9 @@ means.
 
 The exact CPU path is approximately quadratic in sample count and exponential
 in qubit count, and currently rebuilds/simulates a circuit for every pair. The
-existing cap (`N <= 200`, `q <= 6`) bounds the first adaptation but may still be
-slow. The user should run one tiny timing/memory pilot before any grid. No
-feasibility claim should be made for the full reference dataset or MerLin Gram
-matrix without such measurements.
+reviewed `q=4`, `N=100` grid and the tiny MerLin smoke completed locally. Larger
+sample/qubit grids still require a timing and memory pilot; no feasibility claim
+should be made for the full reference dataset.
 
 ## MerLin 0.4 conclusions
 
@@ -266,31 +268,32 @@ matrix without such measurements.
   matrices usable by scikit-learn's precomputed-kernel SVC.
 - In the installed MerLin 0.4.0, `n_photons=` remains accepted by
   `FidelityKernel`, while `FidelityKernel.simple()` is deprecated. The local
-  adaptation should use `FeatureMap.simple()` and pass an explicit
-  `input_state` so that modes and photon count are inspectable.
-- A native photonic feature map is an adaptation, not automatically equivalent
-  to the qubit BSP circuit.
+  adaptation uses `FeatureMap.simple()` and passes an explicit `input_state` so
+  that modes and photon count are inspectable.
+- The implemented native photonic feature map is an adaptation, not equivalent
+  to the qubit BSP circuit on current evidence.
 - MerLin should reuse the same surrogate inputs, splits, labels, SVM settings,
   and artifact schema, while clearly naming its resource definition.
-- Start only after the upstream CPU baseline is characterized and after a tiny
-  user-run MerLin timing pilot.
+- The initial upstream CPU baseline and tiny user-run MerLin timing smoke are
+  complete; larger comparisons still require a separate user-run pilot.
 - Installing MerLin 0.4.0 in the historical virtual environment upgraded
   scikit-learn from the project pin 1.6.1 to 1.9.0. New artifacts must record
   that environment difference; it does not alter results already generated.
 
 ## Decisions still open
 
-1. Which first offline fixture/sample count and `q` should characterize the
-   preserved CPU path?
-2. Should the first real surrogate remain raw-pixel PneumoniaMNIST, or should it
+1. Should the first real surrogate remain raw-pixel PneumoniaMNIST, or should it
    be limited to smoke while an open frozen-embedding dataset is selected?
-3. After baseline tests, should normalization/preprocessing be compared using
+2. After baseline tests, should normalization/preprocessing be compared using
    the existing upstream options, a new corrected mode, or both?
-4. Should the circuit target the upstream implementation, the paper text, or
+3. Should the circuit target the upstream implementation, the paper text, or
    expose both explicitly?
-5. What exact artifacts and seed count are affordable after the timing pilot?
-6. Should MerLin dependencies share the Qiskit environment or be isolated?
-7. Which legacy HPC/docs/notebook files should be kept, archived, or removed?
+4. What exact artifacts and seed count are affordable after the timing pilot?
+
+Recorded decisions: the first CPU characterization used `q=4`, 100 samples,
+and ten paired data/split seeds; the historical virtual environment is reused
+for MerLin; the approved first cleanup batch is complete. Further cleanup still
+requires an exact reviewed list.
 
 Answers to these questions should be recorded here or in an explicit decision
 section before the corresponding implementation changes.

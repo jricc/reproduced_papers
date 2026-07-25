@@ -55,20 +55,20 @@ def build_dataframe(images: np.ndarray, labels: np.ndarray) -> pd.DataFrame:
     )
 
 
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(
         description="Prepare the public PneumoniaMNIST chest X-ray dataset."
     )
     parser.add_argument(
         "--download_path",
         type=Path,
-        default=Path("data/pneumoniamnist.npz"),
+        default=Path("../../data/qsvm_medimage/pneumoniamnist.npz"),
         help="Location of the official NPZ archive",
     )
     parser.add_argument(
         "--output_path",
         type=Path,
-        default=Path("data/pneumoniamnist_train.pkl"),
+        default=Path("../../data/qsvm_medimage/pneumoniamnist_train.pkl"),
         help="Output pickle understood by the training scripts",
     )
     parser.add_argument(
@@ -77,7 +77,7 @@ def main() -> None:
         default="train",
         help="Official split to convert (default: train)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     download_dataset(args.download_path)
     with np.load(args.download_path) as dataset:

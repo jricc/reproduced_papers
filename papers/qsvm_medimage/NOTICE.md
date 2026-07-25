@@ -3,8 +3,9 @@
 This directory is an adapted copy of the original QML-MedImage repository:
 
 - Original source: <https://github.com/sebasmos/qml-medimage>
+- Imported upstream revision: `9e80037305d683b0e70c94b8fa7dd648e1bac82b`
 - Original paper: *Quantum Kernel Advantage over Classical Collapse in Medical
-  Foundation Model Embeddings*, <https://arxiv.org/abs/2604.24597>
+  Foundation Model Embeddings*, <https://arxiv.org/abs/2604.24597v1>
 - Reproduction collection: <https://github.com/merlinquantum/reproduced_papers>
 
 The original authors retain attribution for the original code and scientific
@@ -17,6 +18,8 @@ Local modifications are intentionally limited to:
 - providing an exact Qiskit statevector backend for CPU and macOS;
 - supporting PneumoniaMNIST as a public alternative dataset;
 - providing a separate MerLin 0.4 photonic fidelity-kernel adaptation;
+- adding a thin shared-catalogue runtime adapter;
+- removing unused private/HPC artifacts and dependencies after review;
 - documenting the alternative execution path.
 
 The alternative dataset and CPU results are not a reproduction of the paper's

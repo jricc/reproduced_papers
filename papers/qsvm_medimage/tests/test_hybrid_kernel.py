@@ -4,8 +4,7 @@ Tests for hybrid kernel functionality.
 
 Verifies:
 1. Hybrid kernel math is correct
-2. qsvm_hybrid_insurance.py is isolated from existing code
-3. Hybrid features in qsvm_cuda_embeddings_insurance.py are backwards compatible
+2. Hybrid features in qsvm_cuda_embeddings_insurance.py are backwards compatible
 
 Usage:
     pytest tests/test_hybrid_kernel.py -v
@@ -65,68 +64,6 @@ class TestHybridKernelMath:
 
         K_h = get_hybrid_kernel_matrix(K_c, K_q, alpha=0.6)
         np.testing.assert_array_almost_equal(K_h, K_h.T)
-
-
-class TestHybridScriptIsolation:
-    """Test that qsvm_hybrid_insurance.py is isolated from existing code."""
-
-    @pytest.fixture
-    def hybrid_script_path(self):
-        return os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "scripts", "qsvm_hybrid_insurance.py"
-        )
-
-    @pytest.fixture
-    def main_script_path(self):
-        return os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "scripts", "qsvm_cuda_embeddings_insurance.py"
-        )
-
-    def test_hybrid_script_exists(self, hybrid_script_path):
-        """Test hybrid script file exists."""
-        assert os.path.exists(hybrid_script_path), "qsvm_hybrid_insurance.py should exist"
-
-    def test_hybrid_script_syntax(self, hybrid_script_path):
-        """Test hybrid script has valid Python syntax."""
-        import py_compile
-        py_compile.compile(hybrid_script_path, doraise=True)
-
-    def test_hybrid_script_has_own_function(self, hybrid_script_path):
-        """Test hybrid script defines its own get_hybrid_kernel_matrix."""
-        with open(hybrid_script_path, 'r') as f:
-            content = f.read()
-
-        tree = ast.parse(content)
-        function_names = [
-            node.name for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef)
-        ]
-
-        assert 'get_hybrid_kernel_matrix' in function_names, \
-            "Hybrid script should have its own get_hybrid_kernel_matrix function"
-
-    def test_hybrid_script_independent_imports(self, hybrid_script_path):
-        """Test hybrid script doesn't import get_hybrid_kernel_matrix from qve.core."""
-        with open(hybrid_script_path, 'r') as f:
-            content = f.read()
-
-        # Should NOT import get_hybrid_kernel_matrix from qve
-        # It defines its own locally
-        tree = ast.parse(content)
-
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                if node.module and 'qve' in node.module:
-                    imported_names = [alias.name for alias in node.names]
-                    assert 'get_hybrid_kernel_matrix' not in imported_names, \
-                        "Hybrid script should use local function, not import from qve"
-
-    def test_main_script_syntax(self, main_script_path):
-        """Test main script still has valid syntax."""
-        import py_compile
-        py_compile.compile(main_script_path, doraise=True)
 
 
 class TestBackwardsCompatibility:

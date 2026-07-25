@@ -67,17 +67,18 @@ uv.lock
 # Experiments/outputs
 experiments/
 outputs/
+outdir/
 logs/
 *.log
+
+# Required empty catalogue directory
+!models/
+!models/.gitkeep
 
 # Credentials
 .env
 *.env
 credentials.json
-
-# SLURM completion markers and dotfiles
-slurm/**/.completed*
-slurm/**/.*
 
 # Temporary exclusions (to add later)
 Results-temp

@@ -69,13 +69,15 @@ guess the mapping.
 
 ### What already exists
 
-- The authors' Qiskit/MPI/cuQuantum code and HPC launch material are present.
+- The authors' Qiskit/MPI/cuQuantum scientific code is retained; obsolete HPC
+  launch material was removed after approval.
 - A serial MPI fallback and an exact Qiskit statevector CPU path were added.
 - A PneumoniaMNIST preparation script and a bounded Table 1 adaptation launcher
   exist for `q = 2, 4, 6`, five seeds, and at most 200 samples.
 - Linear `C=1` and tuned-RBF baselines plus a Table 1 summary script exist.
 - README/NOTICE already acknowledge that PneumoniaMNIST is not MIMIC-CXR.
-- No current MerLin implementation or curated local result is present.
+- A MerLin 0.4 fidelity-kernel smoke, curated local results, and the thin shared
+  catalogue runner are present.
 
 ### Scientific observations retained for discussion
 
@@ -106,21 +108,15 @@ and the full discussion record.
 
 ### Catalogue and maintenance issues
 
-- The required runtime markers `configs/defaults.json`, root `cli.json`, and
-  `lib/runner.py` are absent, so the shared runtime cannot discover this paper.
-- Raw data/output locations and direct script commands do not follow the
-  catalogue contract.
-- Several tests refer to missing scripts or absolute HPC paths and may skip the
-  only behavior they claim to test.
-- Requirements are duplicated/inconsistent; the CPU import path implicitly
-  depends on Torch, and old MerLin code is incompatible with the 0.4 kernel
-  constructor.
-- README, SLURM files, notebooks, generated site, and commands contain stale or
-  missing upstream paths. No file should be removed before an explicit
-  keep/archive/delete inventory is approved.
-- Curated artifacts do not exist. `results/` is ignored, while upstream code can
-  serialize raw embeddings and absolute paths; curated outputs must be small and
-  sanitized.
+- The shared runtime markers and thin MerLin runner are now present; a user-run
+  catalogue smoke remains to be performed.
+- The catalogue path uses `data/qsvm_medimage/` and writes raw runs under
+  `outdir/run_*`; direct legacy scripts remain available separately.
+- Obsolete HPC tests and artifacts were removed after an explicit inventory,
+  and a fast runtime-contract test was added.
+- Direct dependencies are declared consistently in `requirements.txt` and
+  `pyproject.toml`.
+- Small sanitized result artifacts are versioned under `results/`.
 
 ## Selected artifacts
 
@@ -245,17 +241,14 @@ before considering any scientific correction.
 
 ### Phase 2 -- Integrate the shared catalogue runtime
 
-Status: **not started**.
+Status: **minimal integration implemented; user-run smoke pending**.
 
-Add only the minimum runtime skeleton:
+Keep only the minimum runtime skeleton:
 
 - `configs/defaults.json`: intentionally small CPU-safe defaults;
-- `configs/smoke_cpu.json`: tiny offline fixture, not a scientific result;
-- `configs/table1_cpu_surrogate.json`: the declared upstream-baseline grid;
-- `configs/kernel_geometry_cpu.json`: geometry artifacts from a selected run;
 - root `cli.json`: paper-specific options only;
 - `lib/runner.py::train_and_evaluate(cfg, run_dir)` as a thin adapter around the
-  preserved upstream entry path.
+  validated MerLin entry path.
 
 Use `data/qsvm_medimage/` for datasets, `outdir/run_*` for disposable raw runs,
 and `results/` only for curated, sanitized outputs. Keep the existing upstream
@@ -271,8 +264,8 @@ pytest -q papers/qsvm_medimage/tests
 ```
 
 The paper must be discoverable, imports must be CPU-only by default, and the
-offline smoke config must write the standard config snapshot/log/artifact
-manifest when the user chooses to execute it.
+small prepared-data smoke must write the standard config snapshot, log, and
+result artifacts when the user chooses to execute it.
 
 ### Phase 3 -- Establish data tiers
 
@@ -299,7 +292,7 @@ Status: **blocked on Phases 1--3 and user execution**.
 The agent prepares commands and validates configuration statically. The user
 runs experiments in this order:
 
-1. tiny offline smoke;
+1. tiny prepared-data smoke;
 2. one-configuration timing/memory pilot;
 3. one small `upstream_baseline` Tier 1 comparison;
 4. review the baseline and the discussion gate;
@@ -330,7 +323,7 @@ are documented.
 
 ### Phase 6 -- Add the MerLin 0.4 adaptation
 
-Status: **initial local smoke complete; shared-runtime integration deferred**.
+Status: **local smoke complete; shared-runtime smoke pending user execution**.
 
 - Implement the documented `FeatureMap` + `FidelityKernel(feature_map,
   input_state, ...)` API. Prefer an explicit `input_state` so that photon count
@@ -371,36 +364,25 @@ called TODO rather than inferred.
 
 ### Phase 8 -- Approved cleanup and final review
 
-Status: **inventory complete; waiting for explicit deletion approval**.
+Status: **approved first cleanup complete**.
 
 - Present the keep/archive/delete inventory for explicit approval.
 - Remove only approved obsolete HPC scripts, broken tests, stale generated site,
   caches, and redundant dependency entries.
 - Preserve useful upstream provenance and any compatibility scripts documented
   as such.
+- Before opening a pull request, create a branch with an accepted catalogue
+  prefix such as `paper-qsvm-medimage`; keep the current development branch
+  unchanged until then.
 - Perform the final focused checks only when explicitly requested by the user.
 
-Proposed first cleanup batch:
+The approved batch removed obsolete HPC launchers, generated documentation,
+private-path notebooks, broken tests, and unused dependencies. Active CPU and
+MerLin scripts, `qve/`, useful tests, curated artifacts, and Python PCA
+utilities remain.
 
-- remove all of `slurm/` (24 obsolete HPC launchers) and
-  `MULTISEED_COMMANDS.md`;
-- remove all of `docs/` (six stale/generated website files, including the
-  6.7 MB audio summary);
-- remove the four legacy Colab notebooks directly under `pre-processing/`;
-- remove `tests/save_kernels_q11.sh`, `tests/save_kernels_q16.sh`,
-  `tests/run_tests_standalone.py`, `tests/test_imports.py`,
-  `tests/test_script_imports.py`, `tests/test_qsvm_quick.py`,
-  `tests/test_process_fix.py`, and `tests/test_aggregation_fix.py`;
-- remove generated `pre-processing/pca-pipeline/pca_variance_analysis.csv` and
-  both unused `memory-profiler` entries from `requirements.txt`;
-- remove the now-unused Slurm marker rules from `.gitignore`.
-
-Keep the raw local run directories for now, along with all active CPU/MerLin
-scripts, `qve/`, `tests/test_basic.py`, `tests/test_qve_core.py`, the useful
-mathematical portion of `tests/test_hybrid_kernel.py`, and the Python PCA
-utilities. Any second cleanup batch requires another review.
-
-Acceptance: no absolute local/HPC path in active code or documentation; no
+Acceptance: no absolute local/HPC path in the supported runtime or documentation;
+retained upstream utilities with HPC defaults are explicitly unsupported; no
 duplicate implementation path; requirements match imports; Git diff contains no
 generated/raw data; the user has the exact commands needed for final validation.
 

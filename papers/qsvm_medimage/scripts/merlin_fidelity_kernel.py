@@ -87,19 +87,19 @@ def validate_kernel(matrix, expected_shape, name, square=False):
     return summary
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--data_path",
         type=Path,
-        default=Path("data/pneumoniamnist_train.pkl"),
+        default=Path("../../data/qsvm_medimage/pneumoniamnist_train.pkl"),
     )
     parser.add_argument("--output_dir", type=Path, required=True)
     parser.add_argument("--pca_dim", type=int, default=2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--circuit_seed", type=int, default=0)
     parser.add_argument("--max_samples", type=int, default=100)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not 1 <= args.pca_dim <= 19:
         raise ValueError("MerLin FeatureMap.simple requires 1 <= pca_dim <= 19")
@@ -238,7 +238,7 @@ def main():
     with (args.output_dir / "dataset_info.json").open("w") as file:
         json.dump(
             {
-                "scope": "merlin_photonic_surrogate",
+                "scope": "merlin_photonic_adaptation",
                 "data_path": str(args.data_path),
                 "class_names": class_names,
                 "minority_class": class_names[minority_label],

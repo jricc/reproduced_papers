@@ -36,6 +36,8 @@
 ## Answer style
 
 - Be short, direct, and precise.
+- Keep all repository content, including notebooks, documentation, code
+  comments, configuration text, and artifact labels, in English.
 - Use simple vocabulary and prefer clear explanations over jargon.
 - Name the dataset, protocol, backend, and experiment when a statement depends
   on that context.
