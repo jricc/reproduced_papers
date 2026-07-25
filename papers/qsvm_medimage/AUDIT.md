@@ -129,6 +129,27 @@ training trace. The code/text difference should first be observed in the
 preserved baseline, then discussed. A later corrected mode would need to carry
 the training normalization state into every cross-kernel.
 
+#### Local characterization on the surrogate dataset
+
+A temporary, uncommitted diagnostic compared three otherwise identical
+PneumoniaMNIST runs with `q=4`, seed 0, 100 samples, and `C=1`:
+
+| Kernel scaling | Train minority F1 | Validation minority F1 | Test minority F1 |
+|---|---:|---:|---:|
+| upstream `trace` | 0.000 | 1.000 | 0.800 |
+| `none` | 0.778 | 1.000 | 0.800 |
+| training-trace applied consistently | 0.000 | 0.000 | 0.000 |
+
+With consistent trace scaling, every hard prediction was the majority class,
+although AUC remained 1.0. This shows that the nonzero held-out F1 of the
+upstream path can be caused by the train/cross-kernel scale mismatch. It does
+not establish behavior on the paper's controlled embeddings: this was one seed
+of a raw-pixel surrogate with only two minority samples in the test split.
+
+The temporary corrected option was removed after this diagnostic. The retained
+code continues to expose only the upstream normalization modes; any corrected
+path requires a separate explicit decision.
+
 ### 2. MinMax scaling uses held-out data by default
 
 **Confirmed upstream behavior, not introduced by the CPU adaptation.**
@@ -243,15 +264,19 @@ matrix without such measurements.
 
 - MerLin 0.4 supports a CPU `FeatureMap` + `FidelityKernel` path returning Gram
   matrices usable by scikit-learn's precomputed-kernel SVC.
-- The historical local photonic code passes `n_photons=` to `FidelityKernel`;
-  that keyword is not accepted by the 0.4 constructor because photon number is
-  inferred from `input_state`.
+- In the installed MerLin 0.4.0, `n_photons=` remains accepted by
+  `FidelityKernel`, while `FidelityKernel.simple()` is deprecated. The local
+  adaptation should use `FeatureMap.simple()` and pass an explicit
+  `input_state` so that modes and photon count are inspectable.
 - A native photonic feature map is an adaptation, not automatically equivalent
   to the qubit BSP circuit.
 - MerLin should reuse the same surrogate inputs, splits, labels, SVM settings,
   and artifact schema, while clearly naming its resource definition.
 - Start only after the upstream CPU baseline is characterized and after a tiny
   user-run MerLin timing pilot.
+- Installing MerLin 0.4.0 in the historical virtual environment upgraded
+  scikit-learn from the project pin 1.6.1 to 1.9.0. New artifacts must record
+  that environment difference; it does not alter results already generated.
 
 ## Decisions still open
 

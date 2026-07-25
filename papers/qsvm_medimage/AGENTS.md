@@ -45,6 +45,9 @@
 
 ## Working mode
 
+**Always choose the simplest solution. Keep changes local and minimal,
+especially when adapting upstream code.**
+
 Use simple mode by default:
 
 - Understand the current code first.

@@ -203,6 +203,9 @@ explicit discussion/approval.
 
 ## Implementation phases
 
+Current execution order agreed with the user: MerLin implementation, README,
+pedagogical notebook, then an explicitly approved cleanup.
+
 ### Phase 0 -- Governance and provenance
 
 Status: **audit complete; metadata implementation pending**.
@@ -221,53 +224,24 @@ Status: **audit complete; metadata implementation pending**.
 Acceptance: one authoritative `AGENTS.md`; no ambiguous reproduction claim; no
 destructive cleanup hidden inside a refactor.
 
-### Phase 1 -- Freeze and characterize the upstream baseline
+### Phase 1 -- Minimal CPU and alternative-dataset adaptation
 
-Status: **not started**.
+Status: **complete for the CPU/PneumoniaMNIST smoke**.
 
-- Record the upstream commit and a file-level inventory of local changes.
-- Keep existing upstream scientific semantics unchanged.
-- Complete only the minimal CPU/serial and alternative-data compatibility path
-  needed for a tiny test.
-- Keep the original script entry point usable; do not refactor its scientific
-  logic into a new implementation.
-- Capture the effective config, versions, dataset identity, seed, sample count,
-  timings, exit status, and produced files for each characterization run.
-- Observe and record the normalization, preprocessing, circuit, final-training,
-  and failure behavior identified in `AUDIT.md`; do not silently fix it.
+- Preserve the original scripts and their scientific behavior.
+- Keep only the local CPU statevector path, serial fallback, and support for the
+  alternative dataset schema.
+- Make an optional dependency non-blocking only when it prevents the CPU path
+  from importing or running.
+- Do not add a new framework, abstraction, inventory, or test architecture in
+  this phase.
+- Use the original entry point with the smallest practical CPU configuration;
+  the user runs it and reports the result.
 
-Focused tests to prepare:
-
-- import the upstream package without CUDA or a live MPI installation;
-- compute a tiny CPU kernel through the preserved entry path;
-- load a tiny offline fixture through the alternative-data adapter;
-- record the actual train/cross-kernel normalization behavior;
-- record whether changing held-out extrema changes the training transform;
-- record the actual circuit gates and parameter count;
-- record exit status and artifact presence for one controlled failure.
-
-Acceptance: the upstream baseline is pinned, its local compatibility diff is
-documented, and the user has run the tiny tests without network, GPU, HPC, or
-controlled data. The observations are recorded as baseline behavior; no
-scientific correction or result claim is made.
-
-### Discussion gate -- Decide whether to correct the protocol
-
-Status: **blocked on user-run Phase 1 tests**.
-
-Review the Phase 1 observations against `AUDIT.md`. Decide separately whether to
-correct:
-
-- train/cross-kernel normalization;
-- MinMax leakage and paired preprocessing;
-- paper-text versus upstream circuit;
-- final train/validation semantics and stratification;
-- failure propagation and grid completeness;
-- rounding and numerical validation.
-
-Any approved correction must use a distinct config/mode such as
-`corrected_protocol`, preserve `upstream_baseline`, and produce paired artifacts
-that identify the protocol. No correction is implied by this plan alone.
+Acceptance: the original QSVM script can read the prepared alternative dataset,
+run on CPU without CUDA/HPC, and write its normal outputs. The diff remains
+local and minimal. After that first run, discuss the observed pipeline behavior
+before considering any scientific correction.
 
 ### Phase 2 -- Integrate the shared catalogue runtime
 
@@ -356,12 +330,12 @@ are documented.
 
 ### Phase 6 -- Add the MerLin 0.4 adaptation
 
-Status: **blocked on the characterized qubit baseline and MerLin dependency
-decision**.
+Status: **initial local smoke complete; shared-runtime integration deferred**.
 
 - Implement the documented `FeatureMap` + `FidelityKernel(feature_map,
-  input_state, ...)` API. In MerLin 0.4, photon count is inferred from
-  `input_state`; do not pass the obsolete `n_photons=` keyword.
+  input_state, ...)` API. Prefer an explicit `input_state` so that photon count
+  is recorded; the installed 0.4.0 still accepts `n_photons=`, but
+  `FidelityKernel.simple()` is deprecated.
 - Define the mapping from PCA features to photonic phases and state explicitly
   whether it is a native photonic analogue or a resource-matched translation.
 - Reuse the exact surrogate split manifests, fitted features, SVM protocol, and
@@ -379,7 +353,7 @@ reported as reproducing the paper's qubit kernel without equivalence evidence.
 
 ### Phase 7 -- Notebook, documentation, and curated results
 
-Status: **blocked on validated artifacts**.
+Status: **paper-local README, notebook, and curated artifacts complete**.
 
 - Create a pedagogical `notebook.ipynb` that loads a small fixture or existing
   structured run; it must not require HPC or execute a full Gram computation.
@@ -397,7 +371,7 @@ called TODO rather than inferred.
 
 ### Phase 8 -- Approved cleanup and final review
 
-Status: **not started**.
+Status: **inventory complete; waiting for explicit deletion approval**.
 
 - Present the keep/archive/delete inventory for explicit approval.
 - Remove only approved obsolete HPC scripts, broken tests, stale generated site,
@@ -405,6 +379,26 @@ Status: **not started**.
 - Preserve useful upstream provenance and any compatibility scripts documented
   as such.
 - Perform the final focused checks only when explicitly requested by the user.
+
+Proposed first cleanup batch:
+
+- remove all of `slurm/` (24 obsolete HPC launchers) and
+  `MULTISEED_COMMANDS.md`;
+- remove all of `docs/` (six stale/generated website files, including the
+  6.7 MB audio summary);
+- remove the four legacy Colab notebooks directly under `pre-processing/`;
+- remove `tests/save_kernels_q11.sh`, `tests/save_kernels_q16.sh`,
+  `tests/run_tests_standalone.py`, `tests/test_imports.py`,
+  `tests/test_script_imports.py`, `tests/test_qsvm_quick.py`,
+  `tests/test_process_fix.py`, and `tests/test_aggregation_fix.py`;
+- remove generated `pre-processing/pca-pipeline/pca_variance_analysis.csv` and
+  both unused `memory-profiler` entries from `requirements.txt`;
+- remove the now-unused Slurm marker rules from `.gitignore`.
+
+Keep the raw local run directories for now, along with all active CPU/MerLin
+scripts, `qve/`, `tests/test_basic.py`, `tests/test_qve_core.py`, the useful
+mathematical portion of `tests/test_hybrid_kernel.py`, and the Python PCA
+utilities. Any second cleanup batch requires another review.
 
 Acceptance: no absolute local/HPC path in active code or documentation; no
 duplicate implementation path; requirements match imports; Git diff contains no

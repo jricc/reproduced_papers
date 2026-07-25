@@ -1,351 +1,217 @@
-# QML-MedImage — reproduction adaptation
+# Quantum Kernel Advantage over Classical Collapse — reproduction adaptation
 
-> [!IMPORTANT]
-> This directory is an adapted copy of the original
-> [`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage) repository,
-> maintained in a fork of
-> [`merlinquantum/reproduced_papers`](https://github.com/merlinquantum/reproduced_papers).
-> The local changes provide a macOS/CPU execution path and support for the
-> public PneumoniaMNIST alternative dataset. They do not claim to reproduce the
-> paper's original MIMIC-CXR results. See [NOTICE.md](NOTICE.md) for attribution
-> and modification details.
+This directory adapts
+[`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage) for CPU
+execution, the open PneumoniaMNIST dataset, and a MerLin 0.4 photonic kernel.
+It belongs to a fork of
+[`merlinquantum/reproduced_papers`](https://github.com/merlinquantum/reproduced_papers).
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
-[![Tests](https://img.shields.io/badge/Tests-pytest-orange.svg)](tests/)
-[![Dataset on HF](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-qml--mimic--cxr--embeddings-yellow.svg)](https://huggingface.co/datasets/MITCriticalData/qml-mimic-cxr-embeddings)
-[![Qiskit](https://img.shields.io/badge/Qiskit-1.0%2B-6929C4.svg)](https://qiskit.org/)
-[![cuQuantum](https://img.shields.io/badge/NVIDIA-cuQuantum-76B900.svg)](https://developer.nvidia.com/cuquantum-sdk)
-[![arXiv](https://img.shields.io/badge/arXiv-2604.24597-b31b1b.svg)](https://arxiv.org/abs/2604.24597)
+> **Scope:** the results below are surrogate experiments on raw
+> PneumoniaMNIST pixels. They do not reproduce the paper's controlled
+> MIMIC-CXR medical-foundation-model embeddings.
 
-Quantum Support Vector Machine (QSVM) for binary insurance classification on
-MIMIC-CXR chest radiographs using frozen embeddings from medical foundation
-models.
+## Reference and attribution
 
-Paper: [Quantum Kernel Advantage over Classical Collapse in Medical Foundation Model Embeddings](https://arxiv.org/abs/2604.24597)
+- Paper: [*Quantum Kernel Advantage over Classical Collapse in Medical
+  Foundation Model Embeddings*](https://arxiv.org/abs/2604.24597)
+- Original code: [`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage)
+- Local changes and attribution: [NOTICE.md](NOTICE.md)
+- Detailed scientific audit: [AUDIT.md](AUDIT.md)
+- Current roadmap: [PLAN.md](PLAN.md)
 
-## Table of Contents
+## Original paper
 
-- [Quick Start](#quick-start)
-- [Running Locally (Python)](#running-locally-python)
-- [SLURM Cluster Usage](#slurm-cluster-usage)
-  - [Grid Launchers](#grid-launchers): [Classical SVM](slurm/0-svm-classical-grid-insurance/README.md) | [QSVM Baseline](slurm/1-qsvm-grid-insurance/README.md) | [Hybrid QSVM](slurm/2-hybrid-model-insurance/README.md) | [VQC](slurm/3-vqc-model-insurance/README.md)
-  - [Single-Job Scripts](#single-job-scripts)
-- [CLI Arguments](#cli-arguments)
-- [Project Structure](#project-structure)
-- [Testing](#testing)
-- [Dataset](#dataset)
-- [Requirements](#requirements)
-- [Citation](#citation)
+The paper studies binary classification from frozen medical image embeddings.
+It compares a QSVM using a qubit BSP feature map with classical linear and RBF
+SVMs after PCA dimensionality reduction.
 
-## Quick Start
+Its main claim is that the trace-normalized QSVM with `C=1` obtains a higher
+minority-class F1 than the untuned linear SVM for every tested model/qubit
+configuration. The paper also reports an advantage over a validation-tuned RBF
+baseline at equal PCA dimension.
 
-```bash
-# Create environment
-conda create -n qml-medimage python=3.11 -y
-conda activate qml-medimage
+This repository focuses on that comparison, but current local constraints
+change both the data representation and the quantum implementation.
 
-# Install package
-cd /path/to/QML-MedImage
-pip install -e .
+## Reproduction scope
 
-# On HPC: load modules first
-module load miniforge/24.3.0-0
-module load cuda/12.4.0
+| Scope | Status | Meaning |
+|---|---|---|
+| Reference reproduction | Not run | Original task, controlled embeddings and qubit protocol |
+| Open-data CPU surrogate | Implemented | Raw PneumoniaMNIST pixels with QSVM, linear SVM and RBF SVM |
+| MerLin adaptation | Initial smoke implemented | Native photonic fidelity kernel, not the paper's BSP qubit kernel |
 
-# Verify installation
-python -c "import sklearn; import qiskit; print('OK')"
-```
+The upstream scientific pipeline is preserved as the initial baseline. Local
+changes are limited to CPU execution, alternative-data compatibility and the
+separate MerLin script.
 
-## Running Locally (Python)
+## Installation
 
-All scripts can be run directly with `python`. Set `QML_DATA_ROOT` to the
-directory where you downloaded the embeddings from HuggingFace:
+Conda is not required. From this directory:
 
 ```bash
-export QML_DATA_ROOT=/path/to/qml-mimic-cxr-embeddings
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
-### Public CPU-friendly alternative: PneumoniaMNIST
+The combined environment pins MerLin 0.4.0 and a compatible scikit-learn
+version. The original repository used scikit-learn 1.6.1; the current MerLin
+environment uses scikit-learn 1.9.0.
 
-If the MIMIC-CXR embeddings are unavailable, prepare the public binary
-PneumoniaMNIST chest X-ray dataset:
+## Data
+
+Prepare the official PneumoniaMNIST training split:
 
 ```bash
 python scripts/prepare_pneumoniamnist.py
 ```
 
-Then run a small exact CPU experiment:
+This creates `data/pneumoniamnist_train.pkl`. Each 28×28 image is flattened to
+784 normalized pixels. The labels are `normal` and `pneumonia`; `normal` is the
+minority class in the experiments below.
+
+These pixels are accepted by the upstream `embedding` input field for
+compatibility, but they are not frozen medical foundation-model embeddings.
+
+## How to run
+
+### CPU QSVM and classical baselines
+
+The following reproduces the reviewed `q=4`, ten-seed surrogate comparison:
 
 ```bash
-python scripts/qsvm_cuda_embeddings_insurance.py \
-    --data_path data/pneumoniamnist_train.pkl \
-    --output_dir results/pneumoniamnist-cpu \
-    --backend cpu \
-    --qubits 2 \
-    --max_samples 100 \
-    --single_mode
-```
-
-The converter uses the official training split and stores normalized 28×28
-pixels as features. CPU statevector simulation and kernel construction become
-expensive as the number of qubits or samples increases.
-
-### Adapted Table I
-
-The launcher compares CPU QSVM runs with an untuned linear SVM and a
-validation-tuned RBF SVM for `q=2,4,6` and five paired seeds:
-
-```bash
+Q_VALUES=4 \
+SEEDS=0,1,2,3,4,5,6,7,8,9 \
+MAX_SAMPLES=100 \
+RESULT_ROOT=results/q4-seed-stability \
 bash scripts/run_table1_adaptation.sh
 ```
 
-The defaults can be changed with environment variables:
+For each seed, the seed controls both deterministic subsampling and the
+stratified 80/10/10 split. It is not an embedding-generation seed like those
+used in the paper.
+
+### MerLin photonic fidelity kernel
+
+Run the reviewed CPU smoke:
 
 ```bash
-Q_VALUES=2,4 SEEDS=0,1 MAX_SAMPLES=100 \
-  bash scripts/run_table1_adaptation.sh
+XDG_DATA_HOME=/tmp/qsvm-merlin-data \
+MPLCONFIGDIR=/tmp/qsvm-merlin-mpl \
+PYTHONDONTWRITEBYTECODE=1 \
+.venv/bin/python scripts/merlin_fidelity_kernel.py \
+  --output_dir results/merlin/q_2/seed_0 \
+  --pca_dim 2 \
+  --seed 0 \
+  --circuit_seed 0 \
+  --max_samples 100
 ```
 
-For each `q`, results are averaged over paired seeds before counting a
-minority-class F1 win. This remains an adaptation with one dataset, not a
-reproduction of the paper's original multi-model counts.
+Here `seed` controls the data subset and split, while `circuit_seed` controls
+the fixed random parameters of the photonic feature map. With `pca_dim=2`, the
+MerLin map uses three optical modes and the Fock input state `[1, 0, 1]`.
 
-### Example 1: QSVM on MedSigLIP-448 (q=11, Tier-1 paper result)
+The script writes:
 
-```bash
-python scripts/qsvm_cuda_embeddings_insurance.py \
-    --data_path $QML_DATA_ROOT/medsiglip-448-embeddings/20-seeds/seed_0/data_type9_n2371.parquet \
-    --output_dir results/qsvm-medsiglip-q11-seed0 \
-    --qubits 11 \
-    --normalize_method trace \
-    --seed 0
-```
-
-### Example 2: Classical SVM baseline (Tier-1 comparison, C=1, all seeds)
-
-```bash
-python scripts/classical_svm_multiseed.py \
-    --output_dir results/svm-baseline \
-    --seeds 0,1,2,3,4,5,6,7,8,9 \
-    --pca_dims 2,3,4,5,6,8,9,10,11,12,16
-```
-
-### Example 3: Tier-2 RBF rank-matched comparison
-
-```bash
-python scripts/rbf_rank_matched_multiseed.py \
-    --output_dir results/rbf-rank-matched
-```
-
-### Example 4: Aggregate multi-seed results and run bootstrap
-
-```bash
-python scripts/aggregate_multiseed.py --run_dir results/qsvm-medsiglip-q11-seed0
-python scripts/bootstrap_ci.py --run_dir results/qsvm-medsiglip-q11-seed0
-```
-
-### Results
-
-Results are saved to the specified `--output_dir`:
-```
+```text
 output_dir/
-├── metrics_summary.csv        # Accuracy, AUC, F1 scores per seed
-├── confusion_matrix_test.csv  # Confusion matrix
-└── dataset_info.json          # Run configuration
+|-- metrics_summary.csv
+`-- dataset_info.json
 ```
 
-## SLURM Cluster Usage
+## Results obtained
 
-For HPC clusters with SLURM scheduler and GPU nodes. Edit the `#SBATCH`
-headers (partition, account) and `DATA_DIR` in each script to match your
-cluster before submitting.
+### Ten-seed CPU surrogate at q=4
 
-### Setup
+All models used the same 100-sample seed/split pairs. The reported uncertainty
+is the sample standard deviation across ten seeds.
 
-```bash
-module load miniforge/24.3.0-0
-module load cuda/12.4.0
-conda create -n qml-medimage python=3.11 -y
-conda activate qml-medimage
+| Model | Test minority F1, mean ± std | Zero-F1 seeds |
+|---|---:|---:|
+| QSVM, `C=1`, upstream trace path | 0.610 ± 0.356 | 2/10 |
+| Linear SVM, `C=1` | 0.597 ± 0.351 | 2/10 |
+| Validation-tuned RBF SVM | 0.630 ± 0.373 | 2/10 |
 
-cd /path/to/QML-MedImage
-pip install -e .
-```
+The QSVM mean is `+0.013` above the linear SVM and `−0.020` below the tuned
+RBF. Paired against the linear SVM, it records one win, eight ties and one loss.
+This small raw-pixel surrogate therefore does not reproduce the paper's broad
+QSVM-advantage claim.
 
-### Grid Launchers
+### MerLin q=2 smoke, seed 0
 
-Each experiment type has a dedicated launcher:
+| Split | Accuracy | Minority F1 | AUC |
+|---|---:|---:|---:|
+| Train | 0.8625 | 0.000 | 0.9499 |
+| Validation | 0.9000 | 0.000 | 1.0000 |
+| Test | 0.8000 | 0.000 | 1.0000 |
 
-- **Classical SVM** (baseline): see [slurm/0-svm-classical-grid-insurance/README.md](slurm/0-svm-classical-grid-insurance/README.md)
-- **QSVM Baseline** (pure quantum kernel): see [slurm/1-qsvm-grid-insurance/README.md](slurm/1-qsvm-grid-insurance/README.md)
-- **Hybrid QSVM** (quantum-classical kernel): see [slurm/2-hybrid-model-insurance/README.md](slurm/2-hybrid-model-insurance/README.md)
-- **VQC** (Variational Quantum Classifier): see [slurm/3-vqc-model-insurance/README.md](slurm/3-vqc-model-insurance/README.md)
+The kernel computation took 0.771 seconds and the complete run 0.843 seconds.
+The Gram matrices passed the configured shape, finiteness, symmetry, diagonal,
+range and PSD-tolerance checks.
 
-### Single-Job Scripts
+The classifier nevertheless predicted only the majority class. The test AUC
+of 1.0 means its scores ranked the two normal examples correctly, but its hard
+decision threshold detected neither one. With only ten test images and one
+seed, this is a technical smoke, not evidence for or against a photonic
+advantage. No matching local q=2 seed-0 qubit/classical artifact remains for an
+exact paired comparison.
 
-```bash
-sbatch slurm/qsvm_insurance_single-capped.sh           # QSVM quick test (100 samples)
-sbatch slurm/qsvm_insurance_single.sh                  # QSVM full dataset
-sbatch slurm/qsvm_insurance_multinode-single.sh        # QSVM multi-GPU (single seed)
-sbatch slurm/qsvm_insurance_multinode-multiseed.sh     # QSVM multi-GPU (all seeds)
-sbatch slurm/svm_insurance.sh                          # Classical SVM baseline
-sbatch slurm/multiseed_medsig_dt9.sh                   # Multi-seed MedSigLIP-448
-sbatch slurm/multiseed_raddino_dt9.sh                  # Multi-seed RAD-DINO
-sbatch slurm/multiseed_vit_dt9.sh                      # Multi-seed ViT-patch32
-sbatch slurm/rbf_rank_matched_multiseed.sh             # Tier-2 RBF comparison
-```
+Small, sanitized values used by this README are kept in
+[`results/curated_results.csv`](results/curated_results.csv) and
+[`results/merlin_q2_seed0.json`](results/merlin_q2_seed0.json).
 
-### Monitor Jobs
+## Notebook
 
-```bash
-squeue --me                                    # Check job status
-sacct -j <JOB_ID> --format=JobID,State,MaxRSS  # Check memory usage
-```
+[`notebook.ipynb`](notebook.ipynb) loads only the curated artifacts, explains
+the minority-class F1 and plots the CPU and MerLin results. It performs no
+kernel calculation and can therefore be read or executed quickly on CPU.
 
-## CLI Arguments
+## Important limitations
 
-### QSVM Scripts
+- PneumoniaMNIST pixels are not equivalent to the paper's frozen MIMIC-CXR
+  embeddings.
+- The MerLin fidelity kernel is a native photonic adaptation, not a faithful
+  implementation or resource match of the BSP qubit circuit.
+- The current sample cap leaves only ten test images, including two minority
+  examples for seed 0.
+- The preserved upstream path fits its final MinMax transform using training
+  plus held-out data. This is a preprocessing leak.
+- The upstream trace path divides square training kernels by their trace while
+  leaving rectangular cross-kernels unscaled. This behavior is preserved and
+  documented in [AUDIT.md](AUDIT.md).
+- Installing MerLin changed the environment from scikit-learn 1.6.1 to 1.9.0.
+- No result here reproduces the paper's all-configuration or statistical
+  significance claims.
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--data_path` | Path to .parquet file or directory | Required |
-| `--output_dir` | Output directory | Required |
-| `--qubits` | Number of qubits (= PCA dims) | 2 |
-| `--max_samples` | Max training samples (None=all) | None |
-| `--seed` | Random seed | 42 |
-| `--normalize_method` | Normalization: `trace`, `minmax`, `none` | `trace` |
+## Tests and verification
 
-### Classical SVM Scripts
+The MerLin script was checked for syntax and import/CLI construction. The
+documented q=2 command was then run by the user and produced the reported
+artifacts. Full QSVM grids are intentionally user-run because exact kernel
+construction becomes expensive with sample count and qubit count.
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--output_dir` | Output directory | Required |
-| `--seeds` | Comma-separated seed list | `0,1,...,9` |
-| `--pca_dims` | Comma-separated PCA dimension list | `2,3,4,5,6,8,9,10,11,12,16` |
+## Legacy files and cleanup
 
-## Project Structure
+The original HPC, SLURM, preprocessing notebooks and generated documentation
+remain present for provenance. They are not part of the supported CPU/MerLin
+path. They will only be removed after review and explicit approval of an exact
+file list.
 
-```
-QML-MedImage/
-├── scripts/                              # Training and analysis scripts
-│   ├── qsvm_cuda_embeddings_insurance.py # Main QSVM (GPU, multi-seed)
-│   ├── classical_svm_multiseed.py        # Tier-1 classical baseline (C=1)
-│   ├── classical_svm_c1_pca.py          # Single-seed C=1 extended sweep
-│   ├── rbf_rank_matched_multiseed.py    # Tier-2 RBF comparison
-│   ├── aggregate_multiseed.py           # Aggregate seed results
-│   ├── bootstrap_ci.py                  # Confidence intervals
-│   ├── paired_bootstrap_q11.py          # q=11 significance test
-│   ├── regen_eigenspectrum_fig.py       # Figure regeneration
-│   ├── regen_qubit_scaling_fig.py
-│   └── regen_scatter_figs.py
-├── slurm/                               # SLURM job scripts
-│   ├── 0-svm-classical-grid-insurance/
-│   ├── 1-qsvm-grid-insurance/
-│   ├── 2-hybrid-model-insurance/
-│   └── 3-vqc-model-insurance/
-├── qve/                                 # Quantum kernel module
-│   ├── core.py                          # QSVM kernel computation
-│   ├── metrics.py                       # Evaluation metrics
-│   ├── process.py                       # Data processing
-│   └── utils.py
-├── pre-processing/                      # Data preparation
-│   └── pca-pipeline/                    # PCA reduction scripts
-├── tests/                               # Test suite
-├── figures/                             # Paper figures
-└── docs/
-```
-
-## Testing
-
-```bash
-# All tests (GPU tests auto-skip if unavailable)
-pytest tests/ -v
-
-# Basic tests only (no GPU required)
-pytest tests/test_basic.py -v
-
-# GPU tests on HPC
-srun --gres=gpu:1 pytest tests/ -v
-```
-
-| Test File | GPU Required | Description |
-|-----------|--------------|-------------|
-| `test_basic.py` | No | Core imports, qve module, sklearn integration |
-| `test_imports.py` | Yes | cuQuantum/cupy imports, GPU functionality |
-| `test_script_imports.py` | Yes | Full script import chain, circuit conversion |
-| `test_qsvm_quick.py` | Yes | End-to-end QSVM with test data |
-
-## Dataset
-
-Pre-computed embeddings (20 seeds × 3 models) are on HuggingFace:
-
-```python
-from datasets import load_dataset
-ds = load_dataset("MITCriticalData/qml-mimic-cxr-embeddings")
-```
-
-Or download directly for local use:
-
-```bash
-export QML_DATA_ROOT=/path/to/store/embeddings
-huggingface-cli download MITCriticalData/qml-mimic-cxr-embeddings \
-    --repo-type dataset --local-dir $QML_DATA_ROOT
-```
-
-Raw MIMIC-CXR-JPG images require credentialed PhysioNet access:
-[physionet.org/content/mimic-cxr-jpg](https://physionet.org/content/mimic-cxr-jpg/2.0.0/)
-
-For an open alternative, `scripts/prepare_pneumoniamnist.py` downloads
-PneumoniaMNIST from its official Zenodo distribution. It contains 28×28
-pediatric chest X-rays for binary normal-versus-pneumonia classification and
-is distributed under CC BY 4.0. It is suitable for running the code, but it
-does not reproduce the paper's MIMIC-CXR embedding experiments.
-
-## Requirements
-
-- Python 3.10–3.11
-- CUDA 12.x + cuQuantum 24.8 (for QSVM GPU acceleration)
-- qiskit >= 1.2.4
-- scikit-learn 1.6.1
-- pyarrow >= 15.0 (parquet loading)
-- mpi4py (multi-GPU, optional)
-
-Install all pinned dependencies:
-
-```bash
-pip install -r requirements.txt
-pip install -e .
-```
-
-See `requirements.txt` for the full pinned list.
-
-## Contributing
-
-See [docs/contributing.md](docs/contributing.md) for guidelines.
-
-## Citation
-
-This adaptation is based on the original
-[`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage) repository.
-If you use this code, cite the original repository and paper:
+## Citation and license
 
 ```bibtex
 @article{cajas2026qml,
   title   = {Quantum Kernel Advantage over Classical Collapse in Medical
              Foundation Model Embeddings},
-  author  = {Cajas Ord\'{o}\~{n}ez, Sebasti\'{a}n A. and Ocampo Osorio, Felipe
-             and Koh, Dax Enshan and Al Attrach, Rafi and Marzullo, Aldo
-             and Guerra-Adames, Ariel and Andrade, J. Alejandro and Goh, Siong Thye
-             and Chen, Chi-Yu and Gorijavolu, Rahul and Yang, Xue
-             and Hebdon, Noah Dane and Celi, Leo Anthony},
+  author  = {Cajas Ord\'{o}\~{n}ez, Sebasti\'{a}n A. and others},
   journal = {arXiv preprint arXiv:2604.24597},
   year    = {2026},
   url     = {https://arxiv.org/abs/2604.24597}
 }
 ```
 
-Based on [QuantumVE](https://github.com/sebasmos/QuantumVE).
-
-The repository is distributed under the original CC BY-NC-SA 4.0 license.
-See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
+The original code attribution and CC BY-NC-SA 4.0 terms are preserved. See
+[LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). PneumoniaMNIST has its own data
+and code terms, summarized in [NOTICE.md](NOTICE.md).

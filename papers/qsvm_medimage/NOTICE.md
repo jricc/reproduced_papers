@@ -13,12 +13,18 @@ work. This adaptation is maintained in a fork of `merlinquantum/reproduced_paper
 Local modifications are intentionally limited to:
 
 - making NVIDIA/cuQuantum dependencies optional;
+- making Torch optional for the CPU-only QSVM import path;
 - providing an exact Qiskit statevector backend for CPU and macOS;
 - supporting PneumoniaMNIST as a public alternative dataset;
+- providing a separate MerLin 0.4 photonic fidelity-kernel adaptation;
 - documenting the alternative execution path.
 
 The alternative dataset and CPU results are not a reproduction of the paper's
 MIMIC-CXR embedding experiments.
+
+MerLin 0.4 requires scikit-learn 1.7.2 or newer. The combined local environment
+therefore differs from the original scikit-learn 1.6.1 pin; generated artifacts
+must record the effective dependency versions.
 
 The original CC BY-NC-SA 4.0 license is preserved in [LICENSE](LICENSE).
 The changes in this adapted copy are distributed under the same license.

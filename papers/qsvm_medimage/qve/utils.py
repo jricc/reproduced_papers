@@ -2,13 +2,19 @@ import os
 import argparse
 import numpy as np
 import random
-import torch
+
+try:
+    import torch
+except ImportError:
+    torch = None
 
 def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
+    if torch is None:
+        return
+    torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)

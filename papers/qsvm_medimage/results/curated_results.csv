@@ -1,0 +1,5 @@
+scope,protocol,dataset,representation,model,pca_dim,n_samples,n_seeds,data_seed,circuit_seed,mean_test_minority_f1,std_test_minority_f1,test_accuracy,test_auc,kernel_time_sec,total_time_sec,notes
+open_data_surrogate,upstream_baseline,PneumoniaMNIST,raw_pixels,QSVM BSP,4,100,10,,,0.61,0.356266650033266,,,,,"One paired win, eight ties and one loss against linear SVM"
+open_data_surrogate,classical_baseline,PneumoniaMNIST,raw_pixels,linear SVM C=1,4,100,10,,,0.596666666666667,0.35081914724552,,,,,
+open_data_surrogate,classical_baseline,PneumoniaMNIST,raw_pixels,validation-tuned RBF SVM,4,100,10,,,0.63,0.373323412566598,,,,,
+merlin_photonic_adaptation,technical_smoke,PneumoniaMNIST,raw_pixels,MerLin fidelity kernel C=1,2,100,1,0,0,0.0,,0.8,1.0,0.7712405059937737,0.8427999519990408,"Predicted only the majority class; test contains two minority examples"

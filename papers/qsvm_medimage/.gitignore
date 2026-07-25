@@ -81,7 +81,9 @@ slurm/**/.*
 
 # Temporary exclusions (to add later)
 Results-temp
-results/
+results/*
+!results/curated_results.csv
+!results/merlin_q2_seed0.json
 results-tocheck/
 results-QSVM/
 results-gender-all/
