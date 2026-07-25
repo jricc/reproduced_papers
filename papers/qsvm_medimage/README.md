@@ -69,9 +69,15 @@ environment uses scikit-learn 1.9.0.
 
 ## Data
 
-The catalogue default downloads the official PneumoniaMNIST archive when it is
-missing, verifies its checksum, and prepares the training split. To prepare it
-explicitly:
+The two launch paths use distinct configurable locations. The shared catalogue
+runtime follows the repository convention and reads
+`../../data/qsvm_medimage/pneumoniamnist_train.pkl`. Direct paper scripts can
+instead use the ignored paper-local file `data/pneumoniamnist_train.pkl` by
+setting `DATA_PATH` or `--data_path` explicitly.
+
+The catalogue default downloads the official PneumoniaMNIST archive when its
+shared copy is missing, verifies its checksum, and prepares the training split.
+To prepare that shared copy explicitly:
 
 ```bash
 python scripts/prepare_pneumoniamnist.py \
@@ -128,6 +134,8 @@ options such as `--config`, `--outdir`, `--seed`, `--device`, `--dtype`, and
 The following reproduces the reviewed `q=4`, ten-seed surrogate comparison:
 
 ```bash
+PYTHON_BIN=.venv/bin/python \
+DATA_PATH=data/pneumoniamnist_train.pkl \
 Q_VALUES=4 \
 SEEDS=0,1,2,3,4,5,6,7,8,9 \
 MAX_SAMPLES=100 \
@@ -148,6 +156,7 @@ XDG_DATA_HOME=/tmp/qsvm-merlin-data \
 MPLCONFIGDIR=/tmp/qsvm-merlin-mpl \
 PYTHONDONTWRITEBYTECODE=1 \
 .venv/bin/python scripts/merlin_fidelity_kernel.py \
+  --data_path data/pneumoniamnist_train.pkl \
   --output_dir outdir/merlin/pca_2/seed_0 \
   --pca_dim 2 \
   --seed 0 \
@@ -205,7 +214,10 @@ advantage. No matching local two-component, seed-0 qubit/classical artifact
 remains for an exact paired comparison.
 
 Small, sanitized values used by this README are kept in
-[`results/curated_results.csv`](results/curated_results.csv) and
+[`results/curated_results.csv`](results/curated_results.csv), detailed paired
+seed records are kept in
+[`results/q4_n100_per_seed.csv`](results/q4_n100_per_seed.csv), and the MerLin
+smoke values are kept in
 [`results/merlin_q2_seed0.json`](results/merlin_q2_seed0.json).
 
 ## Notebook
@@ -235,8 +247,10 @@ kernel calculation and can therefore be read or executed quickly on CPU.
 
 The MerLin script was checked for syntax and import/CLI construction. The same
 PCA-dimension-2 settings were run by the user and produced the reported
-artifacts. Full QSVM grids are intentionally user-run because exact kernel
-construction becomes expensive with sample count and qubit count.
+artifacts. The shared catalogue runtime smoke also completed and wrote its
+configuration snapshot, log, metrics, and dataset metadata. Full QSVM grids are
+intentionally user-run because exact kernel construction becomes expensive
+with sample count and qubit count.
 
 Fast local checks can be run from this directory:
 

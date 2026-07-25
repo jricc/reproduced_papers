@@ -108,8 +108,9 @@ and the full discussion record.
 
 ### Catalogue and maintenance issues
 
-- The shared runtime markers and thin MerLin runner are now present; a user-run
-  catalogue smoke remains to be performed.
+- The shared runtime markers and thin MerLin runner are present. A user-run
+  catalogue smoke completed successfully and wrote the standard configuration,
+  log, metrics, and dataset metadata artifacts.
 - The catalogue path uses `data/qsvm_medimage/` and writes raw runs under
   `outdir/run_*`; direct legacy scripts remain available separately.
 - Obsolete HPC tests and artifacts were removed after an explicit inventory,
@@ -241,7 +242,7 @@ before considering any scientific correction.
 
 ### Phase 2 -- Integrate the shared catalogue runtime
 
-Status: **minimal integration implemented; user-run smoke pending**.
+Status: **minimal integration and user-run smoke complete**.
 
 Keep only the minimum runtime skeleton:
 
@@ -323,7 +324,7 @@ are documented.
 
 ### Phase 6 -- Add the MerLin 0.4 adaptation
 
-Status: **local smoke complete; shared-runtime smoke pending user execution**.
+Status: **local and shared-runtime smoke complete**.
 
 - Implement the documented `FeatureMap` + `FidelityKernel(feature_map,
   input_state, ...)` API. Prefer an explicit `input_state` so that photon count
