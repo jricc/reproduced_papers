@@ -5,6 +5,7 @@ import argparse
 import json
 import sys
 import time
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,13 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"The `probability` parameter was deprecated in 1\.9",
+    category=FutureWarning,
+    module=r"sklearn\.svm\._base",
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))

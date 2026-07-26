@@ -40,6 +40,7 @@ import json
 import re
 import sys
 import time
+import warnings
 from typing import List, Optional, Tuple
 
 import matplotlib
@@ -86,6 +87,13 @@ from sklearn.metrics.pairwise import linear_kernel, polynomial_kernel, rbf_kerne
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"The `probability` parameter was deprecated in 1\.9",
+    category=FutureWarning,
+    module=r"sklearn\.svm\._base",
+)
 
 # Add parent directory to path for qve imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

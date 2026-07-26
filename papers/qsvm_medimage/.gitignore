@@ -83,9 +83,7 @@ credentials.json
 # Temporary exclusions (to add later)
 Results-temp
 results/*
-!results/curated_results.csv
-!results/q4_n100_per_seed.csv
-!results/merlin_q2_seed0.json
+!results/q4_q6_n500_per_seed.csv
 results-tocheck/
 results-QSVM/
 results-gender-all/

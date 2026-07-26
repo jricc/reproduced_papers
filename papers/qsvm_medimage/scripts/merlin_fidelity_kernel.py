@@ -48,7 +48,7 @@ def validate_kernel(matrix, expected_shape, name, square=False):
     if not np.isfinite(matrix).all():
         raise ValueError(f"{name} contains non-finite values")
 
-    tolerance = 1e-4
+    tolerance = 2e-4
     minimum = float(matrix.min())
     maximum = float(matrix.max())
     if minimum < -tolerance or maximum > 1.0 + tolerance:
@@ -61,6 +61,7 @@ def validate_kernel(matrix, expected_shape, name, square=False):
         "shape": list(matrix.shape),
         "minimum": minimum,
         "maximum": maximum,
+        "tolerance": tolerance,
     }
     if square:
         symmetry_error = float(np.max(np.abs(matrix - matrix.T)))

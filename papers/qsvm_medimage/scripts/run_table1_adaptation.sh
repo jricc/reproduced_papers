@@ -12,9 +12,12 @@ MAX_SAMPLES="${MAX_SAMPLES:-200}"
 Q_VALUES_CSV="${Q_VALUES:-2,4,6}"
 SEEDS_CSV="${SEEDS:-0,1,2,3,4}"
 C_VALUES="${C_VALUES:-0.01,0.1,1,10,100}"
+CIRCUIT_SEED="${CIRCUIT_SEED:-0}"
 MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/qsvm-medimage-matplotlib}"
+XDG_DATA_HOME="${XDG_DATA_HOME:-/tmp/qsvm-merlin-data}"
 
 export MPLCONFIGDIR
+export XDG_DATA_HOME
 export PYTHONDONTWRITEBYTECODE=1
 
 IFS=',' read -r -a Q_VALUES_ARRAY <<< "$Q_VALUES_CSV"
@@ -32,6 +35,15 @@ for q_value in "${Q_VALUES_ARRAY[@]}"; do
       --single_mode \
       --num_seeds 1 \
       --seed "$seed_value"
+
+    echo "MerLin: PCA=$q_value seed=$seed_value"
+    "$PYTHON_BIN" scripts/merlin_fidelity_kernel.py \
+      --data_path "$DATA_PATH" \
+      --output_dir "$RESULT_ROOT/merlin/q_${q_value}/seed_${seed_value}" \
+      --pca_dim "$q_value" \
+      --seed "$seed_value" \
+      --circuit_seed "$CIRCUIT_SEED" \
+      --max_samples "$MAX_SAMPLES"
   done
 done
 

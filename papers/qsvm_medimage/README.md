@@ -3,12 +3,10 @@
 This directory adapts
 [`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage) for CPU
 execution, the open PneumoniaMNIST dataset, and a MerLin 0.4 photonic kernel.
-It belongs to a fork of
-[`merlinquantum/reproduced_papers`](https://github.com/merlinquantum/reproduced_papers).
 
 > **Scope:** the results below are surrogate experiments on raw
-> PneumoniaMNIST pixels. They do not reproduce the paper's controlled
-> MIMIC-CXR medical-foundation-model embeddings.
+> PneumoniaMNIST pixels. They do not reproduce the paper's gated
+> MIMIC-CXR foundation-model embeddings.
 
 ## Reference and attribution
 
@@ -18,39 +16,96 @@ It belongs to a fork of
   Rafi Al Attrach, Aldo Marzullo, Ariel Guerra-Adames, J. Alejandro Andrade,
   Siong Thye Goh, Chi-Yu Chen, Rahul Gorijavolu, Xue Yang, Noah Dane Hebdon,
   and Leo Anthony Celi
-- Publication: arXiv preprint `arXiv:2604.24597v1`, 2026,
+- Publication: arXiv preprint, 2026,
   [doi:10.48550/arXiv.2604.24597](https://doi.org/10.48550/arXiv.2604.24597)
 - Original code: [`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage)
 - Imported upstream revision: `9e80037305d683b0e70c94b8fa7dd648e1bac82b`
-- Local changes and attribution: [NOTICE.md](NOTICE.md)
-- Detailed scientific audit: [AUDIT.md](AUDIT.md)
-- Current roadmap: [PLAN.md](PLAN.md)
 
 ## Original paper
 
-The paper studies binary classification from frozen medical image embeddings.
-It compares a QSVM using a qubit BSP feature map with classical linear and RBF
-SVMs after PCA dimensionality reduction.
+The original task is not pneumonia detection. It uses chest X-rays to predict
+whether a patient has Private insurance, the minority class, rather than
+Medicaid or Medicare coverage.
+
+Each X-ray is first passed through an image model that was already trained on a
+large collection of images. The model converts the image into a fixed-size list
+of numbers called an **embedding**. **Frozen** means that the image model's
+weights are not updated during this experiment: it is used only as a fixed
+feature extractor. The paper uses embeddings from MedSigLIP-448, RAD-DINO and a
+general-purpose ViT.
+
+Principal component analysis (PCA) then compresses each embedding to `q`
+numbers. All compared classifiers receive these same `q` features. A support
+vector machine (SVM) learns a boundary between the two classes. The linear SVM
+can learn only a straight boundary in this reduced space, while the radial
+basis function (RBF) SVM can learn a curved one. The QSVM encodes the `q`
+numbers into a `q`-qubit state with the circuit that the paper calls BSP
+(Block-Sparse Parameterization). Its quantum kernel is the squared overlap
+between two encoded states: a larger value means that the two inputs look more
+similar to this circuit. An SVM is then fitted from the resulting similarity
+matrix.
+
+The primary score is F1 for the minority class. It combines minority precision
+(how often a minority prediction is correct) and recall (how many minority
+examples are found). This score is zero if a model always predicts the majority
+class, even when its overall accuracy appears reasonable.
+
+In the paper's primary comparisons, trace normalization applies to the QSVM
+kernel only. It divides the square training Gram matrix, the table of all
+train-to-train similarities, by its trace, which is the sum of its diagonal.
+The paper specifies that the same training trace must scale the test--train
+matrix. The linear and RBF baselines use their ordinary scikit-learn kernels
+without trace normalization. This kernel scaling is separate from the common
+StandardScaler, PCA and MinMax preprocessing applied to the input features.
+
+The preserved upstream code differs from the paper on this point: it scales
+the square QSVM training matrix but leaves rectangular validation and test
+cross-kernels unscaled. The local results below retain and label this historical
+behavior instead of silently correcting it.
 
 Its main claim is that the trace-normalized QSVM with `C=1` obtains a higher
 minority-class F1 than the untuned linear SVM for every tested model/qubit
-configuration. The paper also reports an advantage over a validation-tuned RBF
+configuration. It reports 18 wins in 18 QSVM-versus-linear configurations,
+while the linear model has minority F1 equal to zero on 90--100% of seeds. The
+paper also reports seven wins in seven comparisons with a validation-tuned RBF
 baseline at equal PCA dimension.
 
-This repository focuses on that comparison, but current local constraints
-change both the data representation and the quantum implementation.
+This repository focuses on that comparison. The CPU surrogate changes the task
+and input representation; the separate MerLin path also changes the quantum
+implementation.
 
 ## Reproduction scope
 
 | Scope | Status | Meaning |
 |---|---|---|
-| Reference reproduction | Not run | Original task, controlled embeddings and qubit protocol |
+| Reference reproduction | Not run | Original task, gated MIMIC-CXR embeddings and qubit protocol |
 | Open-data CPU surrogate | Implemented | Raw PneumoniaMNIST pixels with QSVM, linear SVM and RBF SVM |
-| MerLin adaptation | Initial smoke implemented | Native photonic fidelity kernel, not the paper's BSP qubit kernel |
+| MerLin adaptation | Matched surrogate grid implemented | Native photonic fidelity kernel, not the paper's BSP qubit kernel |
 
 The upstream scientific pipeline is preserved as the initial baseline. Local
 changes are limited to CPU execution, alternative-data compatibility and the
 separate MerLin script.
+
+### Why not use the paper's embedding models here?
+
+It is possible to use the listed model implementations. The
+[MedSigLIP-448](https://huggingface.co/google/medsiglip-448),
+[RAD-DINO](https://huggingface.co/microsoft/rad-dino) and
+[ViT-patch32](https://huggingface.co/google/vit-base-patch32-224-in21k) model
+pages are available, although MedSigLIP access requires accepting its terms of
+use. Reference inputs still require either authorized MIMIC-CXR images and
+insurance metadata to regenerate the embeddings, or access to the authors'
+seed-specific precomputed files. Those
+[precomputed embeddings announced by the
+paper](https://huggingface.co/datasets/MITCriticalData/qml-mimic-cxr-embeddings)
+are manually gated, and this environment has no authorized copy.
+
+We could instead run these models on PneumoniaMNIST. That would be a useful
+future **frozen-embedding surrogate** and would be closer to the paper than raw
+pixels. It would still change the images, prediction task and embeddings, and
+would require a documented resize, channel conversion, model revision and
+preprocessing protocol. It was therefore kept out of this first minimal CPU
+adaptation rather than presented as the reference experiment.
 
 ## Installation
 
@@ -129,27 +184,46 @@ options such as `--config`, `--outdir`, `--seed`, `--device`, `--dtype`, and
 
 ## Direct experiment scripts
 
-### CPU QSVM and classical baselines
+### CPU QSVM, classical baselines, and MerLin
 
-The following reproduces the reviewed `q=4`, ten-seed surrogate comparison:
+The following reproduces the completed `q=4` and `q=6` ten-seed surrogate
+comparison at 500 samples:
 
 ```bash
 PYTHON_BIN=.venv/bin/python \
 DATA_PATH=data/pneumoniamnist_train.pkl \
-Q_VALUES=4 \
+Q_VALUES=4,6 \
 SEEDS=0,1,2,3,4,5,6,7,8,9 \
-MAX_SAMPLES=100 \
-RESULT_ROOT=outdir/q4-seed-stability \
+MAX_SAMPLES=500 \
+CIRCUIT_SEED=0 \
+RESULT_ROOT=outdir/n500-q4-q6 \
 bash scripts/run_table1_adaptation.sh
 ```
 
 For each seed, the seed controls both deterministic subsampling and the
-stratified 80/10/10 split. It is not an embedding-generation seed like those
-used in the paper.
+stratified 80/10/10 split. It is not statistically equivalent to the paper's
+seed-specific embedding datasets. The QSVM and linear SVM use `C=1`; for each
+seed and `q`, the RBF SVM selects `C` from `{0.01, 0.1, 1, 10, 100}` by
+validation minority-class F1. The test split is not used for this selection.
+For the same `q` and seed, the launcher also runs MerLin on the same N=500
+subset, split and PCA dimension. Its circuit seed remains fixed at zero.
 
 ### MerLin photonic fidelity kernel
 
-Run the reviewed CPU smoke:
+A kernel is a similarity score between two inputs. MerLin's
+[`FidelityKernel`](https://merlinquantum.ai/0.4/user_guide/kernels.html) encodes
+each PCA vector into a photonic quantum state and computes the squared overlap
+between two states. A value near one means that the two states are very
+similar. Repeating this calculation for every pair builds the Gram matrices
+that a scikit-learn SVM can use with `kernel="precomputed"`.
+
+The local script evaluates these overlaps exactly on CPU (`shots=None`) with a
+fixed photonic feature map. This is a native MerLin construction, not a
+translation of the paper's qubit BSP circuit. See also the
+[MerLin 0.4 documentation](https://merlinquantum.ai/0.4/index.html).
+
+The combined command above runs the matched grid. To run only one of its MerLin
+configurations:
 
 ```bash
 XDG_DATA_HOME=/tmp/qsvm-merlin-data \
@@ -157,16 +231,17 @@ MPLCONFIGDIR=/tmp/qsvm-merlin-mpl \
 PYTHONDONTWRITEBYTECODE=1 \
 .venv/bin/python scripts/merlin_fidelity_kernel.py \
   --data_path data/pneumoniamnist_train.pkl \
-  --output_dir outdir/merlin/pca_2/seed_0 \
-  --pca_dim 2 \
+  --output_dir outdir/n500-q4-q6/merlin/q_4/seed_0 \
+  --pca_dim 4 \
   --seed 0 \
   --circuit_seed 0 \
-  --max_samples 100
+  --max_samples 500
 ```
 
 Here `seed` controls the data subset and split, while `circuit_seed` controls
-the fixed random parameters of the photonic feature map. With `pca_dim=2`, the
-MerLin map uses three optical modes and the Fock input state `[1, 0, 1]`.
+the fixed random parameters of the photonic feature map. With `pca_dim=4`, the
+MerLin map uses five optical modes and the Fock input state `[1, 0, 1, 0, 1]`.
+At `pca_dim=6`, it uses seven modes and `[1, 0, 1, 0, 1, 0, 1]`.
 
 The script writes:
 
@@ -178,53 +253,87 @@ output_dir/
 
 ## Results obtained
 
-### Ten-seed CPU surrogate at q=4
+### Ten-seed CPU surrogate at q=4 and q=6, N=500
 
-All models used the same 100-sample seed/split pairs. The reported uncertainty
-is the sample standard deviation across ten seeds.
+Each seed used 500 samples split into 400 training, 50 validation and 50 test
+images. All four model paths used the same subset and split for a given seed
+and `q`. The table below first tests the paper's Claim 1 with QSVM and its two
+classical baselines. Values are mean test minority-class F1 ± sample standard
+deviation across ten data/split seeds.
 
-| Model | Test minority F1, mean ± std | Zero-F1 seeds |
-|---|---:|---:|
-| QSVM, `C=1`, upstream trace path | 0.610 ± 0.356 | 2/10 |
-| Linear SVM, `C=1` | 0.597 ± 0.351 | 2/10 |
-| Validation-tuned RBF SVM | 0.630 ± 0.373 | 2/10 |
+| q | QSVM | Linear | Q−linear | vs linear W/T/L | Tuned RBF | Q−RBF | vs RBF W/T/L |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4 | 0.809 ± 0.059 | 0.758 ± 0.080 | +0.051 | 7/0/3 | 0.760 ± 0.121 | +0.049 | 6/1/3 |
+| 6 | 0.822 ± 0.078 | 0.786 ± 0.095 | +0.036 | 7/0/3 | 0.819 ± 0.091 | +0.003 | 4/1/5 |
 
-The QSVM mean is `+0.013` above the linear SVM and `−0.020` below the tuned
-RBF. Paired against the linear SVM, it records one win, eight ties and one loss.
-This small raw-pixel surrogate therefore does not reproduce the paper's broad
-QSVM-advantage claim.
+`W/T/L` counts, seed by seed, how often the QSVM F1 is higher than, equal to or
+lower than the named baseline. It measures stability across the ten local data
+splits; it is not the paper's count of model/qubit configurations.
 
-### MerLin smoke at PCA dimension 2, seed 0
+The QSVM has the highest mean minority F1 at both dimensions, so the direction
+of the average difference agrees with the paper in these two surrogate
+configurations. The result is not systematic, however. At `q=6`, the mean gain
+over RBF is only `0.003`, and the QSVM loses to RBF on five of ten paired seeds.
+No model has test minority F1 equal to zero, so the paper's linear-collapse
+behavior is not reproduced. No local significance test has been run.
 
-| Split | Accuracy | Minority F1 | AUC |
-|---|---:|---:|---:|
-| Train | 0.8625 | 0.000 | 0.9499 |
-| Validation | 0.9000 | 0.000 | 1.0000 |
-| Test | 0.8000 | 0.000 | 1.0000 |
+The other metrics do not show the same pattern. At `q=4` and `q=6`, mean QSVM
+test AUC is `0.894` and `0.905`, below both the linear SVM (`0.955`, `0.960`) and
+RBF SVM (`0.945`, `0.959`). At `q=6`, QSVM accuracy is also lower than both
+baselines.
 
-The kernel computation took 0.771 seconds and the complete run 0.843 seconds.
-The Gram matrices passed the configured shape, finiteness, symmetry, diagonal,
-range and PSD-tolerance checks.
+One diagnostic anomaly remains: QSVM training minority F1 is zero in all 20
+runs even though its validation and test F1 are nonzero. The preserved upstream
+path trace-normalizes each square training kernel but leaves the rectangular
+validation and test cross-kernels unscaled. This scale mismatch is consistent
+with the unusual train/held-out behavior, but this benchmark does not establish
+that it is the only cause.
 
-The classifier nevertheless predicted only the majority class. The test AUC
-of 1.0 means its scores ranked the two normal examples correctly, but its hard
-decision threshold detected neither one. With only ten test images and one
-seed, this is a technical smoke, not evidence for or against a photonic
-advantage. No matching local two-component, seed-0 qubit/classical artifact
-remains for an exact paired comparison.
+The paper itself notes that its DT9 data stratum was chosen after preliminary
+experiments because it gave the strongest quantum results, and that its
+non-collapse Tier-1 result for q ≥ 10 was validated only on DT9. These caveats
+limit how broadly the paper's result can be generalized, but they do not by
+themselves explain the local difference: this experiment uses q=4 and q=6, a
+different dataset and target, raw pixels rather than frozen embeddings, and the
+preserved upstream protocol concerns described below.
 
-Small, sanitized values used by this README are kept in
-[`results/curated_results.csv`](results/curated_results.csv), detailed paired
-seed records are kept in
-[`results/q4_n100_per_seed.csv`](results/q4_n100_per_seed.csv), and the MerLin
-smoke values are kept in
-[`results/merlin_q2_seed0.json`](results/merlin_q2_seed0.json).
+### Matched MerLin photonic adaptation
+
+MerLin used the same N=500 subset, split and PCA dimension for every `q`--seed
+pair. Its circuit seed was fixed at zero. The deltas and W/T/L counts below are
+from MerLin's perspective.
+
+| q | MerLin | M−QSVM | vs QSVM W/T/L | M−linear | vs linear W/T/L | M−RBF | vs RBF W/T/L |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4 | 0.758 ± 0.132 | −0.051 | 4/0/6 | −0.0002 | 6/0/4 | −0.002 | 4/2/4 |
+| 6 | 0.770 ± 0.096 | −0.052 | 3/0/7 | −0.016 | 2/3/5 | −0.049 | 1/1/8 |
+
+MerLin is nearly tied with the classical baselines on mean minority F1 at
+`q=4`, but is lower than all three comparison models at `q=6`. It is lower than
+QSVM on average at both dimensions. Its mean test AUC is `0.953` at `q=4` and
+`0.960` at `q=6`, compared with `0.894` and `0.905` for QSVM. This illustrates
+why the primary metric must remain explicit: higher AUC did not produce higher
+minority F1 under the fitted SVM decisions.
+
+All MerLin matrices passed the configured shape, finiteness, symmetry,
+diagonal, range and PSD checks. One float32 self-overlap was `1.000132`; the
+validation tolerance was therefore raised from `1e-4` to `2e-4`. The value is
+recorded in `dataset_info.json` and the kernel is not clipped or rounded.
+
+This matched result is useful for comparing local behavior, but it is still a
+photonic adaptation and not evidence for or against the paper's qubit-BSP
+claim.
+
+The 80 detailed, sanitized records used by this README and the notebook are
+kept in
+[`results/q4_q6_n500_per_seed.csv`](results/q4_q6_n500_per_seed.csv).
 
 ## Notebook
 
-[`notebook.ipynb`](notebook.ipynb) loads only the curated artifacts, explains
-the minority-class F1 and plots the CPU and MerLin results. It performs no
-kernel calculation and can therefore be read or executed quickly on CPU.
+[`notebook.ipynb`](notebook.ipynb) focuses on the paper's primary claim. It
+explains the N=500 paired comparison and discusses the matched MerLin results
+separately as a photonic adaptation. It loads only the curated CSV and performs
+no kernel calculation, so it can be read or executed quickly on CPU.
 
 ## Important limitations
 
@@ -232,25 +341,27 @@ kernel calculation and can therefore be read or executed quickly on CPU.
   embeddings.
 - The MerLin fidelity kernel is a native photonic adaptation, not a faithful
   implementation or resource match of the BSP qubit circuit.
-- The current sample cap leaves only ten test images, including two minority
-  examples for seed 0.
+- The N=500 benchmark has only 50 test images per seed, including 11--14
+  minority examples.
 - The preserved upstream path fits its final MinMax transform using training
   plus held-out data. This is a preprocessing leak.
 - The upstream trace path divides square training kernels by their trace while
   leaving rectangular cross-kernels unscaled. This behavior is preserved and
   documented in [AUDIT.md](AUDIT.md).
+- The paper's written BSP circuit and the preserved upstream circuit are not
+  identical. This repository currently follows the upstream implementation.
 - Installing MerLin changed the environment from scikit-learn 1.6.1 to 1.9.0.
 - No result here reproduces the paper's all-configuration or statistical
   significance claims.
 
 ## Tests and verification
 
-The MerLin script was checked for syntax and import/CLI construction. The same
-PCA-dimension-2 settings were run by the user and produced the reported
-artifacts. The shared catalogue runtime smoke also completed and wrote its
-configuration snapshot, log, metrics, and dataset metadata. Full QSVM grids are
-intentionally user-run because exact kernel construction becomes expensive
-with sample count and qubit count.
+The MerLin script was checked for syntax and import/CLI construction. The shared
+catalogue runtime smoke completed and wrote its configuration snapshot, log,
+metrics, and dataset metadata. The user also ran the complete local N=500 grid:
+80 records covering four models, two dimensions and ten data/split seeds.
+Larger reference grids remain manual because exact kernel construction becomes
+expensive with sample count and qubit count.
 
 Fast local checks can be run from this directory:
 
@@ -285,6 +396,9 @@ The supported quick paths are the CPU/MerLin commands documented above.
 }
 ```
 
-The original code attribution and CC BY-NC-SA 4.0 terms are preserved. See
-[LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). PneumoniaMNIST has its own data
-and code terms, summarized in [NOTICE.md](NOTICE.md).
+The original code is attributed above. Its CC BY-NC-SA 4.0 terms are preserved
+in [LICENSE](LICENSE), and this adaptation uses the same license.
+PneumoniaMNIST is distributed through
+[MedMNIST v2](https://medmnist.com/): the dataset is CC BY 4.0 and the MedMNIST
+code is Apache-2.0. The archived dataset release is available on
+[Zenodo](https://zenodo.org/records/10519652).
