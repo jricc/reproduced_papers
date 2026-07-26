@@ -202,9 +202,11 @@ bash scripts/run_table1_adaptation.sh
 
 For each seed, the seed controls both deterministic subsampling and the
 stratified 80/10/10 split. It is not statistically equivalent to the paper's
-seed-specific embedding datasets. The QSVM and linear SVM use `C=1`; for each
-seed and `q`, the RBF SVM selects `C` from `{0.01, 0.1, 1, 10, 100}` by
-validation minority-class F1. The test split is not used for this selection.
+seed-specific embedding datasets. The same seed is also passed to SVC
+probability calibration, which is used for AUC; minority F1 is computed from
+hard predictions. The QSVM and linear SVM use `C=1`; for each seed and `q`, the
+RBF SVM selects `C` from `{0.01, 0.1, 1, 10, 100}` by validation minority-class
+F1. The test split is not used for this selection.
 For the same `q` and seed, the launcher also runs MerLin on the same N=500
 subset, split and PCA dimension. Its circuit seed remains fixed at zero.
 

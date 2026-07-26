@@ -7,7 +7,7 @@ Behavior:
 - For each seed: 80% train, 10% val, 10% test split
 - Trains QSVM with quantum kernel on train set
 - Evaluates on validation set (for hyperparameter selection)
-- Evaluates on test set (for final unbiased performance)
+- Evaluates on test set under the preserved preprocessing
 - Records training and inference times
 - Aggregates results across all seeds
 - Uses a Qiskit CPU statevector by default; CUDA and MPI remain optional
@@ -573,7 +573,7 @@ def run_qsvm_splits(
     results = None
     if rank == 0:
         print("  Building kernel matrices...")
-        # Compute raw quantum kernels (GPU step — done ONCE regardless of alpha sweep)
+        # Compute raw quantum kernels once, regardless of backend or alpha sweep
         K_quantum_train = get_kernel_matrix(
             data_train, data_train, amp_data_train, list_train, mode="train"
         )
