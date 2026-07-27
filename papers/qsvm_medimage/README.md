@@ -11,13 +11,11 @@ execution, the open PneumoniaMNIST dataset, and a MerLin 0.4 photonic kernel.
 ## Reference and attribution
 
 - Paper: [*Quantum Kernel Advantage over Classical Collapse in Medical
-  Foundation Model Embeddings*](https://arxiv.org/abs/2604.24597v1)
+  Foundation Model Embeddings*](https://arxiv.org/abs/2604.24597v1), doi:10.48550/arXiv.2604.24597.
 - Authors: Sebastián Andrés Cajas Ordóñez, Felipe Ocampo Osorio, Dax Enshan Koh,
   Rafi Al Attrach, Aldo Marzullo, Ariel Guerra-Adames, J. Alejandro Andrade,
   Siong Thye Goh, Chi-Yu Chen, Rahul Gorijavolu, Xue Yang, Noah Dane Hebdon,
   and Leo Anthony Celi
-- Publication: arXiv preprint, 2026,
-  [doi:10.48550/arXiv.2604.24597](https://doi.org/10.48550/arXiv.2604.24597)
 - Original code: [`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage)
 - Imported upstream revision: `9e80037305d683b0e70c94b8fa7dd648e1bac82b`
 
@@ -112,7 +110,7 @@ adaptation rather than presented as the reference experiment.
 Conda is not required. From this directory:
 
 ```bash
-python3 -m venv .venv
+python3 -m venv .venv # Python 3.12
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
