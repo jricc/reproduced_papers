@@ -1,6 +1,7 @@
 # Re-export useful public API
 from .utils import set_seed
-from .process import process_folds, data_prepare, data_prepare_cv
+from .process import  data_prepare_cv
+# from .process import process_folds, data_prepare, data_prepare_cv
 from .metrics import (
     get_metrics_multiclass_case,
     get_metrics_multiclass_case_cv,
@@ -28,6 +29,7 @@ from .core import (
     get_kernel_matrix,
     get_hybrid_kernel_matrix,
     normalize_kernel_trace,
+    normalize_train_and_cross_kernel_trace,
     normalize_kernel_frobenius,
     normalize_kernel_cosine,
     compute_projected_features,

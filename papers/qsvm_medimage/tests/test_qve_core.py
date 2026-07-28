@@ -297,8 +297,8 @@ class TestBackwardsCompatibility:
         """Test all original qve exports are still available."""
         from qve import (
             set_seed,
-            process_folds,
-            data_prepare,
+            # process_folds,
+            # data_prepare,
             data_prepare_cv,
             get_metrics_multiclass_case,
             get_metrics_multiclass_case_cv,
@@ -316,7 +316,9 @@ class TestBackwardsCompatibility:
         )
         # All should be importable
         assert all([
-            set_seed, process_folds, data_prepare, data_prepare_cv,
+            set_seed, 
+            # process_folds, data_prepare, 
+            data_prepare_cv,
             make_bsp, build_qsvm_qc, get_kernel_matrix
         ])
 

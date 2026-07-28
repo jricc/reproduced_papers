@@ -386,6 +386,41 @@ def normalize_kernel_trace(K):
     return K
 
 
+def normalize_train_and_cross_kernel_trace(kernel_train, kernel_cross):
+    """Normalize training and cross-kernel matrices by the training trace.
+
+    Args:
+        kernel_train: Square training-kernel matrix.
+        kernel_cross: Cross-kernel matrix with one column per training sample.
+
+    Returns:
+        The normalized training and cross-kernel matrices.
+
+    Raises:
+        ValueError: If matrix dimensions are incompatible or the training trace
+            is not finite and strictly positive.
+    """
+    kernel_train = np.asarray(kernel_train)
+    kernel_cross = np.asarray(kernel_cross)
+
+    if kernel_train.ndim != 2 or kernel_train.shape[0] != kernel_train.shape[1]:
+        raise ValueError("kernel_train must be a square matrix")
+    if kernel_cross.ndim != 2 or kernel_cross.shape[1] != kernel_train.shape[0]:
+        raise ValueError(
+            "kernel_cross must have one column per training sample"
+        )
+
+    train_trace = np.trace(kernel_train)
+    if (
+        not np.isreal(train_trace)
+        or not np.isfinite(train_trace)
+        or train_trace.real <= 0
+    ):
+        raise ValueError("kernel_train trace must be finite and strictly positive")
+
+    return kernel_train / train_trace, kernel_cross / train_trace
+
+
 def normalize_kernel_frobenius(K):
     """
     Frobenius normalization: K_norm = K / ||K||_F
