@@ -48,6 +48,9 @@ def train_and_evaluate(cfg: dict[str, Any], run_dir: Path) -> None:
 
     pca_dim = int(experiment_cfg["pca_dim"])
     max_samples = int(experiment_cfg["max_samples"])
+    fix_leakage = experiment_cfg.get("fix_leakage", False)
+    if not isinstance(fix_leakage, bool):
+        raise ValueError("experiment.fix_leakage must be a boolean")
     if not 1 <= pca_dim <= 19:
         raise ValueError("experiment.pca_dim must be between 1 and 19")
     if max_samples <= 0:
@@ -87,19 +90,20 @@ def train_and_evaluate(cfg: dict[str, Any], run_dir: Path) -> None:
         pca_dim,
         max_samples,
     )
-    merlin_main(
-        [
-            "--data_path",
-            data_argument,
-            "--output_dir",
-            str(run_dir.resolve()),
-            "--pca_dim",
-            str(pca_dim),
-            "--seed",
-            str(int(cfg["seed"])),
-            "--circuit_seed",
-            str(int(experiment_cfg["circuit_seed"])),
-            "--max_samples",
-            str(max_samples),
-        ]
-    )
+    arguments = [
+        "--data_path",
+        data_argument,
+        "--output_dir",
+        str(run_dir.resolve()),
+        "--pca_dim",
+        str(pca_dim),
+        "--seed",
+        str(int(cfg["seed"])),
+        "--circuit_seed",
+        str(int(experiment_cfg["circuit_seed"])),
+        "--max_samples",
+        str(max_samples),
+    ]
+    if fix_leakage:
+        arguments.append("--fix_leakage")
+    merlin_main(arguments)

@@ -21,6 +21,17 @@
       "type": "int",
       "default": null,
       "apply": {"kind": "config_path", "path": "experiment.max_samples"}
+    },
+    {
+      "flags": ["--fix-leakage"],
+      "help": "Fit MinMaxScaler on train only instead of train plus held-out data",
+      "action": "store_true",
+      "default": false,
+      "apply": {
+        "kind": "config_path",
+        "path": "experiment.fix_leakage",
+        "value": true
+      }
     }
   ]
 }

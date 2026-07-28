@@ -71,6 +71,25 @@ def test_train_only_minmax_does_not_clip_held_out_values():
     assert np.any((held_out < -1.0) | (held_out > 1.0))
 
 
+def test_train_only_full_svd_training_transform_is_held_out_independent():
+    train_for_validation, _ = process.data_prepare_cv(
+        1,
+        TRAIN_FEATURES,
+        HELD_OUT_WITHIN_TRAIN_RANGE,
+        fix_leakage=True,
+        svd_solver="full",
+    )
+    train_for_test, _ = process.data_prepare_cv(
+        1,
+        TRAIN_FEATURES,
+        HELD_OUT_EXTREME,
+        fix_leakage=True,
+        svd_solver="full",
+    )
+
+    np.testing.assert_allclose(train_for_validation, train_for_test)
+
+
 def test_legacy_trace_normalization_skips_rectangular_matrices():
     square = np.array([[2.0, 1.0], [1.0, 2.0]])
     rectangular = np.array([[4.0, 8.0], [12.0, 16.0], [20.0, 24.0]])

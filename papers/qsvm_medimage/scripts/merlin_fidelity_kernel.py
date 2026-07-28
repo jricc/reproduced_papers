@@ -100,6 +100,11 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--circuit_seed", type=int, default=0)
     parser.add_argument("--max_samples", type=int, default=100)
+    parser.add_argument(
+        "--fix_leakage",
+        action="store_true",
+        help="Fit MinMaxScaler on train only (default: legacy train+held-out fit)",
+    )
     args = parser.parse_args(argv)
 
     if not 1 <= args.pca_dim <= 19:
@@ -117,13 +122,23 @@ def main(argv=None):
         args.pca_dim,
         train_x,
         validation_x,
+        fix_leakage=args.fix_leakage,
         svd_solver="full",
     )
     train_for_test, test_pca = data_prepare_cv(
         args.pca_dim,
         train_x,
         test_x,
+        fix_leakage=args.fix_leakage,
         svd_solver="full",
+    )
+
+    preprocessing_protocol = (
+        "train_only" if args.fix_leakage else "legacy_train_plus_heldout"
+    )
+    minmax_fit = "train" if args.fix_leakage else "train+heldout"
+    preprocessing_description = (
+        f"StandardScaler(train) -> PCA(train) -> MinMaxScaler({minmax_fit})"
     )
 
     device = torch.device("cpu")
@@ -215,6 +230,8 @@ def main(argv=None):
         "train_samples": len(train_y),
         "val_samples": len(validation_y),
         "test_samples": len(test_y),
+        "fix_leakage": args.fix_leakage,
+        "preprocessing_protocol": preprocessing_protocol,
         "kernel_time_sec": (
             train_validation_time + validation_time + train_test_time + test_time
         ),
@@ -253,10 +270,9 @@ def main(argv=None):
                 "shots": None,
                 "force_psd": True,
                 "kernel_normalization": "none",
-                "preprocessing": (
-                    "historical StandardScaler(train) -> PCA(train) -> "
-                    "MinMaxScaler(train+heldout)"
-                ),
+                "fix_leakage": args.fix_leakage,
+                "preprocessing_protocol": preprocessing_protocol,
+                "preprocessing": preprocessing_description,
                 "kernel_checks": checks,
                 "versions": {
                     "merlinquantum": version("merlinquantum"),

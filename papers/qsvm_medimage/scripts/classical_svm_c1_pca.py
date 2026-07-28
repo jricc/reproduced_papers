@@ -161,6 +161,7 @@ def run_configuration(
     c_values,
     max_samples,
     minority_label,
+    fix_leakage=False,
 ):
     train_x, validation_x, test_x, train_y, validation_y, test_y = split_data(
         features,
@@ -172,15 +173,20 @@ def run_configuration(
         pca_dim,
         train_x,
         validation_x,
+        fix_leakage=fix_leakage,
         svd_solver="full",
     )
     train_for_test, test_pca = data_prepare_cv(
         pca_dim,
         train_x,
         test_x,
+        fix_leakage=fix_leakage,
         svd_solver="full",
     )
 
+    preprocessing_protocol = (
+        "train_only" if fix_leakage else "legacy_train_plus_heldout"
+    )
     best_c = select_c(
         train_for_validation,
         train_y,
@@ -212,6 +218,8 @@ def run_configuration(
         "val_samples": len(validation_y),
         "test_samples": len(test_y),
         "train_time_sec": train_time,
+        "fix_leakage": fix_leakage,
+        "preprocessing_protocol": preprocessing_protocol,
     }
     row.update(evaluate(model, train_for_test, train_y, "train", minority_label))
     row.update(evaluate(model, test_pca, test_y, "test", minority_label))
@@ -244,6 +252,11 @@ def main():
     parser.add_argument("--c_values", default="1.0")
     parser.add_argument("--seeds", default="42")
     parser.add_argument("--max_samples", type=int, default=100)
+    parser.add_argument(
+        "--fix_leakage",
+        action="store_true",
+        help="Fit MinMaxScaler on train only (default: legacy train+held-out fit)",
+    )
     args = parser.parse_args()
 
     pca_dims = parse_values(args.pca_dims, int)
@@ -267,6 +280,7 @@ def main():
                     c_values,
                     args.max_samples,
                     minority_label,
+                    fix_leakage=args.fix_leakage,
                 )
                 rows.append(row)
                 print(
@@ -291,6 +305,12 @@ def main():
                 "pca_dims": pca_dims,
                 "kernels": kernels,
                 "c_values": c_values,
+                "fix_leakage": args.fix_leakage,
+                "preprocessing_protocol": (
+                    "train_only"
+                    if args.fix_leakage
+                    else "legacy_train_plus_heldout"
+                ),
             },
             file,
             indent=2,

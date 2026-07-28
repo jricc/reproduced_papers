@@ -963,6 +963,15 @@ def run_qsvm_splits(
                 "test": {"X": X_test, "y": y_test, "indices": idx_test},
             }
 
+        preprocessing_protocol = (
+            "train_only" if fix_leakage else "legacy_train_plus_heldout"
+        )
+        results["fix_leakage"] = fix_leakage
+        results["preprocessing_protocol"] = preprocessing_protocol
+        for row in results.get("alpha_sweep_rows", []):
+            row["fix_leakage"] = fix_leakage
+            row["preprocessing_protocol"] = preprocessing_protocol
+
     return results
 
 
@@ -1051,6 +1060,8 @@ def save_seed_outputs(
             "output": {"path": os.path.abspath(out_dir)},
             "seed": seed,
             "qubits": n_qubits,
+            "fix_leakage": bool(results["fix_leakage"]),
+            "preprocessing_protocol": results["preprocessing_protocol"],
             "samples": {
                 "total": n_total,
                 "train": n_train,
