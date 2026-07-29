@@ -24,6 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from qve.process import data_prepare_cv
+from qve.core import normalize_train_and_cross_kernel_trace
 
 from scripts.classical_svm_c1_pca import evaluate, load_data, split_data
 
@@ -88,6 +89,48 @@ def validate_kernel(matrix, expected_shape, name, square=False):
     return summary
 
 
+def normalize_kernel_pairs(
+    train_validation,
+    validation_cross,
+    train_test,
+    test_cross,
+    normalization,
+):
+    """Normalize two matching train/cross kernel pairs.
+
+    Parameters
+    ----------
+    train_validation, train_test : numpy.ndarray
+        Square training kernels used for validation and test evaluation.
+    validation_cross, test_cross : numpy.ndarray
+        Associated rectangular cross-kernels.
+    normalization : {"none", "train_trace"}
+        Normalization protocol.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray, numpy.ndarray]
+        Kernels in the same order, normalized when requested.
+
+    Raises
+    ------
+    ValueError
+        If ``normalization`` is unsupported or a training trace is invalid.
+    """
+    if normalization == "none":
+        return train_validation, validation_cross, train_test, test_cross
+    if normalization != "train_trace":
+        raise ValueError(f"Unsupported kernel normalization: {normalization}")
+
+    train_validation, validation_cross = normalize_train_and_cross_kernel_trace(
+        train_validation, validation_cross
+    )
+    train_test, test_cross = normalize_train_and_cross_kernel_trace(
+        train_test, test_cross
+    )
+    return train_validation, validation_cross, train_test, test_cross
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -104,6 +147,12 @@ def main(argv=None):
         "--fix_leakage",
         action="store_true",
         help="Fit MinMaxScaler on train only (default: legacy train+held-out fit)",
+    )
+    parser.add_argument(
+        "--kernel_normalization",
+        choices=["none", "train_trace"],
+        default="none",
+        help="Kernel normalization protocol (default: none)",
     )
     args = parser.parse_args(argv)
 
@@ -199,6 +248,19 @@ def main(argv=None):
         ),
     }
 
+    (
+        kernel_train_validation,
+        kernel_validation,
+        kernel_train_test,
+        kernel_test,
+    ) = normalize_kernel_pairs(
+        kernel_train_validation,
+        kernel_validation,
+        kernel_train_test,
+        kernel_test,
+        args.kernel_normalization,
+    )
+
     model_started = time.perf_counter()
     model = SVC(
         kernel="precomputed",
@@ -232,6 +294,7 @@ def main(argv=None):
         "test_samples": len(test_y),
         "fix_leakage": args.fix_leakage,
         "preprocessing_protocol": preprocessing_protocol,
+        "kernel_normalization": args.kernel_normalization,
         "kernel_time_sec": (
             train_validation_time + validation_time + train_test_time + test_time
         ),
@@ -269,7 +332,7 @@ def main(argv=None):
                 "n_photons": sum(input_state),
                 "shots": None,
                 "force_psd": True,
-                "kernel_normalization": "none",
+                "kernel_normalization": args.kernel_normalization,
                 "fix_leakage": args.fix_leakage,
                 "preprocessing_protocol": preprocessing_protocol,
                 "preprocessing": preprocessing_description,

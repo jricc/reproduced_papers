@@ -114,6 +114,7 @@ from qve import (
     normalize_kernel_cosine,
     normalize_kernel_frobenius,
     normalize_kernel_trace,
+    normalize_train_and_cross_kernel_trace,
     operand_to_amp,
 )
 from qve.core import get_hybrid_kernel_matrix
@@ -274,6 +275,7 @@ def run_qsvm_splits(
     balanced: bool = False,
     three_dof: bool = False,
     normalize_method: str = "trace",
+    trace_protocol: str = "legacy_square_only",
     bandwidth: float = 1.0,
     circuit: str = "bsp",
     reps: int = 1,
@@ -287,6 +289,9 @@ def run_qsvm_splits(
     80/10/10 train/val/test split for QSVM.
     Returns metrics dict with train/val/test results + timing.
     """
+    if trace_protocol not in {"legacy_square_only", "train_trace"}:
+        raise ValueError(f"Unsupported trace protocol: {trace_protocol}")
+
     minority_label = int(np.argmin(np.bincount(y)))
 
     # Create indices for tracking samples
@@ -635,6 +640,30 @@ def run_qsvm_splits(
                 K_classical_train_full = linear_kernel(data_train_full, data_train_full)
                 K_classical_test = linear_kernel(data_test, data_train_full)
 
+            mixing_normalize_method = normalize_method
+            if normalize_method == "trace" and trace_protocol == "train_trace":
+                K_classical_train, K_classical_val = (
+                    normalize_train_and_cross_kernel_trace(
+                        K_classical_train, K_classical_val
+                    )
+                )
+                K_classical_train_full, K_classical_test = (
+                    normalize_train_and_cross_kernel_trace(
+                        K_classical_train_full, K_classical_test
+                    )
+                )
+                K_quantum_train, K_quantum_val = (
+                    normalize_train_and_cross_kernel_trace(
+                        K_quantum_train, K_quantum_val
+                    )
+                )
+                K_quantum_train_full, K_quantum_test = (
+                    normalize_train_and_cross_kernel_trace(
+                        K_quantum_train_full, K_quantum_test
+                    )
+                )
+                mixing_normalize_method = "none"
+
             _c_values = c_values if c_values else [1.0]
             sweep_rows = []
             best_alpha_val_acc = -1.0
@@ -651,22 +680,25 @@ def run_qsvm_splits(
                     K_classical_train,
                     K_quantum_train,
                     a,
-                    normalize_method=normalize_method,
+                    normalize_method=mixing_normalize_method,
                 )
                 hybrid_K_val = get_hybrid_kernel_matrix(
-                    K_classical_val, K_quantum_val, a, normalize_method=normalize_method
+                    K_classical_val,
+                    K_quantum_val,
+                    a,
+                    normalize_method=mixing_normalize_method,
                 )
                 hybrid_K_train_full = get_hybrid_kernel_matrix(
                     K_classical_train_full,
                     K_quantum_train_full,
                     a,
-                    normalize_method=normalize_method,
+                    normalize_method=mixing_normalize_method,
                 )
                 hybrid_K_test = get_hybrid_kernel_matrix(
                     K_classical_test,
                     K_quantum_test,
                     a,
-                    normalize_method=normalize_method,
+                    normalize_method=mixing_normalize_method,
                 )
 
                 # C-grid search on val
@@ -829,6 +861,7 @@ def run_qsvm_splits(
                 alpha,
                 classical_kernel,
                 normalize_method=normalize_method,
+                trace_protocol=trace_protocol,
             )
             kernel_train_full, kernel_test = apply_hybrid_kernel(
                 K_quantum_train_full,
@@ -839,6 +872,7 @@ def run_qsvm_splits(
                 alpha,
                 classical_kernel,
                 normalize_method=normalize_method,
+                trace_protocol=trace_protocol,
             )
 
             # Training
@@ -968,9 +1002,19 @@ def run_qsvm_splits(
         )
         results["fix_leakage"] = fix_leakage
         results["preprocessing_protocol"] = preprocessing_protocol
+        results["normalize_method"] = normalize_method
+        results["trace_protocol"] = trace_protocol
+        results["cross_kernel_scaled_with_train_trace"] = (
+            normalize_method == "trace" and trace_protocol == "train_trace"
+        )
         for row in results.get("alpha_sweep_rows", []):
             row["fix_leakage"] = fix_leakage
             row["preprocessing_protocol"] = preprocessing_protocol
+            row["normalize_method"] = normalize_method
+            row["trace_protocol"] = trace_protocol
+            row["cross_kernel_scaled_with_train_trace"] = results[
+                "cross_kernel_scaled_with_train_trace"
+            ]
 
     return results
 
@@ -1062,6 +1106,11 @@ def save_seed_outputs(
             "qubits": n_qubits,
             "fix_leakage": bool(results["fix_leakage"]),
             "preprocessing_protocol": results["preprocessing_protocol"],
+            "normalize_method": results["normalize_method"],
+            "trace_protocol": results["trace_protocol"],
+            "cross_kernel_scaled_with_train_trace": bool(
+                results["cross_kernel_scaled_with_train_trace"]
+            ),
             "samples": {
                 "total": n_total,
                 "train": n_train,
@@ -1103,6 +1152,7 @@ def apply_hybrid_kernel(
     alpha=0.5,
     classical_kernel="rbf",
     normalize_method="trace",
+    trace_protocol="legacy_square_only",
 ):
     """
     Apply hybrid kernel combination if enabled; optionally normalize quantum kernel.
@@ -1117,15 +1167,28 @@ def apply_hybrid_kernel(
         classical_kernel: Type of classical kernel ("rbf", "poly", "linear")
         normalize_method: Normalization applied to quantum kernel before combining
             ("trace", "frobenius", "cosine", "none")
+        trace_protocol: Trace-scaling protocol. ``legacy_square_only`` preserves
+            square-only normalization; ``train_trace`` scales each train/cross
+            pair by the corresponding training trace.
 
     Returns:
         Tuple of (kernel_train, kernel_valid) — hybrid or normalized pure quantum
     """
+    if trace_protocol not in {"legacy_square_only", "train_trace"}:
+        raise ValueError(f"Unsupported trace protocol: {trace_protocol}")
+
     if not use_hybrid:
         # Pure QSVM: optionally normalize quantum kernel
         if normalize_method == "trace":
-            kernel_train = normalize_kernel_trace(kernel_train)
-            kernel_valid = normalize_kernel_trace(kernel_valid)
+            if trace_protocol == "train_trace":
+                kernel_train, kernel_valid = (
+                    normalize_train_and_cross_kernel_trace(
+                        kernel_train, kernel_valid
+                    )
+                )
+            else:
+                kernel_train = normalize_kernel_trace(kernel_train)
+                kernel_valid = normalize_kernel_trace(kernel_valid)
         elif normalize_method == "frobenius":
             kernel_train = normalize_kernel_frobenius(kernel_train)
             kernel_valid = normalize_kernel_frobenius(kernel_valid)
@@ -1147,13 +1210,31 @@ def apply_hybrid_kernel(
         classical_K_train = linear_kernel(data_train, data_train)
         classical_K_valid = linear_kernel(data_valid, data_train)
 
+    mixing_normalize_method = normalize_method
+    if normalize_method == "trace" and trace_protocol == "train_trace":
+        classical_K_train, classical_K_valid = (
+            normalize_train_and_cross_kernel_trace(
+                classical_K_train, classical_K_valid
+            )
+        )
+        kernel_train, kernel_valid = normalize_train_and_cross_kernel_trace(
+            kernel_train, kernel_valid
+        )
+        mixing_normalize_method = "none"
+
     # Combine kernels (normalize_method applied inside get_hybrid_kernel_matrix)
     print(f"  Combining with α={alpha:.2f} (Quantum) + {1 - alpha:.2f} (Classical)")
     hybrid_K_train = get_hybrid_kernel_matrix(
-        classical_K_train, kernel_train, alpha, normalize_method=normalize_method
+        classical_K_train,
+        kernel_train,
+        alpha,
+        normalize_method=mixing_normalize_method,
     )
     hybrid_K_valid = get_hybrid_kernel_matrix(
-        classical_K_valid, kernel_valid, alpha, normalize_method=normalize_method
+        classical_K_valid,
+        kernel_valid,
+        alpha,
+        normalize_method=mixing_normalize_method,
     )
 
     return hybrid_K_train, hybrid_K_valid
@@ -1248,6 +1329,12 @@ def main():
         default="trace",
         choices=["cosine", "trace", "frobenius", "none"],
         help="Kernel normalization method (default: trace)",
+    )
+    parser.add_argument(
+        "--trace_protocol",
+        choices=["legacy_square_only", "train_trace"],
+        default="legacy_square_only",
+        help="Trace scaling protocol (default: legacy_square_only)",
     )
     parser.add_argument(
         "--balanced",
@@ -1427,6 +1514,7 @@ def main():
                 balanced=args.balanced,
                 three_dof=args.three_dof,
                 normalize_method=args.normalize_method,
+                trace_protocol=args.trace_protocol,
                 bandwidth=args.bandwidth,
                 circuit=args.circuit,
                 reps=args.reps,
