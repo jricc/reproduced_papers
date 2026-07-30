@@ -84,6 +84,45 @@ The upstream scientific pipeline is preserved as the initial baseline. Local
 changes are limited to CPU execution, alternative-data compatibility and the
 separate MerLin script.
 
+## Protocol-sensitivity audit
+
+The local launcher can evaluate a 2×2 sensitivity matrix for two audited
+implementation choices:
+
+- MinMax preprocessing:
+  - `legacy`: fit MinMaxScaler on training plus held-out data;
+  - `train_only`: fit MinMaxScaler on training data only, without clipping
+    held-out values.
+- Trace scaling:
+  - `legacy_square_only`: divide only square QSVM training kernels by their own
+    trace;
+  - `train_trace`: divide each training kernel and its matching rectangular
+    cross-kernel by the same training-kernel trace.
+
+The four protocol IDs are:
+
+| Protocol ID | Preprocessing | QSVM trace protocol | MerLin normalization |
+|---|---|---|---|
+| `legacy_leak__legacy_trace` | training + held-out | `legacy_square_only` | `none` |
+| `train_only__legacy_trace` | training only | `legacy_square_only` | `none` |
+| `legacy_leak__train_trace` | training + held-out | `train_trace` | `train_trace` |
+| `train_only__train_trace` | training only | `train_trace` | `train_trace` |
+
+`legacy_leak__legacy_trace` retains the historical upstream protocol.
+`train_only__train_trace` is the corrected local protocol. Comparing these
+modes tests sensitivity to two implementation choices; it does not establish
+which behavior the original authors intended.
+
+Classical scikit-learn linear and RBF baselines have only the two preprocessing
+variants because trace scaling applies to precomputed quantum kernels, not to
+ordinary scikit-learn kernels. Their result for a given preprocessing mode is
+therefore reused for both trace rows. MerLin does not have a historical
+QSVM-style square-only trace mode: its historical mode is
+`kernel_normalization=none`, while its corrected mode is `train_trace`.
+
+The full protocol matrix has not yet been executed. No corrected numerical
+result is reported in this README.
+
 ### Why not use the paper's embedding models here?
 
 It is possible to use the listed model implementations. The
@@ -184,19 +223,44 @@ options such as `--config`, `--outdir`, `--seed`, `--device`, `--dtype`, and
 
 ### CPU QSVM, classical baselines, and MerLin
 
-The following reproduces the completed `q=4` and `q=6` ten-seed surrogate
-comparison at 500 samples:
+From the repository root, the following single command runs the complete
+protocol matrix. It runs the four protocol IDs, computes each classical
+baseline once per preprocessing mode, and then performs paired aggregation:
 
 ```bash
 PYTHON_BIN=.venv/bin/python \
-DATA_PATH=data/pneumoniamnist_train.pkl \
+DATA_PATH=../../data/qsvm_medimage/pneumoniamnist_train.pkl \
 Q_VALUES=4,6 \
 SEEDS=0,1,2,3,4,5,6,7,8,9 \
 MAX_SAMPLES=500 \
 CIRCUIT_SEED=0 \
-RESULT_ROOT=outdir/n500-q4-q6 \
-bash scripts/run_table1_adaptation.sh
+LEAKAGE_MODES=legacy,train_only \
+TRACE_MODES=legacy_square_only,train_trace \
+RESULT_ROOT=outdir/qsvm-protocol-matrix \
+bash papers/qsvm_medimage/scripts/run_table1_adaptation.sh
 ```
+
+When already inside this paper directory, use
+`bash scripts/run_table1_adaptation.sh` and paper-relative paths instead.
+Default values for `LEAKAGE_MODES` and `TRACE_MODES` include all four
+combinations.
+
+The aggregator
+[`scripts/aggregate_protocol_matrix.py`](scripts/aggregate_protocol_matrix.py)
+writes:
+
+```text
+RESULT_ROOT/
+|-- protocol_results_per_seed.csv
+|-- protocol_summary.csv
+`-- protocol_summary.md
+```
+
+The per-seed CSV preserves every paired model/baseline comparison. The summary
+CSV contains mean minority F1, sample standard deviation, paired mean delta and
+seed-level W/T/L. The Markdown file documents the same summary and its
+perspective. These files are generated outputs under the selected
+`RESULT_ROOT`; they are not committed numerical results.
 
 For each seed, the seed controls both deterministic subsampling and the
 stratified 80/10/10 split. It is not statistically equivalent to the paper's
@@ -255,6 +319,10 @@ output_dir/
 
 ### Ten-seed CPU surrogate at q=4 and q=6, N=500
 
+The values in this section come from the previously completed historical
+`legacy_leak__legacy_trace` surrogate run. They are not results from the new
+four-protocol matrix.
+
 Each seed used 500 samples split into 400 training, 50 validation and 50 test
 images. All four model paths used the same subset and split for a given seed
 and `q`. The table below first tests the paper's Claim 1 with QSVM and its two
@@ -266,9 +334,11 @@ deviation across ten data/split seeds.
 | 4 | 0.809 ± 0.059 | 0.758 ± 0.080 | +0.051 | 7/0/3 | 0.760 ± 0.121 | +0.049 | 6/1/3 |
 | 6 | 0.822 ± 0.078 | 0.786 ± 0.095 | +0.036 | 7/0/3 | 0.819 ± 0.091 | +0.003 | 4/1/5 |
 
-`W/T/L` counts, seed by seed, how often the QSVM F1 is higher than, equal to or
-lower than the named baseline. It measures stability across the ten local data
-splits; it is not the paper's count of model/qubit configurations.
+W/T/L = Wins / Ties / Losses, counted seed by seed from the first-named model's
+perspective.
+
+Here the first-named model is QSVM. W/T/L measures stability across the ten
+local data splits; it is not the paper's count of model/qubit configurations.
 
 The QSVM has the highest mean minority F1 at both dimensions, so the direction
 of the average difference agrees with the paper in these two surrogate
@@ -308,6 +378,9 @@ from MerLin's perspective.
 | 4 | 0.758 ± 0.132 | −0.051 | 4/0/6 | −0.0002 | 6/0/4 | −0.002 | 4/2/4 |
 | 6 | 0.770 ± 0.096 | −0.052 | 3/0/7 | −0.016 | 2/3/5 | −0.049 | 1/1/8 |
 
+W/T/L = Wins / Ties / Losses, counted seed by seed from the first-named model's
+perspective.
+
 MerLin is nearly tied with the classical baselines on mean minority F1 at
 `q=4`, but is lower than all three comparison models at `q=6`. It is lower than
 QSVM on average at both dimensions. Its mean test AUC is `0.953` at `q=4` and
@@ -343,11 +416,14 @@ no kernel calculation, so it can be read or executed quickly on CPU.
   implementation or resource match of the BSP qubit circuit.
 - The N=500 benchmark has only 50 test images per seed, including 11--14
   minority examples.
-- The preserved upstream path fits its final MinMax transform using training
-  plus held-out data. This is a preprocessing leak.
-- The upstream trace path divides square training kernels by their trace while
-  leaving rectangular cross-kernels unscaled. This behavior is preserved and
-  documented in [AUDIT.md](AUDIT.md).
+- The protocol-matrix workflow evaluates both historical preprocessing
+  (MinMax fitted on training plus held-out data) and corrected train-only
+  preprocessing. The historical behavior remains available and is not silently
+  replaced.
+- The workflow also evaluates both historical QSVM square-only trace scaling
+  and corrected train-trace scaling of matching train/cross pairs. The full
+  corrected matrix has not yet been run, so this README makes no corrected
+  numerical claim. See [AUDIT.md](AUDIT.md).
 - The paper's written BSP circuit and the preserved upstream circuit are not
   identical. This repository currently follows the upstream implementation.
 - Installing MerLin changed the environment from scikit-learn 1.6.1 to 1.9.0.
@@ -358,9 +434,10 @@ no kernel calculation, so it can be read or executed quickly on CPU.
 
 The MerLin script was checked for syntax and import/CLI construction. The shared
 catalogue runtime smoke completed and wrote its configuration snapshot, log,
-metrics, and dataset metadata. The user also ran the complete local N=500 grid:
-80 records covering four models, two dimensions and ten data/split seeds.
-Larger reference grids remain manual because exact kernel construction becomes
+metrics, and dataset metadata. The user also ran the complete local historical
+N=500 grid: 80 records covering four models, two dimensions and ten data/split
+seeds. The full four-protocol sensitivity matrix has not been run. Larger
+reference grids remain manual because exact kernel construction becomes
 expensive with sample count and qubit count.
 
 Fast local checks can be run from this directory:
