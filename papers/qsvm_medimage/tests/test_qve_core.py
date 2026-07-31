@@ -294,11 +294,9 @@ class TestBackwardsCompatibility:
     """Test that existing functionality is not broken."""
 
     def test_original_exports_available(self):
-        """Test all original qve exports are still available."""
+        """Test retained qve exports are still available."""
         from qve import (
             set_seed,
-            # process_folds,
-            # data_prepare,
             data_prepare_cv,
             get_metrics_multiclass_case,
             get_metrics_multiclass_case_cv,
@@ -316,8 +314,7 @@ class TestBackwardsCompatibility:
         )
         # All should be importable
         assert all([
-            set_seed, 
-            # process_folds, data_prepare, 
+            set_seed,
             data_prepare_cv,
             make_bsp, build_qsvm_qc, get_kernel_matrix
         ])

@@ -1,0 +1,101 @@
+"""Archived preprocessing helpers from the imported upstream implementation.
+
+These functions are retained for attribution and provenance. They are not
+exported by the active ``qve`` package and are not used by supported runs.
+"""
+
+import os
+
+import numpy as np
+import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+
+def _transform_pca(pca, sample_train, sample_test):
+    with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+        transformed_train = pca.transform(sample_train)
+        transformed_test = pca.transform(sample_test)
+    if not np.isfinite(transformed_train).all() or not np.isfinite(transformed_test).all():
+        raise ValueError("PCA produced non-finite values")
+    return transformed_train, transformed_test
+
+
+def data_prepare(n_dim, sample_train, sample_test, nb1, nb2, fix_leakage=False, pi_angles=False):
+    """
+    Scales data, applies PCA, and then re-scales using MinMaxScaler.
+    nb1 and nb2 control the number of samples returned.
+    fix_leakage: if True, fit MinMaxScaler on train only (default False preserves legacy behavior).
+    pi_angles: if True, scale to [-pi, pi] instead of [-1, 1] (default False preserves legacy behavior).
+    """
+    std_scale = StandardScaler().fit(sample_train)
+    sample_train = std_scale.transform(sample_train)
+    sample_test = std_scale.transform(sample_test)
+    pca = PCA(n_components=n_dim, svd_solver="auto").fit(sample_train)
+    sample_train, sample_test = _transform_pca(pca, sample_train, sample_test)
+    angle_range = np.pi if pi_angles else 1
+    if fix_leakage:
+        minmax_scale = MinMaxScaler(feature_range=(-angle_range, angle_range)).fit(sample_train)
+    else:
+        # Fit MinMaxScaler on the combined data
+        samples = np.append(sample_train, sample_test, axis=0)
+        minmax_scale = MinMaxScaler(feature_range=(-angle_range, angle_range)).fit(samples)
+    sample_train = minmax_scale.transform(sample_train)[:nb1]
+    sample_test = minmax_scale.transform(sample_test)[:nb2]
+    return sample_train, sample_test
+
+
+def process_folds(n_folds, input_csv, output_csv):
+    # Load the CSV file
+    df = pd.read_csv(input_csv)
+
+    # Filter by number of folds
+    filtered_df = df[df['Fold'] <= n_folds]
+
+    # Group by 'n_dim' and calculate mean and std
+    mean_metrics = filtered_df.groupby('n_dim').mean(numeric_only=True)
+    std_metrics = filtered_df.groupby('n_dim').std(numeric_only=True)
+
+    # Create mean/std results DataFrame
+    mean_results = pd.DataFrame({
+        'n_dim': mean_metrics.index,
+        'Mean_Train_Acc': mean_metrics['Train Acc (%)'].values,
+        'Std_Train_Acc': std_metrics['Train Acc (%)'].values,
+        'Mean_Test_Acc': mean_metrics['Test Acc (%)'].values,
+        'Std_Test_Acc': std_metrics['Test Acc (%)'].values,
+        'Mean_Precision': mean_metrics['Precision'].values,
+        'Std_Precision': std_metrics['Precision'].values,
+        'Mean_F1': mean_metrics['F1'].values,
+        'Std_F1': std_metrics['F1'].values,
+        'Mean_AUC': mean_metrics['AUC'].values,
+        'Std_AUC': std_metrics['AUC'].values,
+        'Mean_Total_Time': mean_metrics['Total Time (s)'].values,
+        'Std_Total_Time': std_metrics['Total Time (s)'].values,
+        'Mean_Peak_Memory_Usage': mean_metrics['Avg Memory Usage (MB)'].values,
+        'Std_Peak_Memory_Usage': std_metrics['Avg Memory Usage (MB)'].values,
+    })
+
+    # Save regular results
+    mean_results.to_csv(output_csv, index=False)
+
+    # Build formatted version
+    formatted_summary = pd.DataFrame()
+    for idx, row in mean_results.iterrows():
+        formatted_row = {}
+        for key in mean_results.columns:
+            if key.startswith("Mean_"):
+                metric_name = key.replace("Mean_", "")
+                std_key = "Std_" + metric_name
+                mean_val = row[key]
+                std_val = row[std_key]
+                formatted_row[metric_name] = f"{mean_val:.3f} ± {std_val:.3f}"
+        formatted_summary = pd.concat([formatted_summary, pd.DataFrame([formatted_row])], ignore_index=True)
+
+    # Save the formatted version
+    formatted_output_csv = os.path.splitext(output_csv)[0] + "_formatted.csv"
+    formatted_summary.to_csv(formatted_output_csv, index=False)
+    print(f"Cross-validation results".center(60,"-"))
+    print(mean_results)
+    print(f"Mean+std:")
+    print(formatted_summary)
+    return mean_results

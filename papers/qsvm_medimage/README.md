@@ -453,7 +453,9 @@ Obsolete HPC launchers, generated documentation, and private-path notebooks
 were removed after an explicit inventory. The remaining upstream scientific and
 analysis scripts are retained for provenance. Some still contain original HPC
 path defaults and are unsupported; they are not used by the catalogue runner.
-The supported quick paths are the CPU/MerLin commands documented above.
+The supported quick paths are the CPU/MerLin commands documented above. See
+[`legacy/README.md`](legacy/README.md) for the archived-code policy and the
+provenance of helpers removed from the active API.
 
 ## Citation and license
 
