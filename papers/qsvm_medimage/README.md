@@ -153,8 +153,9 @@ preprocessing mode, and performs paired aggregation:
 
 Classical scikit-learn baselines have only the two preprocessing variants:
 trace modes apply only to precomputed quantum kernels. For MerLin, the common
-launcher label `legacy_trace` maps to `kernel_normalization=none`; it does not
-represent a MerLin implementation inherited from upstream.
+launcher label `legacy_trace` maps to no normalization. It is only a shared
+protocol label and does not imply that MerLin inherits any behavior from the
+imported repository.
 
 For each seed, deterministic subsampling precedes a stratified 80/10/10 split.
 The QSVM and linear SVM use `C=1`. The RBF SVM selects `C` from

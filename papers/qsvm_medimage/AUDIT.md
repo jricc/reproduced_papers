@@ -81,9 +81,10 @@ scaling:
 | `legacy_leak__train_trace` | `legacy_train_plus_heldout` | `train_trace` | `train_trace` |
 | `train_only__train_trace` | `train_only` | `train_trace` | `train_trace` |
 
-These common launcher IDs describe matched rows. For MerLin,
-`legacy_trace` maps to `kernel_normalization=none`; this is only a launcher
-mapping, not a mode inherited from upstream.
+These common launcher IDs describe matched rows. For MerLin, the common
+launcher label `legacy_trace` maps to no normalization. It is only a shared
+protocol label and does not imply that MerLin inherits any behavior from the
+imported repository.
 
 The completed PneumoniaMNIST CPU surrogate uses at most 500 samples, a
 400/50/50 train/validation/test split, `q` in `{4, 6}`, and paired data/split
