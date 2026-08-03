@@ -84,9 +84,12 @@ credentials.json
 Results-temp
 results/*
 !results/q4_q6_n500_per_seed.csv
+!results/protocol_matrix_n500_q4_q6/
+!results/protocol_matrix_n500_q4_q6/*
 results-tocheck/
 results-QSVM/
 results-gender-all/
 results-insurance-all/
 figures/
 .git-bak
+legacy/outdir*
