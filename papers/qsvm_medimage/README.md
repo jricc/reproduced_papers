@@ -1,122 +1,170 @@
-# Quantum Kernel Advantage over Classical Collapse — reproduction adaptation
+# Quantum Kernel Advantage over Classical Collapse — CPU reproduction audit and photonic adaptation
 
-## Scope
+This directory provides a minimal CPU-oriented adaptation of:
 
-This directory adapts the code imported from
-[`sebasmos/qml-medimage` at revision `9e80037`](https://github.com/sebasmos/qml-medimage/tree/9e80037305d683b0e70c94b8fa7dd648e1bac82b)
-for CPU execution, the open PneumoniaMNIST dataset, and a MerLin 0.4 photonic
-kernel.
+- the paper [*Quantum Kernel Advantage over Classical Collapse in Medical Foundation Model Embeddings*](https://arxiv.org/abs/2604.24597v1);
+- the original repository [`sebasmos/qml-medimage`](https://github.com/sebasmos/qml-medimage);
+- the imported upstream revision [`9e800373`](https://github.com/sebasmos/qml-medimage/tree/9e80037305d683b0e70c94b8fa7dd648e1bac82b).
 
-> **Scope:** the results below are surrogate experiments on raw
-> [PneumoniaMNIST pixels](https://www.nature.com/articles/s41597-022-01721-8). They do not reproduce the paper's gated MIMIC-CXR
-> foundation-model embeddings.
+It also contains a separate photonic-kernel adaptation implemented with MerLin 0.4.
 
-- Paper: [*Quantum Kernel Advantage over Classical Collapse in Medical
-  Foundation Model Embeddings*](https://arxiv.org/abs/2604.24597v1),
-  doi:10.48550/arXiv.2604.24597.
-- Imported upstream revision: `9e80037305d683b0e70c94b8fa7dd648e1bac82b`.
+> **Scope:** the experiments use raw PneumoniaMNIST pixels as an open-data
+> surrogate. They do not reproduce the paper's controlled-access MIMIC-CXR
+> insurance-classification task or its frozen foundation-model embeddings.
 
-## Paper summary
+## Paper in brief
 
-The original task is not pneumonia detection. It uses chest X-rays to predict
-whether a patient has Private insurance, the minority class, rather than
-Medicaid or Medicare coverage.
+The paper studies binary insurance classification from chest radiographs:
 
-Each X-ray is converted to a frozen embedding by MedSigLIP-448, RAD-DINO, or a
-general-purpose ViT. PCA compresses each embedding to `q` features. The linear
-SVM, tuned RBF SVM, and QSVM receive the same reduced features. The QSVM encodes
-them into a `q`-qubit state with the BSP (Block-Sparse Parameterization) circuit
-and uses a compute-uncompute fidelity kernel.
+- `Private insurance` is the minority class;
+- `Medicaid / Medicare` is the majority class.
 
-The primary score is F1 for the minority class. It combines minority precision
-and recall and is zero when a classifier always predicts the majority class.
+Each image is first converted into a frozen embedding using MedSigLIP-448,
+RAD-DINO, or a general-purpose ViT. PCA compresses the embedding to `q`
+features.
 
-The paper reports 18/18 QSVM wins against an untuned linear SVM and 7/7 wins
-against a validation-tuned RBF SVM across its model/qubit configurations. This
-repository evaluates the same comparison structure on a different, open-data
-surrogate.
+The compared classifiers receive the same PCA features:
+
+- a linear SVM;
+- a validation-tuned RBF SVM;
+- a QSVM using the paper's BSP qubit feature map and a compute-uncompute
+  fidelity kernel.
+
+The primary metric is minority-class F1. It becomes zero when a classifier
+never detects the minority class, even if its overall accuracy remains
+apparently reasonable.
+
+The paper reports:
+
+- 18/18 QSVM wins against the untuned linear SVM;
+- 7/7 wins against the tuned RBF SVM;
+- majority-class collapse of the linear SVM on most embedding seeds.
+
+## What this repository evaluates
+
+The controlled-access reference reproduction was not run.
+
+Instead, this directory provides:
+
+- a CPU execution path derived from the imported QSVM implementation;
+- linear and tuned-RBF classical baselines;
+- an open-data PneumoniaMNIST surrogate;
+- a four-protocol audit of preprocessing and kernel normalization;
+- a separate MerLin photonic fidelity-kernel adaptation.
+
+The local experiment uses:
+
+- at most 500 images per seed;
+- 400 training, 50 validation, and 50 test images;
+- PCA dimensions `q=4` and `q=6`;
+- ten deterministic subset/split seeds, from 0 to 9;
+- a fixed MerLin circuit seed equal to 0.
+
+These local seeds control subsampling and splitting. They are not equivalent
+to the paper's seed-specific foundation-model embeddings.
 
 ## Paper protocol versus imported upstream code
 
-| Point | Paper or consistent interpretation | Imported upstream code |
-|---|---|---|
-| StandardScaler and PCA | Fit on training, then applied to held-out data | [Both transformations are fitted on `sample_train`](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/process.py#L10-L13) |
-| MinMax preprocessing | Held-out features should not determine preprocessing parameters | [By default, `MinMaxScaler` is fitted on training plus the current held-out split](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/process.py#L17-L21); [`fix_leakage=True` enables train-only fitting](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/process.py#L17-L18) |
-| Training-kernel trace | Divide the square training Gram matrix by its trace | [`normalize_kernel_trace` divides square matrices by their trace](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/core.py#L356-L372) |
-| Validation/test cross-kernel | Divide each cross-kernel by the trace of its corresponding training Gram matrix | [`normalize_kernel_trace` returns rectangular matrices unchanged](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/core.py#L356-L372) |
-| Consequence | Training and held-out kernels should use the same scale | In [`apply_hybrid_kernel`](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/scripts/qsvm_cuda_embeddings_insurance.py#L832-L833), `normalize_kernel_trace` is called separately on the square training Gram matrix and the rectangular held-out cross-kernel; the latter is subsequently returned unchanged by `normalize_kernel_trace` |
+The audit focuses on two differences.
 
-The paper's protocol is described in
-[Section III.3, Equations (2) and (3)](https://arxiv.org/html/2604.24597v1).
-In the imported implementation,
-`apply_hybrid_kernel` calls `normalize_kernel_trace` separately on the
-training Gram matrix and the held-out
-cross-kernel.
-The training matrix is divided by its trace, but the rectangular cross-kernel
-is returned unchanged. This path is used for both
-validation and test,
-so training and evaluation use different kernel scales.
+### MinMax preprocessing
 
-Fitting `MinMaxScaler` on held-out features also constitutes preprocessing
-leakage. Its measured effect was negligible on the local surrogate, but this
-does not establish its effect on the original embeddings. No conclusion about
-author intent is drawn from the code.
+The imported preprocessing fits `StandardScaler` and PCA on training data.
 
-## Reproduction scope
+By default, however, its final `MinMaxScaler` is fitted on training plus the
+current held-out split:
 
-| Scope | Status | What it covers |
-|---|---|---|
-| Reference reproduction | Not run | Original insurance task, gated MIMIC-CXR embeddings, and BSP qubit protocol |
-| Open-data CPU surrogate | Completed locally | Raw PneumoniaMNIST pixels with QSVM, linear SVM, and tuned RBF SVM |
-| MerLin adaptation | Completed locally | Native photonic fidelity kernel, not the BSP qubit circuit |
+- [`data_prepare_cv`](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/process.py).
 
-The completed local experiments use at most 500 samples with an 80/10/10
-split, corresponding to 400 training, 50 validation, and 50 test samples when
-all 500 samples are available. They evaluate $q\in\{4,6\}$, where $q$ is
-both the PCA output dimension and the number of qubits. Ten paired data and
-split seeds, numbered 0 through 9, are evaluated. The MerLin circuit
-initialization seed is fixed at 0 for all runs.
+This allows validation or test extrema to influence the representation used
+for training. The local audit therefore compares:
 
-The original [MIMIC-CXR embeddings](https://huggingface.co/datasets/MITCriticalData/qml-mimic-cxr-embeddings) used in the paper remain gated and were
-therefore unavailable for the local experiments. The minimal open-data
-adaptation uses raw PneumoniaMNIST pixels instead of foundation-model
-embeddings. Computing new embeddings by applying the paper's foundation
-models to PneumoniaMNIST would constitute a separate surrogate experiment and
-was not performed here.
+- the preserved `train + held-out` behavior;
+- a `train only` variant.
 
-## How to run
+### Trace normalization
 
-### Installation
+The paper states that the square training Gram matrix and its associated
+validation/test cross-kernel must be divided by the same training-kernel
+trace; see Section III.C and Equation (3) of the
+[paper](https://arxiv.org/html/2604.24597v1#S3.SS3).
+
+In the imported implementation:
+
+- [`normalize_kernel_trace`](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/core.py)
+  divides square matrices by their trace but returns rectangular matrices
+  unchanged;
+- [`apply_hybrid_kernel`](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/scripts/qsvm_cuda_embeddings_insurance.py)
+  applies this function separately to the square training matrix and the
+  rectangular held-out cross-kernel;
+- the same path is used for [validation and test](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/scripts/qsvm_cuda_embeddings_insurance.py#L832-L833).
+
+The local audit therefore compares:
+
+- the preserved `square only` behavior;
+- a `train trace` variant that scales both matrices with the same training
+  trace.
+
+No conclusion about author intent is drawn from these implementation details.
+
+## MerLin photonic adaptation
+
+MerLin is absent from both the paper and the imported repository.
+
+The local MerLin path:
+
+1. applies the same local PCA preprocessing;
+2. encodes each PCA vector into a photonic quantum state;
+3. computes a fidelity kernel;
+4. passes the resulting precomputed kernel to scikit-learn's SVM.
+
+The overlaps are evaluated exactly on CPU with `shots=None`. The circuit is a
+native MerLin photonic feature map, not a translation or resource match of the
+paper's BSP qubit circuit.
+
+Two local MerLin variants are evaluated:
+
+- an unnormalized fidelity kernel;
+- a train-trace-normalized fidelity kernel.
+
+These are local analysis choices, not upstream MerLin behaviors.
+
+## Installation
 
 From this paper directory:
 
 ```bash
-python3 -m venv .venv # Python 3.12
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-The combined environment pins MerLin 0.4.0 and a compatible scikit-learn
-version.
+The environment pins MerLin 0.4.0 and a compatible scikit-learn version.
 
-### Data
+## Data
 
-The local experiments use PneumoniaMNIST. Prepare the dataset in the
-paper-local `data/` directory with:
+The local experiments use PneumoniaMNIST.
+
+Prepare the shared dataset copy with:
 
 ```bash
 python scripts/prepare_pneumoniamnist.py \
-  --download_path data/pneumoniamnist.npz \
-  --output_path data/pneumoniamnist_train.pkl
+  --download_path data/qsvm_medimage/pneumoniamnist.npz \
+  --output_path data/qsvm_medimage/pneumoniamnist_train.pkl
 ```
 
-Each 28×28 image is flattened to 784 normalized pixels. The labels are
-`normal` and `pneumonia`; `normal` is the minority class in these experiments.
-The pixels occupy the upstream `embedding` field for compatibility but are not
-medical foundation-model embeddings.
+Each 28×28 image is flattened to 784.
 
-### Catalogue runtime
+The local classes are:
+
+- `normal`, used as the minority class;
+- `pneumonia`, used as the majority class.
+
+The raw pixels occupy the upstream `embedding` field for compatibility, but
+they are not foundation-model embeddings.
+
+## Running the catalogue entry
 
 From this paper directory:
 
@@ -126,16 +174,11 @@ python ../../implementation.py --paper qsvm_medimage --help
 python ../../implementation.py --paper qsvm_medimage
 ```
 
-The last command runs the default CPU MerLin photonic adaptation from
-[`configs/defaults.json`](configs/defaults.json): 100 samples, two PCA
-components, circuit seed 0, and `float32` arithmetic. [`cli.json`](cli.json)
-defines the command-line options that can override these values, including
-`--fix-leakage`. Each run writes its resolved configuration, log, metrics, and
-dataset metadata to `outdir/run_YYYYMMDD-HHMMSS/`.
+The default catalogue configuration runs a small CPU MerLin experiment.
 
-### One-command protocol matrix
+## Running the complete local protocol matrix
 
-From this paper directory, with the virtual environment activated:
+From this paper directory:
 
 ```bash
 PYTHON_BIN=.venv/bin/python \
@@ -150,155 +193,65 @@ RESULT_ROOT=outdir/qsvm-protocol-matrix \
 bash scripts/run_table1_adaptation.sh
 ```
 
-The launcher runs four protocol IDs, computes each classical baseline once per
-preprocessing mode, and performs paired aggregation:
+The launcher evaluates four protocol IDs:
 
-| Protocol ID | Preprocessing | QSVM trace | MerLin normalization |
-|---|---|---|---|
-| `legacy_leak__legacy_trace` | training + held-out | `legacy_square_only` | `none` |
-| `train_only__legacy_trace` | training only | `legacy_square_only` | `none` |
-| `legacy_leak__train_trace` | training + held-out | `train_trace` | `train_trace` |
-| `train_only__train_trace` | training only | `train_trace` | `train_trace` |
+- `legacy_leak__legacy_trace`;
+- `train_only__legacy_trace`;
+- `legacy_leak__train_trace`;
+- `train_only__train_trace`.
 
-Classical scikit-learn baselines have only the two preprocessing variants:
-trace modes apply only to precomputed quantum kernels. For MerLin, the common
-launcher label `legacy_trace` maps to no normalization. It is only a shared
-protocol label and does not imply that MerLin inherits any behavior from the
-imported repository.
+For the QSVM, `legacy_trace` means square-only trace scaling.
 
-For each seed, deterministic subsampling precedes a stratified 80/10/10 split.
-The QSVM and linear SVM use `C=1`. The RBF SVM selects `C` from
-`{0.01, 0.1, 1, 10, 100}` using validation minority F1; the test set is not used
-for selection.
+For MerLin, the same launcher label maps to no kernel normalization. It is
+only a shared protocol identifier and does not imply that MerLin inherits
+behavior from the imported repository.
 
-## Main local audit finding
+The QSVM and linear SVM use `C=1`.
 
-> The MinMax leakage has negligible impact on this PneumoniaMNIST surrogate:
-> every aggregated minority-F1 change between matching leaky and train-only
-> protocols is below 0.005.
->
-> The QSVM trace mismatch is decisive. With consistent train-trace scaling,
-> minority F1 is zero on every seed at q=4 and q=6, regardless of the
-> preprocessing variant.
->
-> Because the square QSVM training kernel is trace-normalized in both compared
-> trace modes, the controlled difference is the scale of the held-out
-> cross-kernel. The favorable held-out scores of the preserved upstream path
-> therefore depend on this scale mismatch in the local surrogate.
->
-> The paper's central linear-collapse-avoidance mechanism is not reproduced:
-> the local linear baseline itself has non-zero minority F1.
->
-> This result does not reproduce or refute the paper because the local
-> experiment changes the dataset, target, input representation, sample count,
-> and evaluated q range.
+The RBF baseline selects `C` from:
 
-The comparison tests protocol sensitivity. It does not establish author intent
-or whether the paper's MIMIC-CXR results are valid.
+```text
+0.01, 0.1, 1, 10, 100
+```
 
-## Protocol matrix results
+using validation minority-class F1. The test set is not used to choose `C`.
 
-The following values are copied from the completed curated protocol summary.
-F1 columns report mean ± sample standard deviation over ten paired data/split
-seeds.
+## Results and analysis
 
-| Preprocessing | QSVM trace | q | QSVM F1 | Linear F1 | Q-linear | vs linear W/T/L | Tuned RBF F1 | Q-RBF | vs RBF W/T/L |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| train + held-out | square only | 4 | 0.81 ± 0.06 | 0.76 ± 0.08 | +0.05 | 7/0/3 | 0.76 ± 0.12 | +0.05 | 6/1/3 |
-| train + held-out | square only | 6 | 0.82 ± 0.08 | 0.79 ± 0.09 | +0.04 | 7/0/3 | 0.82 ± 0.09 | +0.00 | 4/1/5 |
-| train only | square only | 4 | 0.82 ± 0.06 | 0.76 ± 0.08 | +0.06 | 8/0/2 | 0.76 ± 0.12 | +0.05 | 6/1/3 |
-| train only | square only | 6 | 0.82 ± 0.08 | 0.79 ± 0.09 | +0.04 | 7/0/3 | 0.82 ± 0.09 | +0.01 | 4/1/5 |
-| train + held-out | train trace | 4 | 0.00 ± 0.00 | 0.76 ± 0.08 | -0.76 | 0/0/10 | 0.76 ± 0.12 | -0.76 | 0/0/10 |
-| train + held-out | train trace | 6 | 0.00 ± 0.00 | 0.79 ± 0.09 | -0.79 | 0/0/10 | 0.82 ± 0.09 | -0.82 | 0/0/10 |
-| train only | train trace | 4 | 0.00 ± 0.00 | 0.76 ± 0.08 | -0.76 | 0/0/10 | 0.76 ± 0.12 | -0.76 | 0/0/10 |
-| train only | train trace | 6 | 0.00 ± 0.00 | 0.79 ± 0.09 | -0.79 | 0/0/10 | 0.82 ± 0.09 | -0.81 | 0/0/10 |
+All numerical results, paired comparisons, W/T/L counts, protocol-sensitivity
+tables, and interpretation are kept in
+[`notebook.ipynb`](notebook.ipynb).
 
-> **W/T/L = Wins / Ties / Losses**, counted seed by seed from the
-> first-named model's perspective.
+The notebook reads the committed result artifacts and does not recompute
+kernels or retrain models.
 
-`Q-linear = QSVM F1 - linear F1`; `Q-RBF = QSVM F1 - tuned RBF F1`.
-The W/T/L count is not the paper's count of model/qubit configurations.
+Committed artifacts:
 
-### Preserved upstream-protocol result
-
-The previous positive QSVM result is retained for provenance. It corresponds
-only to `legacy_leak__legacy_trace`: leaky MinMax preprocessing plus
-square-only QSVM trace scaling.
-
-| q | QSVM F1 | Linear F1 | Q-linear | vs linear W/T/L | Tuned RBF F1 | Q-RBF | vs RBF W/T/L |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 4 | 0.81 ± 0.06 | 0.76 ± 0.08 | +0.05 | 7/0/3 | 0.76 ± 0.12 | +0.05 | 6/1/3 |
-| 6 | 0.82 ± 0.08 | 0.79 ± 0.09 | +0.04 | 7/0/3 | 0.82 ± 0.09 | +0.00 | 4/1/5 |
-
-> **W/T/L = Wins / Ties / Losses**, counted seed by seed from the
-> first-named model's perspective.
-
-Historical upstream protocol only: leaky MinMax + square-only QSVM trace
-scaling. No local paired significance test has been run.
-
-## MerLin photonic adaptation
-
-MerLin is absent from the imported `sebasmos/qml-medimage` revision. The local
-MerLin experiment is a photonic adaptation, not an implementation of the BSP
-qubit circuit, and does not inherit an upstream normalization mode. Two
-variants are evaluated: **unnormalized** and **train-trace normalized**.
-
-The local script uses MerLin's
-[`FidelityKernel`](https://merlinquantum.ai/0.4/notebooks/Kernels.html#Fidelity-kernel-in-a-few-lines)
-to compute exact CPU overlaps with `shots=None`. The photonic circuit seed is
-fixed at 0. MerLin F1 values are taken from `protocol_summary.csv`; `M-QSVM`,
-`vs QSVM W/T/L` counts are derived locally
-from the paired seed-level results.
-
-| Preprocessing | MerLin normalization | q | MerLin F1 | M-QSVM | vs QSVM W/T/L | M-linear | vs linear W/T/L | M-RBF | vs RBF W/T/L |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| train + held-out | unnormalized | 4 | 0.76 ± 0.13 | -0.05 | 4/0/6 | -0.00 | 6/0/4 | -0.00 | 4/2/4 |
-| train + held-out | unnormalized | 6 | 0.77 ± 0.10 | -0.05 | 3/0/7 | -0.02 | 2/3/5 | -0.05 | 1/1/8 |
-| train only | unnormalized | 4 | 0.75 ± 0.13 | -0.06 | 4/0/6 | -0.00 | 6/0/4 | -0.00 | 4/2/4 |
-| train only | unnormalized | 6 | 0.77 ± 0.10 | -0.05 | 3/0/7 | -0.02 | 2/3/5 | -0.04 | 1/1/8 |
-| train + held-out | train trace | 4 | 0.00 ± 0.00 | 0.00 | 0/10/0 | -0.76 | 0/0/10 | -0.76 | 0/0/10 |
-| train + held-out | train trace | 6 | 0.00 ± 0.00 | 0.00 | 0/10/0 | -0.79 | 0/0/10 | -0.82 | 0/0/10 |
-| train only | train trace | 4 | 0.00 ± 0.00 | 0.00 | 0/10/0 | -0.79 | 0/0/10 | -0.76 | 0/0/10 |
-| train only | train trace | 6 | 0.00 ± 0.00 | 0.00 | 0/10/0 | -0.79 | 0/0/10 | -0.81 | 0/0/10 |
-
-> **W/T/L = Wins / Ties / Losses**, counted seed by seed from the
-> first-named model's perspective.
-
-`M-QSVM = MerLin F1 - QSVM F1`; `M-linear = MerLin F1 - linear F1`; `M-RBF = MerLin F1 - tuned RBF F1`.
-Without trace normalization, MerLin is in the same broad performance range as
-the local QSVM and classical baselines. With train-trace normalization and
-fixed `C=1`, it follows the same qualitative zero-minority-F1 pattern as the
-local QSVM. This supports consistency of the local comparison; it does not
-establish an upstream bug, quantum advantage, or an optimized MerLin result.
-
-Tuning `C`, varying `circuit_seed`, and exploring the photonic feature map,
-modes, photon count, normalization, and kernel scale are future work, not part
-of this minimal reproduction.
+- [per-seed protocol results](results/protocol_matrix_n500_q4_q6/protocol_results_per_seed.csv);
+- [aggregated protocol summary](results/protocol_matrix_n500_q4_q6/protocol_summary.csv);
+- [generated Markdown summary](results/protocol_matrix_n500_q4_q6/protocol_summary.md);
+- [run provenance](results/protocol_matrix_n500_q4_q6/RUN.md);
+- [preserved upstream-protocol-only results](results/q4_q6_n500_per_seed.csv).
 
 ## Limitations
 
-- The reference MIMIC-CXR reproduction has not been run.
-- Pneumonia detection differs from the paper's insurance classification task.
-- Raw pixels differ from frozen medical foundation-model embeddings.
-- The local matrix covers only `q=4` and `q=6`.
-- Each seed has only 50 test samples.
-- Local seeds control deterministic subsets and splits, not embedding seeds.
-- No local paired significance test has been run.
-- The paper's linear-collapse result is not reproduced.
-- MerLin is not resource-matched to the BSP qubit circuit.
-- The MerLin feature map and `C` were not optimized.
-- Local audit findings do not establish whether the paper's MIMIC-CXR results
-  are valid.
-- Paper limitations include noiseless simulation, SVM-only baselines, task
-  scope, and post-hoc DT9 selection.
-
-## Result artifacts
-
-- [Per-seed protocol matrix](results/protocol_matrix_n500_q4_q6/protocol_results_per_seed.csv)
-- [Aggregated protocol summary CSV](results/protocol_matrix_n500_q4_q6/protocol_summary.csv)
-- [Aggregated protocol summary Markdown](results/protocol_matrix_n500_q4_q6/protocol_summary.md)
-- [Run provenance](results/protocol_matrix_n500_q4_q6/RUN.md)
-- [Historical upstream-protocol-only per-seed result](results/q4_q6_n500_per_seed.csv)
+- The reference MIMIC-CXR reproduction was not run.
+- Pneumonia detection is different from insurance classification.
+- Raw pixels are different from frozen medical foundation-model embeddings.
+- The local matrix evaluates only `q=4` and `q=6`.
+- Each seed contains only 50 test images.
+- Local seeds control subsets and splits, not embedding generation.
+- No local paired significance test was performed.
+- The linear-collapse behavior reported by the paper is not reproduced by
+  this surrogate.
+- The MerLin circuit is not an implementation or resource match of the BSP
+  qubit circuit.
+- The MerLin feature map, circuit seed, photon/mode resources, and SVM `C`
+  were not optimized.
+- Local protocol findings do not establish whether the original MIMIC-CXR
+  results are valid.
+- The paper itself is limited by noiseless simulation, SVM-only classical
+  baselines, the proxy task, and post-hoc selection of the DT9 data stratum.
 
 ## Citation and license
 
@@ -318,9 +271,9 @@ of this minimal reproduction.
 }
 ```
 
-The original code is attributed above. Its CC BY-NC-SA 4.0 terms are preserved
-in [LICENSE](LICENSE), and this adaptation uses the same license.
+The imported code is attributed above. Its CC BY-NC-SA 4.0 terms are
+preserved in [`LICENSE`](LICENSE).
+
 PneumoniaMNIST is distributed through
-[MedMNIST v2](https://medmnist.com/): the dataset is CC BY 4.0 and the MedMNIST
-code is Apache-2.0. The archived dataset release is available on
-[Zenodo](https://zenodo.org/records/10519652).
+[MedMNIST v2](https://medmnist.com/). The dataset is CC BY 4.0 and the
+MedMNIST code is Apache-2.0.
