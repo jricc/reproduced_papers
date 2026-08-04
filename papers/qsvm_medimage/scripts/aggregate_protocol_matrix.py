@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
 PROTOCOLS = {
     "legacy_leak__legacy_trace": {
         "preprocessing_protocol": "legacy_train_plus_heldout",

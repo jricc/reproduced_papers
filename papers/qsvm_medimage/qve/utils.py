@@ -1,7 +1,7 @@
 import os
-import argparse
-import numpy as np
 import random
+
+import numpy as np
 
 try:
     import torch

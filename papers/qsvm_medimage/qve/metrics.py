@@ -1,17 +1,17 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import os
-import pandas as pd
-import joblib
-from tabulate import tabulate
 
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
 from sklearn.metrics import (
-    confusion_matrix,
     ConfusionMatrixDisplay,
-    precision_score,
+    confusion_matrix,
     f1_score,
-    roc_auc_score
+    precision_score,
+    roc_auc_score,
 )
+
+
 def get_metrics_multiclass_case_test(trained_svc, kernel_valid, Y_val_sub, peak_memory_usage, n_dim, data_train, data_test, total_time, output_dir):
     acc_test = trained_svc.score(kernel_valid, Y_val_sub)
     y_pred = trained_svc.predict(kernel_valid)
@@ -19,13 +19,13 @@ def get_metrics_multiclass_case_test(trained_svc, kernel_valid, Y_val_sub, peak_
 
     precision = precision_score(Y_val_sub, y_pred, average="weighted", zero_division=1)
     f1 = f1_score(Y_val_sub, y_pred, average="weighted", zero_division=1)
-    print(f"Y_val_sub: ", set(Y_val_sub))
-    print(f"y_pred: ", set(y_pred))
+    print("Y_val_sub: ", set(Y_val_sub))
+    print("y_pred: ", set(y_pred))
     print("classes_ learned by the classifier:", trained_svc.classes_)
     full_labels = list(range(10))
     cm = confusion_matrix(Y_val_sub, y_pred, labels=full_labels)
-    
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[str(l) for l in full_labels])
+
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[str(label) for label in full_labels])
     disp.plot(cmap=plt.cm.Blues)
     # plt.title("MNIST Test Confusion Matrix")
 
@@ -37,9 +37,9 @@ def get_metrics_multiclass_case_test(trained_svc, kernel_valid, Y_val_sub, peak_
     plt.savefig(cm_filename)
     plt.show(block=True)
     print(f"✅ Confusion matrix saved to: {cm_filename}")
-    
+
     auc = float(roc_auc_score(Y_val_sub, y_probs, multi_class='ovr', average='weighted', labels=full_labels))
-    
+
     results = {
         "n_dim": n_dim,
         "Test Size": len(data_test),
@@ -61,7 +61,7 @@ def get_metrics_multiclass_case_test(trained_svc, kernel_valid, Y_val_sub, peak_
     print(results)
 
     return results
-    
+
 
 def get_metrics_multiclass_case(trained_svc, kernel_train, Y_train_sub, kernel_valid, Y_val_sub,
                                 training_time, peak_memory_usage, n_dim, data_train, data_test, exp_t,
@@ -78,7 +78,7 @@ def get_metrics_multiclass_case(trained_svc, kernel_train, Y_train_sub, kernel_v
     full_labels = list(np.unique(Y_train_sub))
     cm = confusion_matrix(Y_val_sub, y_pred, labels=full_labels)
 
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[str(l) for l in full_labels])
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[str(label) for label in full_labels])
     disp.plot(cmap=plt.cm.Blues)
     # plt.title("MNIST CV Fold Confusion Matrix")
 
@@ -125,7 +125,7 @@ def get_metrics_multiclass_case_cv(trained_svc, kernel_train, Y_train_sub, kerne
     full_labels = list(np.unique(Y_train_sub))
     cm = confusion_matrix(Y_val_sub, y_pred, labels=full_labels)
 
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[str(l) for l in full_labels])
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[str(label) for label in full_labels])
     disp.plot(cmap=plt.cm.Blues)
     # plt.title(f"MNIST Confusion Matrix - Fold {fold}")
 

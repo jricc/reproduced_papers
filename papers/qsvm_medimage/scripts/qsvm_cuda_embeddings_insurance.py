@@ -41,7 +41,7 @@ import re
 import sys
 import time
 import warnings
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import matplotlib
 import numpy as np
@@ -135,7 +135,7 @@ def extract_seed_from_name(path: str) -> Optional[int]:
     return int(m.group(1)) if m else None
 
 
-def list_input_files(data_path: str, data_type_filter: str = None) -> List[str]:
+def list_input_files(data_path: str, data_type_filter: str = None) -> list[str]:
     """List .pkl/.parquet files from a flat dir, seed_N/ subdirs, or a single file.
 
     Args:
@@ -171,7 +171,7 @@ def list_input_files(data_path: str, data_type_filter: str = None) -> List[str]:
     return files
 
 
-def load_data(data_path: str) -> Tuple[pd.DataFrame, str]:
+def load_data(data_path: str) -> tuple[pd.DataFrame, str]:
     """Load data from pickle or parquet format."""
     if data_path.endswith(".pkl") or data_path.endswith(".pickle"):
         return pd.read_pickle(data_path), "PICKLE"
@@ -221,7 +221,7 @@ def get_target_column(df: pd.DataFrame) -> str:
 
 
 def plot_confusion_matrix(
-    cm: np.ndarray, class_names: List[str], out_path: str, title: str
+    cm: np.ndarray, class_names: list[str], out_path: str, title: str
 ):
     plt.figure(figsize=(6, 5))
     plt.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
@@ -266,7 +266,7 @@ def run_qsvm_splits(
     comm_mpi,
     rank: int,
     size: int,
-    class_names: List[str],
+    class_names: list[str],
     use_hybrid: bool,
     alpha: float,
     classical_kernel: str,

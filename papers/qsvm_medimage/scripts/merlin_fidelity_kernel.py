@@ -23,9 +23,8 @@ from sklearn.svm import SVC
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from qve.process import data_prepare_cv
 from qve.core import normalize_train_and_cross_kernel_trace
-
+from qve.process import data_prepare_cv
 from scripts.classical_svm_c1_pca import evaluate, load_data, split_data
 
 

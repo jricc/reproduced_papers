@@ -33,7 +33,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from qve.process import data_prepare_cv
 
-
 TARGET_COLUMNS = [
     "target",
     "label",

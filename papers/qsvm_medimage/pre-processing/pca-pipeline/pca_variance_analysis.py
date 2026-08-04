@@ -15,18 +15,17 @@ Output:
 """
 
 import argparse
+import gc
 import os
 import sys
-from typing import Tuple, List, Dict
 
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA, IncrementalPCA
-import gc
 
 
-def load_embeddings(data_path: str) -> Tuple[np.ndarray, int]:
+def load_embeddings(data_path: str) -> tuple[np.ndarray, int]:
     """
     Load embeddings from pickle file and flatten to 2D array.
 
@@ -53,9 +52,9 @@ def load_embeddings(data_path: str) -> Tuple[np.ndarray, int]:
 
 def analyze_pca_variance(
     X: np.ndarray,
-    target_components: List[int],
+    target_components: list[int],
     max_pca_components: int = 1500
-) -> Tuple[pd.DataFrame, Dict]:
+) -> tuple[pd.DataFrame, dict]:
     """
     Fit PCA and analyze cumulative explained variance for target dimensions.
 
@@ -67,7 +66,7 @@ def analyze_pca_variance(
         summary: Dictionary with key findings
     """
     n_samples, n_features = X.shape
-    print(f"\nStandardizing features (zero-centering)...")
+    print("\nStandardizing features (zero-centering)...")
 
     # Standardize (zero-center) the features - use float32 to save memory
     scaler = StandardScaler()
@@ -79,7 +78,7 @@ def analyze_pca_variance(
     n_components = min(max_pca_components, max_possible)
     print(f"Fitting PCA with {n_components} components...")
     print(f"  (n_samples={n_samples}, n_features={n_features})")
-    print(f"  Using randomized SVD solver for memory efficiency...")
+    print("  Using randomized SVD solver for memory efficiency...")
 
     # Use randomized solver - much more memory efficient
     pca = PCA(n_components=n_components, svd_solver='randomized', random_state=42)
@@ -147,7 +146,7 @@ def analyze_pca_variance(
     return results_df, summary
 
 
-def determine_recommendation(summary: Dict, target_variance: float = 0.999) -> Tuple[str, int, float, str]:
+def determine_recommendation(summary: dict, target_variance: float = 0.999) -> tuple[str, int, float, str]:
     """
     Determine whether one-stage or two-stage PCA is recommended.
 
@@ -238,7 +237,7 @@ def determine_recommendation(summary: Dict, target_variance: float = 0.999) -> T
         )
 
 
-def print_analysis_report(results_df: pd.DataFrame, summary: Dict, recommendation: Tuple):
+def print_analysis_report(results_df: pd.DataFrame, summary: dict, recommendation: tuple):
     """Print a formatted analysis report to stdout."""
     strategy, intermediate_dim, intermediate_var, explanation = recommendation
 

@@ -17,10 +17,10 @@ Key Features:
 Usage:
     # Process data_type1_insurance.pkl (default)
     python apply_pca_reduction.py --n_components 1999
-    
+
     # Process a specific file by number
     python apply_pca_reduction.py --n_components 500 --file_num 2
-    
+
     # Via SLURM:
     sbatch run_pca_reduction.sh 1999 1
 
@@ -30,27 +30,25 @@ Output:
 """
 
 import argparse
+import gc
 import os
 import sys
+from collections.abc import Generator
 from pathlib import Path
-from typing import Tuple, Generator
-import gc
 
 import numpy as np
 import pandas as pd
 from scipy.sparse.linalg import svds
-from scipy.sparse import csr_matrix
-import joblib
 
 
 def get_data_file(input_dir: str, file_num: int) -> Path:
     """Get the specific pickle data file by number."""
     input_path = Path(input_dir)
     data_file = input_path / f"data_type{file_num}_insurance.pkl"
-    
+
     if not data_file.exists():
         raise FileNotFoundError(f"File not found: {data_file}")
-    
+
     return data_file
 
 
@@ -61,7 +59,7 @@ def process_embeddings_in_batches(
     """Yield batches of flattened embeddings from dataframe."""
     n_samples = len(df)
     embeddings = df["embedding"].values
-    
+
     for start_idx in range(0, n_samples, batch_size):
         end_idx = min(start_idx + batch_size, n_samples)
         batch_embeddings = embeddings[start_idx:end_idx]
@@ -72,44 +70,44 @@ def process_embeddings_in_batches(
 def compute_global_statistics_streaming(
     df: pd.DataFrame,
     batch_size: int = 200
-) -> Tuple[np.ndarray, np.ndarray, int]:
+) -> tuple[np.ndarray, np.ndarray, int]:
     """Compute global mean and std in a streaming fashion."""
     print("\n--- Computing global statistics (streaming) ---")
-    
+
     n_samples = len(df)
     running_sum = None
     running_sum_sq = None
     n_features = None
     samples_processed = 0
-    
+
     for batch in process_embeddings_in_batches(df, batch_size):
         if running_sum is None:
             n_features = batch.shape[1]
             running_sum = np.zeros(n_features, dtype=np.float64)
             running_sum_sq = np.zeros(n_features, dtype=np.float64)
-        
+
         running_sum += batch.sum(axis=0).astype(np.float64)
         running_sum_sq += (batch ** 2).sum(axis=0).astype(np.float64)
         samples_processed += len(batch)
-        
+
         print(f"  Stats: {samples_processed}/{n_samples} samples", end="\r")
-        
+
         del batch
         gc.collect()
-    
+
     print()
-    
+
     global_mean = (running_sum / n_samples).astype(np.float32)
     global_var = (running_sum_sq / n_samples) - (global_mean.astype(np.float64) ** 2)
     global_std = np.sqrt(np.maximum(global_var, 1e-10)).astype(np.float32)
-    
+
     print(f"  Mean range: [{global_mean.min():.4f}, {global_mean.max():.4f}]")
     print(f"  Std range: [{global_std.min():.4f}, {global_std.max():.4f}]")
     print(f"  Features: {n_features}")
-    
+
     del running_sum, running_sum_sq, global_var
     gc.collect()
-    
+
     return global_mean, global_std, n_features
 
 
@@ -119,77 +117,77 @@ def fit_svd_memory_efficient(
     global_std: np.ndarray,
     n_components: int,
     batch_size: int = 100
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Fit SVD using scipy.sparse.linalg.svds which is very memory efficient.
-    
+
     Returns:
         Tuple of (U, s, Vt) where Vt contains the principal components
     """
     print(f"\n--- Fitting SVD with {n_components} components ---")
     print("  Using scipy.sparse.linalg.svds (memory efficient)")
-    
+
     n_samples = len(df)
     n_features = len(global_mean)
-    
+
     # Adjust components if needed
     max_components = min(n_samples - 1, n_features - 1)
     actual_components = min(n_components, max_components)
-    
+
     if actual_components < n_components:
         print(f"  WARNING: Reducing n_components from {n_components} to {actual_components}")
-    
+
     # Build standardized matrix chunk by chunk
     # Use float32 to save memory
     print("  Building standardized matrix...")
-    
+
     X_std = np.zeros((n_samples, n_features), dtype=np.float32)
     samples_processed = 0
-    
+
     for batch in process_embeddings_in_batches(df, batch_size):
         batch_size_actual = len(batch)
         start_idx = samples_processed
         end_idx = samples_processed + batch_size_actual
-        
+
         # Standardize in place
         X_std[start_idx:end_idx] = ((batch - global_mean) / global_std).astype(np.float32)
-        
+
         samples_processed += batch_size_actual
         print(f"  Standardized: {samples_processed}/{n_samples}", end="\r")
-        
+
         del batch
         gc.collect()
-    
+
     print()
     print(f"  Matrix shape: {X_std.shape}")
     print(f"  Matrix memory: {X_std.nbytes / 1e9:.2f} GB")
-    
+
     # Use scipy svds which is memory efficient
     # It uses ARPACK which doesn't need to form full matrices
     print(f"  Computing SVD with {actual_components} components...")
     print("  (This may take a few minutes...)")
-    
+
     # svds returns components in ascending order of singular values
     # We want descending, so we'll reverse later
     U, s, Vt = svds(X_std, k=actual_components)
-    
+
     # Reverse to get descending order (largest singular values first)
     U = U[:, ::-1]
     s = s[::-1]
     Vt = Vt[::-1, :]
-    
+
     # Compute explained variance ratio
     # Total variance is sum of squared singular values / (n_samples - 1)
     total_var = np.sum(X_std ** 2) / (n_samples - 1)
     explained_var = (s ** 2) / (n_samples - 1)
     explained_var_ratio = explained_var / total_var
-    
+
     print(f"  Variance captured: {np.sum(explained_var_ratio)*100:.2f}%")
     print(f"  Components: {actual_components}")
-    
+
     del X_std
     gc.collect()
-    
+
     return U, s, Vt, explained_var_ratio
 
 
@@ -204,71 +202,71 @@ def transform_and_save(
 ) -> None:
     """
     Transform the data using Vt and save to output file.
-    
+
     Transform is: X_reduced = X_std @ Vt.T
     """
     print(f"\n{'='*60}")
     print("PHASE 2: Transforming and saving dataset")
     print(f"{'='*60}")
-    
+
     original_shape = df["embedding"].values[0].shape
     n_samples = len(df)
     n_components = Vt.shape[0]
-    
+
     print(f"\n  Samples: {n_samples}")
     print(f"  Original embedding shape: {original_shape}")
     print(f"  Target components: {n_components}")
-    
+
     # Transform in batches: X_reduced = X_std @ Vt.T
     X_reduced_list = []
     samples_transformed = 0
-    
+
     for batch in process_embeddings_in_batches(df, batch_size):
         batch_std = ((batch - global_mean) / global_std).astype(np.float32)
         batch_reduced = batch_std @ Vt.T
         X_reduced_list.append(batch_reduced)
-        
+
         samples_transformed += len(batch)
         print(f"  Transformed: {samples_transformed}/{n_samples}", end="\r")
-        
+
         del batch, batch_std, batch_reduced
         gc.collect()
-    
+
     print()
-    
+
     X_reduced = np.vstack(X_reduced_list)
     del X_reduced_list
     gc.collect()
-    
+
     print(f"  Reduced embedding shape: ({X_reduced.shape[1]},)")
-    
+
     # Update dataframe
     df["embedding"] = [X_reduced[i] for i in range(len(X_reduced))]
-    
+
     df.attrs["pca_n_components"] = n_components
     df.attrs["pca_variance_explained"] = float(np.sum(explained_var_ratio))
     df.attrs["original_embedding_shape"] = original_shape
-    
+
     # Save
     output_file.parent.mkdir(parents=True, exist_ok=True)
     df.to_pickle(output_file)
     print(f"  Saved to: {output_file}")
-    
+
     del X_reduced
     gc.collect()
-    
+
     # Save model components
     models_dir = output_file.parent / "models"
     models_dir.mkdir(exist_ok=True)
-    
+
     file_num = output_file.stem.split('type')[1].split('_')[0]
-    
+
     model_path = models_dir / f"svd_components_{n_components}_type{file_num}.npz"
     stats_path = models_dir / f"global_stats_{n_components}_type{file_num}.npz"
-    
+
     np.savez_compressed(model_path, Vt=Vt, explained_var_ratio=explained_var_ratio)
     np.savez(stats_path, mean=global_mean, std=global_std)
-    
+
     print(f"\nSaved SVD components to: {model_path}")
     print(f"Saved global statistics to: {stats_path}")
 
@@ -358,7 +356,7 @@ def main():
     U, s, Vt, explained_var_ratio = fit_svd_memory_efficient(
         df, global_mean, global_std, args.n_components, batch_size=args.batch_size
     )
-    
+
     # We only need Vt for transformation
     del U, s
     gc.collect()
@@ -376,7 +374,7 @@ def main():
 
     actual_components = Vt.shape[0]
     total_variance = np.sum(explained_var_ratio)
-    
+
     del df, Vt
     gc.collect()
 

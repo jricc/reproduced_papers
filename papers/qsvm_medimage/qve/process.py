@@ -1,6 +1,6 @@
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.decomposition import PCA
 import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
 def _transform_pca(pca, sample_train, sample_test):

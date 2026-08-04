@@ -1,15 +1,14 @@
 import os
+
 os.environ["CUQUANTUM_LOG_LEVEL"] = "OFF"
-import time
+from functools import cache
 from itertools import chain
 
 import numpy as np
-
 from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterVector
 from qiskit.quantum_info import Statevector
 
-from functools import cache
 
 # cuQuantum and CuPy are optional GPU dependencies.
 def _get_cuquantum():
@@ -88,7 +87,7 @@ def make_zz_featuremap(n_dim: int, reps: int = 1):
     params = ParameterVector("p", n_dim)
     qc = QuantumCircuit(n_dim)
 
-    for rep in range(reps):
+    for _rep in range(reps):
         # Layer 1: Hadamard on all qubits
         for q in range(n_dim):
             qc.h(q)
@@ -336,7 +335,7 @@ def data_partition(indices_list, size, rank):
     data_end = num_data if rank == size - 1 else (rank + 1) * chunk + min(rank + 1, extra)
     return indices_list[data_begin:data_end]
 
-# EDITED: reduced for-loop so its a comprenhension list 
+# EDITED: reduced for-loop so its a comprenhension list
 def data_to_operand(n_dim,operand_tmp,data1,data2,indices_list):
     return [renew_operand(n_dim, operand_tmp, data1[i1-1], data2[i2-1]) for i1, i2 in indices_list]
 
@@ -345,7 +344,7 @@ def data_to_operand_3dof(n_dim, operand_tmp, data1, data2, indices_list):
     return [renew_operand_3dof(n_dim, operand_tmp, data1[i1-1], data2[i2-1]) for i1, i2 in indices_list]
 
 
-# EDITED: removing the append so instead does direct mapping 
+# EDITED: removing the append so instead does direct mapping
 def operand_to_amp(opers, network):
     amp_tmp = [None]*len(opers)
     with network as tn:
@@ -363,7 +362,7 @@ def get_kernel_matrix(data1, data2, amp_data, indices_list, mode=None):
         i += 1
         kernel_matrix[i1 - 1][i2 - 1] = np.round(amp_m[i], 8)
     if mode == "train":
-        kernel_matrix = kernel_matrix + kernel_matrix.T + np.diag(np.ones((len(data2))))
+        kernel_matrix = kernel_matrix + kernel_matrix.T + np.diag(np.ones(len(data2)))
     return kernel_matrix
 
 
@@ -373,13 +372,13 @@ def normalize_kernel_trace(K):
 
     Ensures trace(K_norm) = 1
     Good for: Making kernels comparable in scale
-    
+
     Note: Only applicable to square matrices. Returns K unchanged for rectangular matrices.
     """
     # Only normalize square matrices
     if K.shape[0] != K.shape[1]:
         return K
-    
+
     trace = np.trace(K)
     if trace > 0:
         return K / trace
@@ -440,13 +439,13 @@ def normalize_kernel_centered(K):
 
     Centers the kernel in feature space
     Good for: Statistical independence tests, better SVM performance
-    
+
     Note: Only applicable to square matrices. Returns K unchanged for rectangular matrices.
     """
     # Only normalize square matrices
     if K.shape[0] != K.shape[1]:
         return K
-    
+
     n = K.shape[0]
     H = np.eye(n) - np.ones((n, n)) / n
     K_centered = H @ K @ H
@@ -461,16 +460,16 @@ def normalize_kernel_cosine(K):
     Good for: Making kernel values range-independent
 
     Note: This is what sklearn's rbf_kernel does internally
-    
+
     Args:
         K: Kernel matrix (n, m) - can be square or rectangular
-    
+
     Returns:
         Normalized kernel matrix of same shape as K.
         For square matrices: applies cosine normalization.
         For rectangular matrices: returns K unchanged (would require diagonals from
         separate K(X_rows, X_rows) and K(X_cols, X_cols) computations).
-        
+
     Warning:
         For rectangular matrices (test/validation kernels), normalization is skipped.
         This may create scale inconsistencies when combining normalized training kernels
@@ -478,20 +477,20 @@ def normalize_kernel_cosine(K):
         small since both quantum and classical test kernels are affected equally.
     """
     n_rows, n_cols = K.shape
-    
+
     # Handle square matrix case (training kernel)
     if n_rows == n_cols:
         # Get diagonal elements
         diag = np.diag(K).reshape(-1, 1)
-        
+
         # Compute normalization matrix: sqrt(K[i,i] * K[j,j])
         normalization = np.sqrt(diag @ diag.T)
-        
+
         # Avoid division by zero
         normalization[normalization == 0] = 1
-        
+
         return K / normalization
-    
+
     # Handle rectangular matrix case (test/validation kernel)
     # For rectangular kernel K of shape (n, m), we need:
     # - K_diag_rows: diagonal of K(X_rows, X_rows) - shape (n,)
