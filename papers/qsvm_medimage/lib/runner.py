@@ -90,6 +90,17 @@ def train_and_evaluate(cfg: dict[str, Any], run_dir: Path) -> None:
         pca_dim,
         max_samples,
     )
+    logging.getLogger(
+        "matplotlib"
+    ).setLevel(
+        logging.WARNING
+    )
+
+    logging.getLogger(
+        "matplotlib.font_manager"
+    ).setLevel(
+        logging.WARNING
+    )
     arguments = [
         "--data_path",
         data_argument,

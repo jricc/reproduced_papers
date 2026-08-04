@@ -93,3 +93,5 @@ results-insurance-all/
 figures/
 .git-bak
 legacy/outdir*
+data/
+legacy/

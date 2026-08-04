@@ -8,7 +8,7 @@ for CPU execution, the open PneumoniaMNIST dataset, and a MerLin 0.4 photonic
 kernel.
 
 > **Scope:** the results below are surrogate experiments on raw
-> PneumoniaMNIST pixels. They do not reproduce the paper's gated MIMIC-CXR
+> [PneumoniaMNIST pixels](https://www.nature.com/articles/s41597-022-01721-8). They do not reproduce the paper's gated MIMIC-CXR
 > foundation-model embeddings.
 
 - Paper: [*Quantum Kernel Advantage over Classical Collapse in Medical
@@ -38,40 +38,51 @@ surrogate.
 
 ## Paper protocol versus imported upstream code
 
-| Point | Paper | Imported upstream code |
+| Point | Paper or consistent interpretation | Imported upstream code |
 |---|---|---|
-| MinMax preprocessing | Common preprocessing described | [Default code fits MinMax on training plus held-out data](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/process.py#L6-L21) |
-| Training-kernel trace | Divide by the training trace | [Square matrices are divided by their trace](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/core.py#L325-L341) |
-| Validation/test cross-kernel | Divide by the same training trace | [Rectangular matrices are returned unchanged](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/core.py#L325-L341) |
+| StandardScaler and PCA | Fit on training, then applied to held-out data | [Both transformations are fitted on `sample_train`](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/process.py#L10-L13) |
+| MinMax preprocessing | Held-out features should not determine preprocessing parameters | [By default, `MinMaxScaler` is fitted on training plus the current held-out split](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/process.py#L17-L21); [`fix_leakage=True` enables train-only fitting](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/process.py#L17-L18) |
+| Training-kernel trace | Divide the square training Gram matrix by its trace | [`normalize_kernel_trace` divides square matrices by their trace](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/core.py#L356-L372) |
+| Validation/test cross-kernel | Divide each cross-kernel by the trace of its corresponding training Gram matrix | [`normalize_kernel_trace` returns rectangular matrices unchanged](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/qve/core.py#L356-L372) |
+| Consequence | Training and held-out kernels should use the same scale | In [`apply_hybrid_kernel`](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/scripts/qsvm_cuda_embeddings_insurance.py#L832-L833), `normalize_kernel_trace` is called separately on the square training Gram matrix and the rectangular held-out cross-kernel; the latter is subsequently returned unchanged by `normalize_kernel_trace` |
 
-The paper's written protocol is in [Section III.C, Equations (2) and
-(3)](https://arxiv.org/html/2604.24597v1). The imported script
-[normalizes the square and rectangular matrices in separate calls](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/scripts/qsvm_cuda_embeddings_insurance.py#L732-L761),
-so the rectangular guard makes cross-kernel trace normalization a no-op. The
-same path is used for both
-[validation and test](https://github.com/sebasmos/qml-medimage/blob/9e80037305d683b0e70c94b8fa7dd648e1bac82b/scripts/qsvm_cuda_embeddings_insurance.py#L545-L555).
+The paper's protocol is described in
+[Section III.3, Equations (2) and (3)](https://arxiv.org/html/2604.24597v1).
+In the imported implementation,
+`apply_hybrid_kernel` calls `normalize_kernel_trace` separately on the
+training Gram matrix and the held-out
+cross-kernel.
+The training matrix is divided by its trace, but the rectangular cross-kernel
+is returned unchanged. This path is used for both
+validation and test,
+so training and evaluation use different kernel scales.
 
-Fitting MinMaxScaler on held-out data is methodologically invalid because it
-leaks held-out information into preprocessing. Its empirical impact is
-negligible in this local surrogate. No conclusion about author intent can be
-drawn from the code. The cross-kernel trace behavior does, however, contradict
-the written protocol of the paper.
+Fitting `MinMaxScaler` on held-out features also constitutes preprocessing
+leakage. Its measured effect was negligible on the local surrogate, but this
+does not establish its effect on the original embeddings. No conclusion about
+author intent is drawn from the code.
 
 ## Reproduction scope
 
-| Scope | Status | Meaning |
+| Scope | Status | What it covers |
 |---|---|---|
 | Reference reproduction | Not run | Original insurance task, gated MIMIC-CXR embeddings, and BSP qubit protocol |
 | Open-data CPU surrogate | Completed locally | Raw PneumoniaMNIST pixels with QSVM, linear SVM, and tuned RBF SVM |
 | MerLin adaptation | Completed locally | Native photonic fidelity kernel, not the BSP qubit circuit |
 
-The completed local matrix uses at most 500 samples, split into 400 training,
-50 validation, and 50 test samples. It evaluates `q` in `{4, 6}` with ten paired
-data/split seeds, 0 through 9. The MerLin circuit seed is fixed at 0.
+The completed local experiments use at most 500 samples with an 80/10/10
+split, corresponding to 400 training, 50 validation, and 50 test samples when
+all 500 samples are available. They evaluate $q\in\{4,6\}$, where $q$ is
+both the PCA output dimension and the number of qubits. Ten paired data and
+split seeds, numbered 0 through 9, are evaluated. The MerLin circuit
+initialization seed is fixed at 0 for all runs.
 
-The paper's embedding files remain gated. Running the listed foundation models
-on PneumoniaMNIST would be a different frozen-embedding surrogate and is not
-part of this minimal adaptation.
+The original [MIMIC-CXR embeddings](https://huggingface.co/datasets/MITCriticalData/qml-mimic-cxr-embeddings) used in the paper remain gated and were
+therefore unavailable for the local experiments. The minimal open-data
+adaptation uses raw PneumoniaMNIST pixels instead of foundation-model
+embeddings. Computing new embeddings by applying the paper's foundation
+models to PneumoniaMNIST would constitute a separate surrogate experiment and
+was not performed here.
 
 ## How to run
 
@@ -91,17 +102,13 @@ version.
 
 ### Data
 
-The catalogue runtime reads
-`../../data/qsvm_medimage/pneumoniamnist_train.pkl`. Direct scripts can instead
-use the ignored paper-local file `data/pneumoniamnist_train.pkl` by setting
-`DATA_PATH` or `--data_path`.
-
-To prepare the shared copy:
+The local experiments use PneumoniaMNIST. Prepare the dataset in the
+paper-local `data/` directory with:
 
 ```bash
 python scripts/prepare_pneumoniamnist.py \
-  --download_path ../../data/qsvm_medimage/pneumoniamnist.npz \
-  --output_path ../../data/qsvm_medimage/pneumoniamnist_train.pkl
+  --download_path data/pneumoniamnist.npz \
+  --output_path data/pneumoniamnist_train.pkl
 ```
 
 Each 28×28 image is flattened to 784 normalized pixels. The labels are
@@ -119,10 +126,12 @@ python ../../implementation.py --paper qsvm_medimage --help
 python ../../implementation.py --paper qsvm_medimage
 ```
 
-The last command runs the small CPU MerLin default from
-[`configs/defaults.json`](configs/defaults.json). Paper-specific options are in
-[`cli.json`](cli.json). Each run writes its resolved configuration, log,
-metrics, and dataset metadata under `outdir/run_YYYYMMDD-HHMMSS/`.
+The last command runs the default CPU MerLin photonic adaptation from
+[`configs/defaults.json`](configs/defaults.json): 100 samples, two PCA
+components, circuit seed 0, and `float32` arithmetic. [`cli.json`](cli.json)
+defines the command-line options that can override these values, including
+`--fix-leakage`. Each run writes its resolved configuration, log, metrics, and
+dataset metadata to `outdir/run_YYYYMMDD-HHMMSS/`.
 
 ### One-command protocol matrix
 
@@ -195,14 +204,14 @@ seeds.
 
 | Preprocessing | QSVM trace | q | QSVM F1 | Linear F1 | Q-linear | vs linear W/T/L | Tuned RBF F1 | Q-RBF | vs RBF W/T/L |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| train + held-out | square only | 4 | 0.808947 ± 0.059340 | 0.758009 ± 0.079520 | +0.050938 | 7/0/3 | 0.759963 ± 0.121262 | +0.048984 | 6/1/3 |
-| train + held-out | square only | 6 | 0.822105 ± 0.077912 | 0.786008 ± 0.094895 | +0.036097 | 7/0/3 | 0.818913 ± 0.090559 | +0.003193 | 4/1/5 |
-| train only | square only | 4 | 0.813727 ± 0.057270 | 0.758009 ± 0.079520 | +0.055718 | 8/0/2 | 0.759963 ± 0.121262 | +0.053763 | 6/1/3 |
-| train only | square only | 6 | 0.822105 ± 0.077912 | 0.786008 ± 0.094895 | +0.036097 | 7/0/3 | 0.814960 ± 0.086978 | +0.007145 | 4/1/5 |
-| train + held-out | train trace | 4 | 0.000000 ± 0.000000 | 0.758009 ± 0.079520 | -0.758009 | 0/0/10 | 0.759963 ± 0.121262 | -0.759963 | 0/0/10 |
-| train + held-out | train trace | 6 | 0.000000 ± 0.000000 | 0.786008 ± 0.094895 | -0.786008 | 0/0/10 | 0.818913 ± 0.090559 | -0.818913 | 0/0/10 |
-| train only | train trace | 4 | 0.000000 ± 0.000000 | 0.758009 ± 0.079520 | -0.758009 | 0/0/10 | 0.759963 ± 0.121262 | -0.759963 | 0/0/10 |
-| train only | train trace | 6 | 0.000000 ± 0.000000 | 0.786008 ± 0.094895 | -0.786008 | 0/0/10 | 0.814960 ± 0.086978 | -0.814960 | 0/0/10 |
+| train + held-out | square only | 4 | 0.81 ± 0.06 | 0.76 ± 0.08 | +0.05 | 7/0/3 | 0.76 ± 0.12 | +0.05 | 6/1/3 |
+| train + held-out | square only | 6 | 0.82 ± 0.08 | 0.79 ± 0.09 | +0.04 | 7/0/3 | 0.82 ± 0.09 | +0.00 | 4/1/5 |
+| train only | square only | 4 | 0.82 ± 0.06 | 0.76 ± 0.08 | +0.06 | 8/0/2 | 0.76 ± 0.12 | +0.05 | 6/1/3 |
+| train only | square only | 6 | 0.82 ± 0.08 | 0.79 ± 0.09 | +0.04 | 7/0/3 | 0.82 ± 0.09 | +0.01 | 4/1/5 |
+| train + held-out | train trace | 4 | 0.00 ± 0.00 | 0.76 ± 0.08 | -0.76 | 0/0/10 | 0.76 ± 0.12 | -0.76 | 0/0/10 |
+| train + held-out | train trace | 6 | 0.00 ± 0.00 | 0.79 ± 0.09 | -0.79 | 0/0/10 | 0.82 ± 0.09 | -0.82 | 0/0/10 |
+| train only | train trace | 4 | 0.00 ± 0.00 | 0.76 ± 0.08 | -0.76 | 0/0/10 | 0.76 ± 0.12 | -0.76 | 0/0/10 |
+| train only | train trace | 6 | 0.00 ± 0.00 | 0.79 ± 0.09 | -0.79 | 0/0/10 | 0.82 ± 0.09 | -0.81 | 0/0/10 |
 
 > **W/T/L = Wins / Ties / Losses**, counted seed by seed from the
 > first-named model's perspective.
@@ -218,8 +227,8 @@ square-only QSVM trace scaling.
 
 | q | QSVM F1 | Linear F1 | Q-linear | vs linear W/T/L | Tuned RBF F1 | Q-RBF | vs RBF W/T/L |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 4 | 0.808947 ± 0.059340 | 0.758009 ± 0.079520 | +0.050938 | 7/0/3 | 0.759963 ± 0.121262 | +0.048984 | 6/1/3 |
-| 6 | 0.822105 ± 0.077912 | 0.786008 ± 0.094895 | +0.036097 | 7/0/3 | 0.818913 ± 0.090559 | +0.003193 | 4/1/5 |
+| 4 | 0.81 ± 0.06 | 0.76 ± 0.08 | +0.05 | 7/0/3 | 0.76 ± 0.12 | +0.05 | 6/1/3 |
+| 6 | 0.82 ± 0.08 | 0.79 ± 0.09 | +0.04 | 7/0/3 | 0.82 ± 0.09 | +0.00 | 4/1/5 |
 
 > **W/T/L = Wins / Ties / Losses**, counted seed by seed from the
 > first-named model's perspective.
@@ -229,32 +238,33 @@ scaling. No local paired significance test has been run.
 
 ## MerLin photonic adaptation
 
-MerLin is absent from the imported `sebasmos/qml-medimage` revision. It is a
-local photonic adaptation, not an implementation of the BSP qubit circuit, and
-it has no mode inherited from upstream. The two evaluated variants are
-the **MerLin unnormalized variant** and the **MerLin train-trace variant**.
+MerLin is absent from the imported `sebasmos/qml-medimage` revision. The local
+MerLin experiment is a photonic adaptation, not an implementation of the BSP
+qubit circuit, and does not inherit an upstream normalization mode. Two
+variants are evaluated: **unnormalized** and **train-trace normalized**.
 
-The local script uses MerLin's `FidelityKernel` to compute exact CPU overlaps
-with `shots=None`. The circuit seed is fixed at 0. The table values are copied
-from `protocol_summary.csv`. That summary does not contain MerLin-versus-QSVM
-rows, so those two requested columns are explicitly marked as not reported
-rather than reconstructed.
+The local script uses MerLin's
+[`FidelityKernel`](https://merlinquantum.ai/0.4/notebooks/Kernels.html#Fidelity-kernel-in-a-few-lines)
+to compute exact CPU overlaps with `shots=None`. The photonic circuit seed is
+fixed at 0. MerLin F1 values are taken from `protocol_summary.csv`; `M-QSVM`,
+`vs QSVM W/T/L` counts are derived locally
+from the paired seed-level results.
 
 | Preprocessing | MerLin normalization | q | MerLin F1 | M-QSVM | vs QSVM W/T/L | M-linear | vs linear W/T/L | M-RBF | vs RBF W/T/L |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| train + held-out | unnormalized | 4 | 0.757814 ± 0.131587 | not reported | not reported | -0.000195 | 6/0/4 | -0.002150 | 4/2/4 |
-| train + held-out | unnormalized | 6 | 0.770021 ± 0.096427 | not reported | not reported | -0.015987 | 2/3/5 | -0.048891 | 1/1/8 |
-| train only | unnormalized | 4 | 0.755433 ± 0.133619 | not reported | not reported | -0.002576 | 6/0/4 | -0.004531 | 4/2/4 |
-| train only | unnormalized | 6 | 0.770021 ± 0.096427 | not reported | not reported | -0.015987 | 2/3/5 | -0.044939 | 1/1/8 |
-| train + held-out | train trace | 4 | 0.000000 ± 0.000000 | not reported | not reported | -0.758009 | 0/0/10 | -0.759963 | 0/0/10 |
-| train + held-out | train trace | 6 | 0.000000 ± 0.000000 | not reported | not reported | -0.786008 | 0/0/10 | -0.818913 | 0/0/10 |
-| train only | train trace | 4 | 0.000000 ± 0.000000 | not reported | not reported | -0.758009 | 0/0/10 | -0.759963 | 0/0/10 |
-| train only | train trace | 6 | 0.000000 ± 0.000000 | not reported | not reported | -0.786008 | 0/0/10 | -0.814960 | 0/0/10 |
+| train + held-out | unnormalized | 4 | 0.76 ± 0.13 | -0.05 | 4/0/6 | -0.00 | 6/0/4 | -0.00 | 4/2/4 |
+| train + held-out | unnormalized | 6 | 0.77 ± 0.10 | -0.05 | 3/0/7 | -0.02 | 2/3/5 | -0.05 | 1/1/8 |
+| train only | unnormalized | 4 | 0.75 ± 0.13 | -0.06 | 4/0/6 | -0.00 | 6/0/4 | -0.00 | 4/2/4 |
+| train only | unnormalized | 6 | 0.77 ± 0.10 | -0.05 | 3/0/7 | -0.02 | 2/3/5 | -0.04 | 1/1/8 |
+| train + held-out | train trace | 4 | 0.00 ± 0.00 | 0.00 | 0/10/0 | -0.76 | 0/0/10 | -0.76 | 0/0/10 |
+| train + held-out | train trace | 6 | 0.00 ± 0.00 | 0.00 | 0/10/0 | -0.79 | 0/0/10 | -0.82 | 0/0/10 |
+| train only | train trace | 4 | 0.00 ± 0.00 | 0.00 | 0/10/0 | -0.79 | 0/0/10 | -0.76 | 0/0/10 |
+| train only | train trace | 6 | 0.00 ± 0.00 | 0.00 | 0/10/0 | -0.79 | 0/0/10 | -0.81 | 0/0/10 |
 
 > **W/T/L = Wins / Ties / Losses**, counted seed by seed from the
 > first-named model's perspective.
 
-`M-linear = MerLin F1 - linear F1`; `M-RBF = MerLin F1 - tuned RBF F1`.
+`M-QSVM = MerLin F1 - QSVM F1`; `M-linear = MerLin F1 - linear F1`; `M-RBF = MerLin F1 - tuned RBF F1`.
 Without trace normalization, MerLin is in the same broad performance range as
 the local QSVM and classical baselines. With train-trace normalization and
 fixed `C=1`, it follows the same qualitative zero-minority-F1 pattern as the
@@ -289,31 +299,6 @@ of this minimal reproduction.
 - [Aggregated protocol summary Markdown](results/protocol_matrix_n500_q4_q6/protocol_summary.md)
 - [Run provenance](results/protocol_matrix_n500_q4_q6/RUN.md)
 - [Historical upstream-protocol-only per-seed result](results/q4_q6_n500_per_seed.csv)
-
-The user executed the completed protocol-matrix experiments. Neither Codex nor
-the assistant executed them. The notebook remains a lightweight historical
-analysis and does not calculate quantum kernels.
-
-## Manual verification commands
-
-From this paper directory:
-
-```bash
-python -m pytest -q tests
-python ../../implementation.py --paper qsvm_medimage --help
-git diff --check -- README.md
-```
-
-These commands are provided for manual use; this documentation update does not
-run experiments, tests, or benchmarks.
-
-## Legacy code
-
-Obsolete HPC launchers, generated documentation, and private-path notebooks
-were removed after an explicit inventory. Remaining upstream scientific and
-analysis scripts are retained for provenance. Some contain original HPC path
-defaults and are unsupported; they are not used by the catalogue runner. See
-[`legacy/README.md`](legacy/README.md).
 
 ## Citation and license
 
