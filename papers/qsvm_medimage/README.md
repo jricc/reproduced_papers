@@ -233,6 +233,45 @@ Committed artifacts:
 - [run provenance](results/protocol_matrix_n500_q4_q6/RUN.md);
 - [preserved upstream-protocol-only results](results/q4_q6_n500_per_seed.csv).
 
+### Curating generated protocol results
+
+`run_table1_adaptation.sh` writes raw runs and the three aggregated protocol
+artifacts under `RESULT_ROOT`, which defaults to a directory under `outdir/`.
+It does not copy generated files into the committed `results/` directory.
+
+After a completed run using `RESULT_ROOT=outdir/qsvm-protocol-matrix`, curate
+the aggregate artifacts with:
+
+```bash
+bash scripts/curate_protocol_results.sh
+```
+
+The script checks that all three aggregate files exist, copies them to
+`results/protocol_matrix_n500_q4_q6/`, and verifies each copy against its
+source. It does not run experiments, calculate kernels, or regenerate the
+aggregates.
+
+If the raw protocol directories exist but the aggregate files do not, first
+run only the aggregator, then curate its output:
+
+```bash
+.venv/bin/python scripts/aggregate_protocol_matrix.py \
+  --result_root outdir/qsvm-protocol-matrix
+bash scripts/curate_protocol_results.sh
+```
+
+Alternative locations can be selected explicitly:
+
+```bash
+SOURCE_ROOT=outdir/another-run \
+CURATED_ROOT=results/another-protocol-matrix \
+bash scripts/curate_protocol_results.sh
+```
+
+The script deliberately leaves `RUN.md` and
+`results/q4_q6_n500_per_seed.csv` unchanged. Review or create `RUN.md`
+separately so that it accurately records the provenance of the curated run.
+
 ## Limitations
 
 - The reference MIMIC-CXR reproduction was not run.
