@@ -1,6 +1,6 @@
-"""Headline statistics of the paper (E7) and the cross-architecture table (E5, Table VII).
+"""Headline statistics of the paper (E7) and the cross-architecture table (E5, Table VIII).
 
-Paper rule (Sec. III-B; Tables III-VI): for each configuration, one "best" model
+Paper rule (Sec. III-B; Tables IV-VII): for each configuration, one "best" model
 is taken among the 8 quantum or hybrid cells, and both its MAE and its RMSE are
 compared with the classical reservoir + classical (linear) ridge baseline as
 ``1 - best / baseline``. Average and peak are over the 8 configurations. The
@@ -130,6 +130,10 @@ def main() -> int:
         stats = sweep_statistics(Path(arg))
         result["ours"][stats["architecture"]] = stats
     out = PAPER_DIR / "results" / "headline_statistics.json"
+    result = {
+        "paper_reference": "abstract; Tables IV-VII (best cells), computed from Tables C1-C12",
+        **result,
+    }
     out.write_text(json.dumps(result, indent=1), encoding="utf-8")
 
     print(

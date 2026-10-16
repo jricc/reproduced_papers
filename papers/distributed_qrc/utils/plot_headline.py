@@ -60,7 +60,7 @@ def main() -> int:
     axes[0].set_ylabel("reduction vs classical reservoir + linear ridge (%)")
     axes[0].legend(fontsize=8, loc="upper left")
     fig.suptitle(
-        "Headline error reductions, paper rule (best quantum/hybrid cell per configuration by test R²); "
+        "Headline error reductions (paper abstract and Tables IV-VII), paper rule (best quantum/hybrid cell per configuration by test R²); "
         "full data, 3 seeds, full-n kernels",
         fontsize=10,
     )

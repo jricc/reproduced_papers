@@ -1,5 +1,5 @@
 {
-  "description": "E1 (Table III, C1-C3, Fig. 4): SRSR, 8 sizes x 9 cells, full-n kernels.",
+  "description": "E1 (Table IV, C1-C3, Fig. 4): SRSR, 8 sizes x 9 cells, full-n kernels.",
   "experiment": {
     "id": "E1",
     "variant": "original",

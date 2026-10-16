@@ -88,6 +88,10 @@ def main() -> int:
                 f"{architecture}-vs-srsr {n:3d} | {diff:+32.5f} {diff / pooled:+12.2f} | {paper_diff:+10.4f}"
             )
     out = PAPER_DIR / "results" / f"noise_distribution_comparison{suffix}.json"
+    result = {
+        "paper_reference": "Sec. III-B; noisy fully quantum cells of Tables C3, C6, C9, C12; device mapping Table III",
+        **result,
+    }
     out.write_text(json.dumps(result, indent=1), encoding="utf-8")
     print(f"wrote {out}")
     return 0

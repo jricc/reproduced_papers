@@ -52,6 +52,7 @@ def compare(sweep_dir: Path) -> list[dict]:
             "configuration": configuration,
             "reservoir": reservoir,
             "readout": readout,
+            "paper_table": reference["table"],
             "n_seeds": cell["n_seeds"],
         }
         for metric in ("mae", "rmse"):

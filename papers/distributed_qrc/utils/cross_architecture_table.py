@@ -1,4 +1,4 @@
-"""Cross-architecture comparison at equal total neuron count (E5, paper Table VII, claim C3).
+"""Cross-architecture comparison at equal total neuron count (E5, paper Table VIII, claim C3).
 
 For each total neuron count (10, 15, 20, 25, 30, 40, 50, 60), the paper reports
 the best model over all four architectures and observes that it always involves
@@ -133,6 +133,7 @@ def main() -> int:
         "sweeps": [str(s) for s in sweep_dirs],
     }
     out = PAPER_DIR / "results" / "cross_architecture.json"
+    result = {"paper_reference": "Table VIII (best model per total neurons)", **result}
     out.write_text(json.dumps(result, indent=1), encoding="utf-8")
     print(
         f"{'N':>3s} | {'paper best':28s} | {'ours best (mean over seeds)':40s} | {'best SRSR MAE':>13s} {'gap/std':>8s}"

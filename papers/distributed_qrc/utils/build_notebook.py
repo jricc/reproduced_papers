@@ -32,7 +32,7 @@ This notebook is the entry point to the reproduction in `papers/distributed_qrc/
 
 1. What does the paper claim, and what evidence would weaken that claim?
 2. Do we obtain the paper's numbers when we rebuild its models?
-3. Do the numbers still support the claim once the models face **fair classical competitors** and **controls** that test alternative explanations?
+3. Do the numbers still support the claim once the models face **additional classical competitors** and **controls** that test alternative explanations?
 4. What happens when the method is translated to **linear-optical (photonic) hardware** with MerLin?
 
 **How to read it.**
@@ -72,7 +72,43 @@ There are four **architectures**: one or several reservoirs (SR/MR), feeding one
 
 The readout predictions are averaged.
 
-**Central claim (C1), to be falsified.** Quantum-enhanced variants beat the architecture-matched classical baseline, with average MAE reductions of 28.5 % (SRSR), 25.6 % (MRSR), 54.2 % (SRMR) and 52.1 % (MRMR), and a peak of −78.8 %.
+**Pipeline of one model.** Only the readout is trained:
+
+```text
+  4-hour window (x[t-3], x[t-2], x[t-1], x[t])
+        |
+        v
+  Reservoir (fixed)  ── classical ESN, or a network of 4-qubit quantum neurons
+        |  measured expectation values = features r(t)
+        v
+  Readout (trained)  ── linear ridge, or kernel ridge with a fidelity kernel
+        |
+        v
+  Forecast x̂[t+1]
+```
+
+**The four architectures.** Every arrow carries classical data. Each branch runs independently, and no quantum state is shared between reservoirs, readouts or devices:
+
+```text
+SRSR   x ──> Reservoir ──> Readout ──> ŷ
+
+MRSR   x ─┬─> Reservoir 1 ─┐
+          ├─> Reservoir 2 ─┼─> concatenate ──> Readout ──> ŷ
+          └─> Reservoir k ─┘
+
+SRMR   x ──> Reservoir ──> r(t) ─┬─> part 1 ──> Readout 1 ─┐
+                                 ├─> part 2 ──> Readout 2 ─┼─> mean ──> ŷ
+                                 └─> part m ──> Readout m ─┘
+
+MRMR   x ─┬─> Reservoir 1 ──> Readout 1 ─┐
+          ├─> Reservoir 2 ──> Readout 2 ─┼─> mean ──> ŷ
+          └─> Reservoir k ──> Readout k ─┘
+```
+
+The paper's main contribution is this **modular decomposition**: small, independent quantum workloads that can run on several heterogeneous QPUs and are joined classically. The authors do not claim a computational speed-up. Their claims concern forecasting accuracy and modular deployment.
+
+
+**Central claim (C1), as a testable statement.** Quantum-enhanced variants beat the architecture-matched classical baseline, with average MAE reductions of 28.5 % (SRSR), 25.6 % (MRSR), 54.2 % (SRMR) and 52.1 % (MRMR), and a peak of −78.8 %.
 
 **Secondary claims:**
 - **C2:** the quantum-kernel readout is the main contributor.
@@ -85,7 +121,7 @@ The readout predictions are averaged.
 **What would weaken C1:**
 - (a) a classical model with the *same inputs and readout type* that matches the quantum models;
 - (b) the gain disappearing when the best cell is chosen on validation data instead of test data;
-- (c) the gain being explained by a weak or unstable baseline rather than by the quantum components.
+- (c) the gain depending on the choice of classical reference rather than on the quantum components.
 """)
 
 code(r"""
@@ -149,7 +185,7 @@ md(r"""
 ## 2. Data, splits, metrics and evaluation protocol
 
 **Data:**
-- IPTO/ADMIE `RealTimeSCADASystemLoad`, hourly load in MW, 2020-10-22 … 2024-10-21 (35,064 values).
+- IPTO (Independent Power Transmission Operator of Greece; ADMIE in Greek, portal admie.gr) `RealTimeSCADASystemLoad`, hourly load in MW, 2020-10-22 … 2024-10-21 (35,064 values).
 - The paper does not give the dates. We identified the window by matching the first and last rows of the paper's Table II and its length exactly. The loader enforces it with a SHA-256 fingerprint.
 - The raw files live in `data/distributed_qrc/` (not committed). See the README *Data* section to download them.
 
@@ -210,7 +246,7 @@ $$K(x,x') = \prod_{q=1}^{n} \frac{1 + \mathbf b_q(x)\cdot \mathbf b_q(x')}{2},$$
 
 where $\mathbf b_q$ is the Bloch vector of qubit $q$.
 
-> This is the single most important observation of the reproduction. The paper's "quantum ridge" is a classically computable kernel, in closed form, with cost $O(nd)$ per pair. This is what we compute (`lib/kernels.py`). Section 4 checks it against an independent quantum simulation.
+> This is a key observation for the rest of the analysis. The kernel used by the paper's "quantum ridge" is classically computable, in closed form, with cost $O(nd)$ per pair. This is what we compute (`lib/kernels.py`). Section 4 checks it against an independent quantum simulation.
 
 **Readouts:**
 - *Linear ridge:* $\hat y = W r + b$.
@@ -368,12 +404,12 @@ md(r"""
 - **The reservoir-free product kernel** on the raw lags (0.0144) is at least as good as quantum reservoir + quantum kernel (0.0147).
 
 **Inference:**
-- The large "quantum" gain over the paper's baseline comes mostly from a weak baseline reservoir. Then, a smaller part comes from the move from a linear to a kernel readout (0.0165 → 0.0145).
+- The large "quantum" gain over the paper's baseline comes mostly from the default classical reservoir used as the reference, which is seed-sensitive with these settings. Then, a smaller part comes from the move from a linear to a kernel readout (0.0165 → 0.0145).
 - The quantum reservoir adds nothing measurable on top of a kernel applied to the raw window.
 
 **Remaining uncertainty:** this is a reduced, single-configuration run. Sections 7–9 test the same pattern at full scale, on all 32 configurations.
 
-**Claim impact:** this live run already suggests that C1 may be a baseline effect. It is not yet decisive.
+**Claim impact:** this live run suggests that C1 depends on the choice of classical reference. It is not yet decisive.
 """)
 
 # ---------------------------------------------------------------- 7. Headline reproduction
@@ -396,7 +432,7 @@ for arch, exp in ARCHS.items():
     df = pd.read_csv(RESULTS / f"{exp}-R2_vs_paper.csv")
     for cell in ["quantum_ideal|quantum_kernel_ideal", "classical|quantum_kernel_ideal", "quantum_ideal|linear", "classical|linear", "quantum_noisy|quantum_kernel_noisy"]:
         g = df[(df.reservoir + "|" + df.readout) == cell]
-        rows.append({"architecture": arch.upper(), "cell": cell, "configs within 12 %": f"{int((g.mae_rel.abs() <= 0.12).sum())}/8",
+        rows.append({"architecture": arch.upper(), "paper tables": ", ".join(sorted(set(g.paper_table), key=lambda t: int(t[1:]))), "cell": cell, "configs within 5 %": f"{int((g.mae_rel.abs() <= 0.05).sum())}/8", "configs within 12 %": f"{int((g.mae_rel.abs() <= 0.12).sum())}/8",
                      "median rel. Δ MAE": g.mae_rel.median(), "ours (mean MAE)": g.mae_ours.mean(), "paper (mean MAE)": g.mae_paper.mean()})
 cell_table = pd.DataFrame(rows)
 display(cell_table.style.format({"median rel. Δ MAE": "{:+.0%}", "ours (mean MAE)": "{:.4f}", "paper (mean MAE)": "{:.4f}"}).hide(axis="index"))
@@ -418,7 +454,7 @@ fig.suptitle("Paper (open markers, single runs) vs ours (filled, mean ± std ove
 
 md(r"""
 **Observation:**
-- The fully quantum ideal cell reproduces within 12 % in **32/32 configurations**.
+- The fully quantum ideal cell matches the paper closely: the median absolute deviation is 2.6 %, with 26/32 configurations within 5 % and **all 32 within 12 %**. The largest deviations are in small multi-readout configurations.
 - The paper's baseline (`classical|linear`, gray) is much noisier. The paper's values often fall at one extreme of our seed spread.
 - Noisy cells do not degrade as much as in the paper. See the limitations in Section 12.
 
@@ -451,7 +487,7 @@ md(r"""
 
 **Inference:** the headline is *quantitatively close to the paper* for MRSR and MRMR and *the same in trend* for SRSR and SRMR. The test-set selection in the paper is not what produces it.
 
-**Claim impact:** the **C1 numbers reproduce against the paper's own baseline**. Whether that baseline is a fair reference is the question of Section 8.
+**Claim impact:** the **C1 numbers reproduce against the paper's own baseline**. Section 8 asks how the comparison changes with additional classical references.
 """)
 
 # ---------------------------------------------------------------- 8. Fair baselines
@@ -496,12 +532,12 @@ for arch in ARCHS:
         q, c, m = (sel[k]["picks"] for k in ("quantum", "fair_classical", "merlin"))
         rows.append({"arch": arch.upper(), "config": config,
                      "quantum (eval-sel.)": np.mean([p["test_mae"] for p in q]), "q seeds": " ".join(f"{p['test_mae']:.4f}" for p in q),
-                     "fair classical (eval-sel.)": np.mean([p["test_mae"] for p in c]), "c seeds": " ".join(f"{p['test_mae']:.4f}" for p in c),
+                     "additional classical (eval-sel.)": np.mean([p["test_mae"] for p in c]), "c seeds": " ".join(f"{p['test_mae']:.4f}" for p in c),
                      "classical cell(s)": ", ".join(sorted({p["cell"] for p in c})),
                      "paper baseline B0": a["per_configuration"][config]["classical|linear"]["mean"],
                      "verdict": a["claims"]["C1_vs_fair_classical"]["configurations"][config]["verdict"]})
 fair_table = pd.DataFrame(rows)
-display(fair_table.style.format({"quantum (eval-sel.)": "{:.4f}", "fair classical (eval-sel.)": "{:.4f}", "paper baseline B0": "{:.4f}"}).hide(axis="index"))
+display(fair_table.style.format({"quantum (eval-sel.)": "{:.4f}", "additional classical (eval-sel.)": "{:.4f}", "paper baseline B0": "{:.4f}"}).hide(axis="index"))
 """)
 
 code(r"""
@@ -509,7 +545,7 @@ fig, axes = plt.subplots(1, 4, figsize=(16, 3.6), sharey=True)
 for ax, arch in zip(axes, ARCHS):
     sub = fair_table[fair_table.arch == arch.upper()]
     x = np.arange(len(sub))
-    for col, seeds, color, label in (("quantum (eval-sel.)", "q seeds", COLORS["quantum"], "quantum/hybrid (R2)"), ("fair classical (eval-sel.)", "c seeds", COLORS["classical"], "fair classical")):
+    for col, seeds, color, label in (("quantum (eval-sel.)", "q seeds", COLORS["quantum"], "quantum/hybrid (R2)"), ("additional classical (eval-sel.)", "c seeds", COLORS["classical"], "additional classical")):
         ax.plot(x, sub[col], color=color, marker="o", lw=1.2, label=label)
         for i, s in enumerate(sub[seeds]):  # individual seeds
             ax.scatter([i] * 3, [float(v) for v in s.split()], color=color, s=8, alpha=0.5)
@@ -517,7 +553,7 @@ for ax, arch in zip(axes, ARCHS):
     ax.axhline(fair["architectures"][arch]["per_configuration"][sub.config.iloc[0]]["raw_lags|quantum_kernel_ideal"]["mean"], color="k", ls="--", lw=0.8, label="B3: product kernel, no reservoir")
     ax.set_xticks(x, sub.config, rotation=45, fontsize=7); ax.set_yscale("log"); ax.set_title(arch.upper())
 axes[0].set_ylabel("test MAE (normalized, log)"); axes[0].legend(fontsize=6)
-fig.suptitle("Eval-selected best model per configuration: quantum/hybrid vs fair classical (dots = individual seeds)", fontsize=10); plt.tight_layout(); plt.show()
+fig.suptitle("Eval-selected best model per configuration: quantum/hybrid vs additional classical (dots = individual seeds)", fontsize=10); plt.tight_layout(); plt.show()
 """)
 
 code(r"""
@@ -527,7 +563,7 @@ for arch in ARCHS:
     c1, b0 = a["claims"]["C1_vs_fair_classical"], a["claims"]["C1_vs_paper_baseline_B0"]
     h = a["E7_headline_vs_fair_classical"]["mae"]
     dm = [r for r in a["diebold_mariano"]["rows"] if r["loss"] == "abs" and r["lag"] == 24]
-    rows.append({"architecture": arch.upper(), "vs fair classical: better / tie / worse": f"{c1['counts']['better']} / {c1['counts']['tie']} / {c1['counts']['worse']}",
+    rows.append({"architecture": arch.upper(), "vs additional classical: better / tie / worse": f"{c1['counts']['better']} / {c1['counts']['tie']} / {c1['counts']['worse']}",
                  "C1 vs fair": c1["outcome"], "vs paper B0: better": f"{b0['counts']['better']}/8",
                  "avg MAE reduction vs fair": f"{h['average']['mean']:+.1%} ± {h['average']['std']:.1%}",
                  f"DM at headline config (seeds 0,1,2)": " ".join(f"{r['dm']:+.1f}" for r in dm)})
@@ -538,16 +574,16 @@ md(r"""
 The decision rule was fixed before the runs: model A is "better" than B in a configuration if $\overline{\rm MAE}_A - \overline{\rm MAE}_B < -2\sigma_{\rm pooled}$ over the 3 seeds. The Diebold-Mariano statistic is computed on the test errors (HLN correction, lag 24); a positive value means the quantum model has the larger loss.
 
 **Observation:**
-- Against fair classical models, the eval-selected quantum/hybrid model is **better in 0/8 configurations in every architecture**. It ties in 4–6/8 and is worse in the rest.
+- Against additional classical models, the eval-selected quantum/hybrid model is **better in 0/8 configurations in every architecture**. It ties in 4–6/8 and is worse in the rest.
 - The average "reduction" turns negative, −3 % to −6 %.
 - Diebold-Mariano tests favour the classical model in 10 of 12 seed-level tests, and favour the quantum model in none.
 - The classical winner is very often **B3, the paper's own product kernel on the raw lags with no reservoir**.
 
-**Inference:** the paper's gains are explained by its weak baseline: default, untuned ReservoirPy features with a *linear* readout, which at small sizes is worse than a plain AR(4). Once the classical side may use a kernel too, or simply drops the reservoir, nothing quantum remains.
+**Inference:** in our setting, the gains measured against B0 mainly reflect the classical reference used: default, untuned ReservoirPy features with a *linear* readout, which at small sizes performs below a plain AR(4). Once the classical side may use a kernel too, or simply drops the reservoir, nothing quantum remains.
 
 **Remaining uncertainty:** the frozen RBF γ grid and ESN grid were often selected at their edges. A wider grid could only improve the classical side, so this limits the comparison in the quantum models' favour.
 
-**Claim impact:** **C1 is not supported** against fair classical baselines. It is only supported against the paper's mismatched baseline.
+**Claim impact:** C1 is **reproduced against the paper's reference** and **not confirmed** against the additional classical baselines.
 """)
 
 # ---------------------------------------------------------------- 9. Controls
@@ -559,7 +595,7 @@ md(r"""
 | Kernel swap on **identical** features (C2) | the *quantum* kernel is what helps | any good nonlinear kernel helps | product kernel vs RBF on the same features |
 | Reservoir removal (B3) | the quantum *reservoir* creates useful features | the window plus a kernel is enough | kernel on raw lags vs quantum reservoir + kernel |
 | Same-device noise (C6) | distribution mitigates noise | the paper put the single-reservoir model on the noisiest device | MRSR vs SRSR at ×10 noise, paper mapping vs one device for all |
-| Best cell (C7) | the 3×20 hybrid is the best model | it is a kernel model like the others | hybrid vs fair classical at 3×20 |
+| Best cell (C7) | the 3×20 hybrid is the best model | it is a kernel model like the others | hybrid vs additional classical at 3×20 |
 """)
 
 code(r"""
@@ -571,7 +607,7 @@ for arch in ARCHS:
         rows.append({"architecture": arch.upper(), "comparison": label, "product kernel better / tie / worse": f"{c['better']} / {c['tie']} / {c['worse']}", "outcome": a["claims"][key]["outcome"]})
 display(pd.DataFrame(rows).style.hide(axis="index"))
 c7 = fair["C7"]
-print(f"C7: MRSR 3x20 hybrid {c7['hybrid_3x20']['mean']:.5f} ± {c7['hybrid_3x20']['std']:.5f} vs fair classical {c7['fair_classical_3x20']['mean']:.5f} ± {c7['fair_classical_3x20']['std']:.5f} -> {c7['verdict']} (paper 0.0113)")
+print(f"C7: MRSR 3x20 hybrid {c7['hybrid_3x20']['mean']:.5f} ± {c7['hybrid_3x20']['std']:.5f} vs additional classical {c7['fair_classical_3x20']['mean']:.5f} ± {c7['fair_classical_3x20']['std']:.5f} -> {c7['verdict']} (paper 0.0113)")
 """)
 
 code(r"""
@@ -594,7 +630,7 @@ md(r"""
 - **Kernel swap:** on the classical features, the paper's product kernel and an RBF kernel tie in 32/32 configurations. On the quantum features, the product kernel is better in SRSR and MRSR, but there the RBF γ was capped by its frozen grid.
 - **Reservoir removal:** the product kernel on the raw lags (Section 8, dashed line) matches the best quantum model everywhere.
 - **Same-device noise:** under the paper's device mapping, MRSR beats SRSR in 4/8 sizes. With the same device for every component, it beats SRSR in 0/8.
-- **C7:** the hybrid ties with the fair classical models.
+- **C7:** the hybrid ties with the additional classical models.
 
 **Inference:**
 - The kernel, not its quantum origin, explains the readout gain. It is a classical closed-form kernel in any case (Section 4).
@@ -605,8 +641,9 @@ md(r"""
 - A wider RBF grid could change the quantum-feature row of C2, but only against the quantum kernel.
 
 **Claim impact:**
-- **C2** and **C6** are not supported.
-- **C7** is not supported: it is not reproduced (0.0146 vs 0.0113) and ties with the classical models.
+- **C2:** the readout gain is real but not specific to quantum hardware.
+- **C6:** not confirmed under a same-noise control.
+- **C7:** not reproduced (0.0146 vs 0.0113), and on par with the additional classical models.
 """)
 
 # ---------------------------------------------------------------- 10. Robustness and uncertainty
@@ -734,7 +771,7 @@ for arch in ARCHS:
                  "photonic+photonic kernel vs gate full-quantum": f"{m['a_full_quantum']['verdict']} ({m['a_full_quantum']['preserved_count']}/8, median {m['a_full_quantum']['median_relative_delta']:+.1%})",
                  "photonic reservoir + linear vs gate + linear": f"{m['c_reservoir_linear']['verdict']} ({m['c_reservoir_linear']['median_relative_delta']:+.1%})",
                  "headline vs B0 (MerLin / gate)": f"{m['d_headline']['merlin']['mae']['average_mean']:.1%} / {m['d_headline']['r2_ideal']['mae']['average_mean']:.1%}",
-                 "MerLin vs fair classical: better": f"{fair['architectures'][arch]['claims']['MERLIN_vs_fair_classical']['counts']['better']}/8"})
+                 "MerLin vs additional classical: better": f"{fair['architectures'][arch]['claims']['MERLIN_vs_fair_classical']['counts']['better']}/8"})
 display(pd.DataFrame(rows).style.hide(axis="index"))
 hw = pd.DataFrame([
     {"component": "neuron chip", "space": "UNBUNCHED", "detector": "threshold", "photons": 2, "modes": 4, "input": "[1,0,1,0]", "postselection": "yes (2-click)", "shots": "exact", "simulator": "MerLin 0.4.2"},
@@ -746,7 +783,7 @@ md(r"""
 **Observation:**
 - The photonic adaptation preserves the gate-model behaviour in all four architectures. The photonic kernel is 2–3 % worse and the photonic reservoir slightly better.
 - In small multi-readout configurations with 5-feature instances, the 2-photon, 5-mode kernel (15 amplitudes) is clearly weaker than the 5-qubit one (32 amplitudes).
-- Against fair classical models, the MerLin cells are better in 0/32 configurations.
+- Against additional classical models, the MerLin cells are better in 0/32 configurations.
 
 **Inference:** the method transfers to linear optics without loss, and without gain. A 2-photon kernel is classically simulable.
 
@@ -779,9 +816,9 @@ md(r"""
 |---|---|---|
 | Does the software execute? | yes: 48 tests and 196 audited sweep runs (139 R2, 24 MerLin, 33 phase 05) | §4, `tests/`, `LOG.md` |
 | Does the method solve the task? | yes: test MAE ≈ 0.014, about 135 MW, R² ≈ 0.98, far better than persistence (0.034) | §5–7 |
-| Does the paper's metric reproduce? | largely: the ideal cells within 12 % in 32/32 configurations; headline reductions vs its baseline of the same size; C7 not reproduced | §7 |
-| Does the paper's explanation survive controls? | no: the gain comes from the kernel readout, which is classical; distribution has no noise effect under a same-device control | §4, §9 |
-| Does the method beat a fair baseline? | no: better in 0/32 configurations; a reservoir-free classical kernel matches it | §8 |
+| Does the paper's metric reproduce? | largely: the ideal cells match closely (median deviation 2.6 %; 26/32 within 5 %, 32/32 within 12 %); headline reductions vs its baseline of the same size; C7 not reproduced | §7 |
+| Does the paper's explanation hold under controls? | partly: the gain comes from the kernel readout, which is computable classically; distribution shows no noise effect under a same-noise control | §4, §9 |
+| Does the method beat the additional classical baselines? | not in our setting: better in 0/32 configurations; a reservoir-free classical kernel performs on par | §8 |
 
 **1. What reproduced:**
 - the quantum models (§4);
@@ -806,8 +843,8 @@ md(r"""
 
 **5. Reproduction verdict: partially reproduced.**
 - The numbers reproduce against the paper's protocol.
-- The comparative claims C1, C2, C5, C6 and C7 are **not supported** against fair, predeclared classical baselines.
-- The decisive evidence: a classical closed-form kernel on the raw 4-hour window matches every quantum model (§8). No quantum advantage is shown.
+- The accuracy claims C1, C2, C5, C6 and C7 are **not confirmed** against the additional, predeclared classical baselines. The modular, distributable architecture itself is confirmed and reused for a follow-up proof of concept.
+- The main evidence: a classical closed-form kernel on the raw 4-hour window performs on par with every quantum model (§8). We find no evidence of a quantum accuracy advantage on this task.
 
 **6. Extension verdict (MerLin):** a faithful, Perceval-verified photonic translation that preserves the behaviour of the gate model (§11), with no photonic advantage.
 """)

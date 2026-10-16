@@ -3,8 +3,8 @@
 Writes ``results/results_summary.md`` with:
 
 1. the paper-item table (paper value, reproduced value, delta, metric / trend
-   agreement, claim support, seeds, comment) for Tables III-VI (headline),
-   Tables C (per-cell agreement by cell type), Table VII (C7) and the C6
+   agreement, claim support, seeds, comment) for Tables IV-VII (headline),
+   Tables C (per-cell agreement by cell type), Table VIII (C7) and the C6
    cross-architecture comparison, plus the fair-baseline rows of phase 05;
 2. the sweep index: every evidence sweep (R2, MerLin, phase 05) with its
    purpose, candidates, successful / expected runs, completeness, machine, code
@@ -33,10 +33,10 @@ import numpy as np
 PAPER_DIR = Path(__file__).resolve().parents[1]
 ARCHS = {"srsr": "E1", "mrsr": "E2", "srmr": "E3", "mrmr": "E4"}
 TABLES = {
-    "srsr": "III / C1-C3",
-    "mrsr": "IV / C4-C6",
-    "srmr": "V / C7-C9",
-    "mrmr": "VI / C10-C12",
+    "srsr": "IV / C1-C3",
+    "mrsr": "V / C4-C6",
+    "srmr": "VI / C7-C9",
+    "mrmr": "VII / C10-C12",
 }
 # Evidence sweeps (superseded phase-03 sweeps without the -R2 suffix are excluded).
 SWEEPS = {
@@ -46,13 +46,17 @@ SWEEPS = {
         ["quantum_ideal|linear", "quantum_ideal|quantum_kernel_ideal"],
     ),
     "E1-R2": (
-        "E1 paper grid, SRSR (Table III)",
+        "E1 paper grid, SRSR (Table IV)",
         "no selection; seed aggregation",
         None,
     ),
-    "E2-R2": ("E2 paper grid, MRSR (Table IV)", "no selection; seed aggregation", None),
-    "E3-R2": ("E3 paper grid, SRMR (Table V)", "no selection; seed aggregation", None),
-    "E4-R2": ("E4 paper grid, MRMR (Table VI)", "no selection; seed aggregation", None),
+    "E2-R2": ("E2 paper grid, MRSR (Table V)", "no selection; seed aggregation", None),
+    "E3-R2": ("E3 paper grid, SRMR (Table VI)", "no selection; seed aggregation", None),
+    "E4-R2": (
+        "E4 paper grid, MRMR (Table VII)",
+        "no selection; seed aggregation",
+        None,
+    ),
     "P1-ROBUST-R2": (
         "S2: robustness to normalization (per split) and artifact handling (interpolate); the merge rule R12 was resolved analytically, not swept",
         "no selection; materiality rule (results/r2_verdicts.json, S2-R2)",
@@ -213,7 +217,7 @@ def main() -> int:
             )
     c7 = fair["C7"]
     lines.append(
-        f"| Table VII / Table IV: best overall model, MRSR 3x20 classical reservoir + quantum kernel | C7 | 0.0113 | {c7['hybrid_3x20']['mean']:.4f} ± {c7['hybrid_3x20']['std']:.4f} | {c7['hybrid_3x20']['mean'] - 0.0113:+.4f} | no | no (not the best model in our runs) | unsupported | 3 | ties with the fair classical models ({c7['fair_classical_3x20']['mean']:.4f} ± {c7['fair_classical_3x20']['std']:.4f}) |"
+        f"| Table VIII / Table V: best overall model, MRSR 3x20 classical reservoir + quantum kernel | C7 | 0.0113 | {c7['hybrid_3x20']['mean']:.4f} ± {c7['hybrid_3x20']['std']:.4f} | {c7['hybrid_3x20']['mean'] - 0.0113:+.4f} | no | no (not the best model in our runs) | unsupported | 3 | ties with the fair classical models ({c7['fair_classical_3x20']['mean']:.4f} ± {c7['fair_classical_3x20']['std']:.4f}) |"
     )
     same_sign = sum(
         v["same_sign"] for k, v in noise.items() if k.startswith("mrsr-vs-srsr@")

@@ -1,17 +1,11 @@
 # Scalable Quantum Reservoir Computing over Distributed Quantum Architectures — Reproduction
 
-Reproduction of the paper's distributed quantum reservoir computing (QRC) architectures for next-hour Greek power-load forecasting, with a fair classical comparison and a photonic (MerLin) adaptation.
+Reproduction of the paper's distributed quantum reservoir computing (QRC) architectures for next-hour Greek power-load forecasting, extended with additional classical baselines and a photonic (MerLin) adaptation.
 
-**Status (2026-10-16):**
-- the paper grids are reproduced (phase 03);
-- the MerLin adaptation is complete (phase 04);
-- the fair comparison is complete (phase 05);
-- the documentation is complete (phase 06);
-- a distributed-stack PoC is planned after the reproduction (see Next Steps).
-
-**Verdict in one line:** the paper's numbers against its own baseline reproduce in trend, but **no quantum advantage survives a fair comparison**. The paper's own product kernel on the raw 4 lags, computed classically with no reservoir, matches or beats every quantum cell.
-
-Full log: `LOG.md`. Durable lessons: `INSIGHTS.md`.
+**Summary.**
+- **The paper's main contribution is architectural.** A QRC model is split into small, independent quantum circuits whose measured results are combined classically. No entanglement or quantum communication is needed between devices.
+- **Reproduction.** We reproduce the four architectures and the paper's reported trend against its classical reference. The ideal fully quantum cells match the paper closely: the median deviation is 2.6 %; 26/32 configurations are within 5 % and all 32 within 12 %.
+- **Advantage.** The authors do not claim a computational advantage. On forecasting accuracy, our additional classical baselines indicate that, in our setting, the gain comes from the kernel readout, which can be computed classically. The same kernel applied directly to the 4-hour window, without any reservoir, performs on par with the quantum models.
 
 ## Reference and Attribution
 
@@ -19,7 +13,7 @@ Full log: `LOG.md`. Durable lessons: `INSIGHTS.md`.
 - **Authors:** Ioannis Liliopoulos, Georgios D. Varsamis, Konstantinos Rallis, Evangelos Tsipas, Ioannis G. Karafyllidis, Georgios Ch. Sirakoulis, Panagiotis Dimitrakis.
 - **DOI/arXiv:** https://arxiv.org/abs/2605.04991
 - **Original repository:** none listed; no original code is reused.
-- **Attribution:** cite the arXiv preprint above. The dataset is IPTO/ADMIE public data (see Data).
+- **Attribution:** cite the arXiv preprint above. The dataset is public data from IPTO, the Independent Power Transmission Operator of Greece (ADMIE in Greek, portal admie.gr), as cited by the paper (see Data).
 
 ## Original Paper
 
@@ -41,9 +35,45 @@ Both reservoirs and kernels are simulated ideally or with hardware-informed nois
 - *SRMR:* one reservoir feeding 2, 3 or 5 readout instances.
 - *MRMR:* k reservoirs, each with its own readout.
 
-Each architecture has 8 configurations at 10–60 total neurons. The full grid is 3 reservoir types × 3 readout types per configuration, reported in Tables III–VI and C1–C12.
+**One model, end to end.** Only the readout is trained:
 
-**Metrics:** MAE, RMSE and R² on min-max-normalized load, with one run per cell.
+```text
+  4-hour window (x[t-3], x[t-2], x[t-1], x[t])
+        |
+        v
+  Reservoir (fixed)  ── classical ESN, or a network of 4-qubit quantum neurons
+        |
+        |  measured expectation values = features r(t)
+        v
+  Readout (trained)  ── linear ridge, or kernel ridge with a fidelity kernel
+        |
+        v
+  Forecast x̂[t+1]
+```
+
+**The four architectures (Table I).** Every arrow carries classical data. Each reservoir and each readout runs independently, and no quantum state is shared between them:
+
+```text
+SRSR   x ──> Reservoir ──> Readout ──> ŷ
+
+MRSR   x ─┬─> Reservoir 1 ─┐
+          ├─> Reservoir 2 ─┼─> concatenate ──> Readout ──> ŷ
+          └─> Reservoir k ─┘
+
+SRMR   x ──> Reservoir ──> r(t) ─┬─> part 1 ──> Readout 1 ─┐
+                                 ├─> part 2 ──> Readout 2 ─┼─> mean ──> ŷ
+                                 └─> part m ──> Readout m ─┘
+
+MRMR   x ─┬─> Reservoir 1 ──> Readout 1 ─┐
+          ├─> Reservoir 2 ──> Readout 2 ─┼─> mean ──> ŷ
+          └─> Reservoir k ──> Readout k ─┘
+```
+
+Each branch can therefore run on its own process, node or QPU. MRMR is the most naturally distributable: only the branch predictions are exchanged.
+
+Each architecture has 8 configurations at 10–60 total neurons. The full grid is 3 reservoir types × 3 readout types per configuration, reported in Tables IV–VII (best models per architecture), VIII (best per total neurons) and C1–C12 (all cells).
+
+**Metrics:** MAE, RMSE and R² on min-max-normalized load, with one run per cell. The paper's claims concern forecasting accuracy and modular, hardware-agnostic deployment; it does not claim a computational speed-up.
 
 **Claims:**
 - **C1:** the quantum-enhanced variants beat the architecture-matched classical baseline, with average MAE reductions of 25–54 % and a peak of 78.8 %.
@@ -83,20 +113,29 @@ Each architecture has 8 configurations at 10–60 total neurons. The full grid i
 | Distributed merge (R12) | Not given | Contiguous feature partition, mean of instance predictions. This was resolved in phase 03 by evidence, without a sweep: `sum` would double the prediction, and feeding the full r(t) to every instance would make the linear SRMR cells identical to SRSR, which the paper's tables contradict (paper 0.0750 vs 0.0458; ours 0.0608 vs 0.0438). `--merge sum` is available but was not swept |
 | Classical reservoir (R14) | ReservoirPy, no hyperparameters | Library defaults = paper baseline B0; tuned ESN added in phase 05 |
 | Noise construction (R15) | Not given | Depolarizing + readout from the App. B medians; no shots |
-| Best-cell selection (R16) | Best of 8 cells, chosen on test | Reported with the paper's rule (leakage disclosed) and with eval selection |
+| Best-cell selection (R16) | Best of 8 cells, chosen on test | Reported with the paper's rule (selection on the test split) and with validation-based selection |
+
+**Software and hardware named in the paper:**
+
+| Named in the paper | What we did |
+|---|---|
+| Qiskit | Used only to cross-check our exact numpy simulation (`tests/`) |
+| NVIDIA CUDA-Q | Not used. It would not change the ideal results, since the simulation is exact |
+| IBM `ibm_brisbane`, `ibm_marrakesh`; IonQ Aria-1 | Noise profiles only, in the paper too (no QPU runs). Rebuilt from the App. B medians (R15); the full device noise models were not used |
+| ReservoirPy | Used (0.4.2) |
 
 **Claim verdicts (summary).** Details are in Results and Fair Baselines.
 
 | Claim | Outcome |
 |---|---|
-| C1 | Trend reproduced vs the paper's baseline B0. **Unsupported** vs fair matched classical models (phase 05) |
-| C2 | The kernel readout is the consistent contributor (reproduced), but the "quantum" kernel is a classical closed-form kernel. **Unsupported** as a quantum advantage |
-| C3 | "Comparable" supported; "best model always distributed" unsupported |
-| C4 | Fully quantum cells are stable across sizes; their advantage over hybrids is within seed noise |
-| C5 | Holds vs B0 under our noise model; **unsupported** vs fair classical models |
-| C6 | **Unsupported**: no benefit under a same-device control; the paper's effect is consistent with its device assignment |
-| C7 | **Not reproduced** (0.0146 vs 0.0113) and **unsupported** (ties with fair classical models) |
-| C8 | Not testable |
+| C1 | Trend reproduced against the paper's classical reference (B0). Not confirmed against the additional classical baselines |
+| C2 | Reproduced: the kernel readout is the consistent contributor. The kernel used is computable classically in closed form, so this gain is not specific to quantum hardware |
+| C3 | Partly confirmed: distributed architectures perform comparably to SRSR, but the best model is not always distributed |
+| C4 | Fully quantum cells are stable across sizes; their margin over hybrids is within seed variance |
+| C5 | Holds against the paper's reference under our noise model; not confirmed against the additional baselines |
+| C6 | Not confirmed: with the same noise profile on every component, distribution brings no measurable benefit |
+| C7 | Not reproduced (0.0146 vs 0.0113); on par with the additional classical baselines |
+| C8 | Qualitative. Consistent with our implementation, in which each component runs independently; not tested on hardware |
 
 ## Project Layout
 
@@ -127,7 +166,7 @@ From the repository root, in the shared repository venv:
 python implementation.py --paper distributed_qrc
 ```
 
-**Paper grids** (Tables III–VI), one seed per run. E1/E2 take 1–2 h per seed on a laptop CPU. E3/E4 are intended for a GPU.
+**Paper grids** (Tables IV–VII, C1–C12), one seed per run. E1/E2 take 1–2 h per seed on a laptop CPU. E3/E4 are intended for a GPU.
 
 ```bash
 python implementation.py --paper distributed_qrc --config configs/e1_srsr_original.json --seed 0
@@ -211,7 +250,7 @@ The shared runtime adds `--config`, `--seed`, `--device`, `--outdir`, `--log-lev
 ## Data
 
 **Source:**
-- IPTO/ADMIE, the Greek transmission system operator. The data type is "System Load" (filetype `RealTimeSCADASystemLoad`): one public daily `.xls` file of hourly "real time load demand" in MWh.
+- IPTO, the Independent Power Transmission Operator of Greece, as cited by the paper. ADMIE is its Greek acronym (ΑΔΜΗΕ), and `admie.gr` is the domain of its data portal, which the paper's reference points to. The data type is "System Load" (filetype `RealTimeSCADASystemLoad`): one public daily `.xls` file of hourly "real time load demand" in MWh.
 - The files are listed at https://www.admie.gr/en/market/market-statistics/detail-data and downloaded through the official IPTO File Download API (https://www.admie.gr/en/market/market-statistics/file-download-api), with no login.
 
 **Local path:** `data/distributed_qrc/ipto_greek_hourly_load/` under the repository data root (git-ignored). It contains:
@@ -246,24 +285,55 @@ No fallback or synthetic data was used.
 ## Results Obtained and Comparison with the Paper
 
 **Generated tables.** All are full-data runs over seeds 0–2. `results/results_summary.md` is generated by `utils/documentation_tables.py` from the structured artifacts and holds:
-- the complete **paper-item table**: paper value, reproduced value, delta, metric and trend agreement, claim support, seeds and comment, for Tables III–VI, C1–C12 (by cell type) and VII, and the C6 comparison;
+- the complete **paper-item table**: paper value, reproduced value, delta, metric and trend agreement, claim support, seeds and comment, for Tables IV–VII, C1–C12 (by cell type) and VIII, and the C6 comparison;
 - the **sweep index**: all 28 evidence sweeps, each with its rule, run counts, completeness and recomputed selection, linking to its full candidate table `outdir/sweep_<ID>/summary.json`.
 
-**Per-cell comparison:** `results/E{1..4}-R2_vs_paper.csv` and figures `results/E{1..4}-R2_grid.png`.
+**One image per paper table and figure:** `results/paper_items/`, generated by `utils/plot_paper_items.py`. Each image puts the paper's value next to ours (mean ± std over 3 seeds).
+
+| Paper | Image |
+|---|---|
+| Tables I, II, III (architectures, data excerpt, QPU mapping) | `TABLE_1.png`, `TABLE_2.png`, `TABLE_3.png` |
+| Tables IV, V, VI, VII (best model per configuration: SRSR, MRSR, SRMR, MRMR) | `TABLE_4.png` … `TABLE_7.png` |
+| Table VIII (best model per total neurons) | `TABLE_8.png` |
+| Tables B1, B2 (calibration data) | `TABLE_B1.png`, `TABLE_B2.png` |
+| Tables C1–C12 (all cells) | `TABLE_C1.png` … `TABLE_C12.png` |
+| Figures 1 and A1 (architectures) | `FIGURE_1.png`, `FIGURE_A1.png` (as implemented) |
+| Figures 2 and 3 (neuron and kernel circuits) | `FIGURE_2.png`, `FIGURE_3.png` (as implemented, drawn with Qiskit) |
+| Figures 4–7 (MAE and RMSE per architecture) | `FIGURE_4.png` … `FIGURE_7.png` |
+
+```bash
+python papers/distributed_qrc/utils/plot_paper_items.py papers/distributed_qrc/outdir data/distributed_qrc/sources/arxiv_source_v1/tqe_tran.tex
+```
+
+**Where to find each paper item:**
+
+| Paper item | File in `results/` | Generated by (`utils/`) |
+|---|---|---|
+| Tables C1–C12, values extracted from the paper | `paper_tables.json` (field `table`) | `extract_paper_tables.py` |
+| Tables C1–C12 vs ours, cell by cell | `E1-R2_vs_paper.csv` … `E4-R2_vs_paper.csv` (column `paper_table`) | `compare_with_paper.py` |
+| Figs. 4–7 (MAE and RMSE per architecture) | `E1-R2_grid.png` … `E4-R2_grid.png` | `plot_architecture_grid.py` |
+| Abstract and Tables IV–VII (headline reductions, best cells) | `headline_statistics.json`, `headline_reductions.png` | `headline_statistics.py`, `plot_headline.py` |
+| Table VIII (best model per total neurons) | `cross_architecture.json` | `cross_architecture_table.py` |
+| Sec. III-B, noisy MRSR vs SRSR (C6; Tables C3, C6, C9, C12; device mapping Table III) | `noise_distribution_comparison-R2.json` | `noise_distribution_comparison.py` |
+| All of the above, with paper value, reproduced value and verdict | `results_summary.md` | `documentation_tables.py` |
+
+Each JSON output names the paper table it reproduces in a `paper_reference` field.
 
 **Headline reductions vs the paper's baseline B0** (paper rule: best quantum/hybrid cell per configuration by test R²). Values are test MAE reductions, average / peak, as mean over seeds:
 
 | Architecture | Ours | Paper |
 |---|---|---|
-| SRSR (Table III) | 23.4 ± 1.5 % / 64.9 % | 28.5 / 69.2 |
-| MRSR (Table IV) | 26.2 ± 3.6 % / 57.9 % | 24.7 / 63.4 (recomputed from the paper's tables; reported average 25.6) |
-| SRMR (Table V) | 44.1 ± 3.1 % / 75.5 % | 54.2 / 78.8 |
-| MRMR (Table VI) | 51.8 ± 5.9 % / 75.4 % | 52.1 / 76.1 |
+| SRSR (Table IV) | 23.4 ± 1.5 % / 64.9 % | 28.5 / 69.2 |
+| MRSR (Table V) | 26.2 ± 3.6 % / 57.9 % | 24.7 / 63.4 (recomputed from the paper's tables; reported average 25.6) |
+| SRMR (Table VI) | 44.1 ± 3.1 % / 75.5 % | 54.2 / 78.8 |
+| MRMR (Table VII) | 51.8 ± 5.9 % / 75.4 % | 52.1 / 76.1 |
 
-The peak RMSE reduction for MRMR is 72.5 % (paper 72.3 %). See `results/headline_reductions.png` and `results/headline_statistics.json`. **Caveat:** B0 is mismatched (see Fair Baselines).
+The peak RMSE reduction for MRMR is 72.5 % (paper 72.3 %). See `results/headline_reductions.png` and `results/headline_statistics.json`. **Note:** B0 uses a linear readout, while the best quantum cells use a kernel readout (see Fair Baselines).
 
 **Reproduced (metric agreement):**
-- The ideal quantum reservoir with the ideal kernel readout lies within 12 % of the paper in 32/32 configurations (median Δ −2 % to +3 %).
+- **Ideal quantum reservoir with the ideal kernel readout** (paper Tables C2, C5, C8, C11; ours: mean of 3 seeds; `results/E{1..4}-R2_vs_paper.csv`).
+  - The median absolute deviation from the paper is 2.6 %; 26/32 configurations are within 5 % and all 32 within 12 %.
+  - The largest deviations (5–12 %) are in small multi-readout configurations, where seed variance is highest. The maximum is 11.9 %, at SRMR 25/5.
 - The headline reductions vs B0 lie within one seed std of the paper for 6/8 statistics.
 
 **Not reproduced, or only partly:**
@@ -280,7 +350,10 @@ The peak RMSE reduction for MRMR is 72.5 % (paper 72.3 %). See `results/headline
 
 ## Fair Baselines
 
-**Paper baseline state: mismatched** (phase 05, `MISSING_OR_UNFAIR`). The paper compares kernel-readout models with an untuned ReservoirPy reservoir plus a **linear** ridge (B0). Its "quantum" kernel is a product state, which we evaluate classically in closed form; this is verified against the Qiskit statevector.
+**Why additional baselines.**
+- The paper's classical reference (B0) is an untuned ReservoirPy reservoir with a **linear** ridge readout, while the best quantum and hybrid cells use a **kernel** readout.
+- To separate the effect of the reservoir from that of the readout, we added classical models with comparable readouts.
+- The paper's kernel is a product state, which we evaluate classically in closed form (verified against the Qiskit statevector).
 
 **Baselines added.** They were declared in phase 01 and frozen in `LOG.md#Phase 5 Comparison Plan` before any run. Code: `lib/baselines_classical.py`.
 
@@ -297,13 +370,13 @@ The peak RMSE reduction for MRMR is 72.5 % (paper 72.3 %). See `results/headline
 
 | Claim | Outcome | Evidence |
 |---|---|---|
-| C1 | **Unsupported** vs fair classical models; supported only vs B0 | The eval-selected quantum/hybrid cell is better in 0/8 configurations of every architecture (ties 4–6/8, otherwise worse). Average MAE reduction vs the best fair classical model: −3.1 % (SRSR), −3.9 % (MRSR), −6.3 % (SRMR), −4.4 % (MRMR). Diebold-Mariano tests (lag 24) favour the classical model in 10/12 seed-level tests at SRSR 10, MRSR 3x20, SRMR 10/2 and MRMR 2x5; none favours the quantum cell |
-| C2 | **Unsupported** | The "quantum" kernel is a classical closed-form kernel. On B0 features it ties with RBF in 32/32 configurations; on quantum features it beats RBF in SRSR/MRSR, where the RBF γ sat at its grid edge |
-| C5 | **Unsupported** vs fair classical models | The noisy fully quantum cells are never better |
-| C6 | **Unsupported** | At ×10 effective noise with the same device for every component, MRSR beats SRSR in 0/8 configurations and MRMR in 0/3. Under the paper's device mapping it is 4/8 and 1/3, which is attributable to SRSR being placed on the noisiest device |
-| C7 | **Unsupported** | The MRSR 3x20 hybrid scores 0.01459 ± 0.00097 against 0.01365 ± 0.00032 for the fair classical cell: a tie |
+| C1 | Confirmed against B0; not confirmed against the additional baselines | The eval-selected quantum/hybrid cell is better in 0/8 configurations of every architecture (ties 4–6/8, otherwise worse). Average MAE reduction vs the best additional classical model: −3.1 % (SRSR), −3.9 % (MRSR), −6.3 % (SRMR), −4.4 % (MRMR). Diebold-Mariano tests (lag 24) favour the classical model in 10/12 seed-level tests at SRSR 10, MRSR 3x20, SRMR 10/2 and MRMR 2x5; none favours the quantum cell |
+| C2 | Not specific to quantum hardware | The kernel is computable classically in closed form. On B0 features it ties with RBF in 32/32 configurations; on quantum features it beats RBF in SRSR/MRSR, where the RBF γ sat at its grid edge |
+| C5 | Not confirmed against the additional baselines | The noisy fully quantum cells are never better |
+| C6 | Not confirmed | At ×10 effective noise with the same noise profile for every component, MRSR beats SRSR in 0/8 configurations and MRMR in 0/3. Under the paper's device mapping it is 4/8 and 1/3. This is consistent with SRSR being assigned the noisiest profile in the paper's mapping |
+| C7 | Not confirmed | The MRSR 3x20 hybrid scores 0.01459 ± 0.00097, against 0.01365 ± 0.00032 for the best additional classical cell; the difference is within the decision tolerance |
 
-**Key finding.** B3, the paper's product kernel on the 4 raw lags with no reservoir and computed classically, reaches test MAE 0.0138. It matches or beats the eval-selected quantum/hybrid cell in every configuration. The large reductions in the paper come from comparing kernel models with an untuned linear readout on default ReservoirPy features. **No quantum or photonic advantage is supported by this evidence.**
+**Key finding.** B3, the paper's product kernel on the 4 raw lags with no reservoir and computed classically, reaches test MAE 0.0138. It matches or beats the eval-selected quantum/hybrid cell in every configuration. In our setting, the reported reductions therefore reflect mainly the difference between a kernel readout and the paper's linear classical reference, rather than the quantum components themselves. We find no evidence of a quantum or photonic accuracy advantage on this task.
 
 **Wall-clock (readout fit per cell, n = 24,535):**
 
@@ -349,7 +422,7 @@ The tolerance was declared before the runs: |Δ| ≤ max(10 %, 2 × pooled std) 
 **What this shows:**
 - The adaptation **preserves the gate-model behaviour** in all four architectures.
 - Under a strict 10 % criterion, agreement drops in the small multi-readout configurations (for example SRMR 10/2 is +106 %). There, the 5-mode, 2-photon kernel (15 amplitudes) is less expressive than the 5-qubit kernel (32), and seed variance is large.
-- Against the fair classical models, the MerLin cells are better in 0/8 configurations of every architecture.
+- Against the additional classical baselines, the MerLin cells are better in 0/8 configurations of every architecture.
 
 ## Hardware-Aware Settings
 
@@ -369,10 +442,10 @@ Full table: `LOG.md#Hardware-Aware Result Summary`.
 
 ## Next Steps
 
-**Follow-up PoC (defined 2026-10-16 with the user, set aside until the reproduction is finished).** The aim is to use the distributed architectures as a simple, MerLin-only **proof of concept that the distributed hybrid stack works**. It does not aim at an accuracy or speed gain. The PoC is labelled as an extension, not as a result of the paper.
+**Follow-up PoC.** The aim is to use the distributed architectures as a simple, MerLin-only **proof of concept that the distributed hybrid stack works**. It does not aim at an accuracy or speed gain. The PoC is labelled as an extension, not as a result of the paper.
 - **Stages:**
   - *Local, on a laptop or the L4 GPUs:* multi-core, one reservoir per process.
-  - *At TGCC, the same three levels:* multi-core (one reservoir per core), multi-node (one reservoir per node), multi-QPU (one reservoir per QPU).
+  - *On an HPC system, the same three levels:* multi-core (one reservoir per core), multi-node (one reservoir per node), multi-QPU (one reservoir per QPU).
 - **Model:** the phase-04 MerLin photonic reservoir. Each neuron is a frozen 4-mode, 2-photon chip, run in sampled (shots) mode from the local stage onward. The readout is classical (linear ridge). MRMR is the first target: k independent reservoir + readout pipelines followed by a mean. MRSR, which needs a gather of features, comes second.
 - **Why it maps well:**
   - k reservoirs run in parallel on k workers or QPUs.
@@ -381,11 +454,6 @@ Full table: `LOG.md#Hardware-Aware Result Summary`.
 - **Validation per level:**
   - *Exact mode:* bit-equality with the sequential reference. The per-sub-reservoir seeds are already deterministic.
   - *Sampled or QPU mode:* every estimated expectation within ±3σ of the shot noise around the exact value. Bytes exchanged, per-pass synchronization time, QPU time and shots are reported.
-- **Open points at TGCC:**
-  - how jobs reach the QPU from compute nodes;
-  - the number of accessible QPUs;
-  - offline installation of MerLin;
-  - job arrays vs MPI.
 - **Code change needed:** a reservoir-executor interface (sequential / process pool / GPU / scheduler-MPI / remote QPU) at the point where `PhotonicReservoir.transform` evaluates a batch of neurons per pass. Data, readout, merge, metrics and logs are unchanged.
 
 ## Limitations
@@ -432,4 +500,4 @@ Cite the original paper:
 }
 ```
 
-The data is © IPTO/ADMIE, public and provided "as is". The reproduction code follows the repository's license.
+The data is © IPTO (ADMIE), public and provided "as is". The reproduction code follows the repository's license.

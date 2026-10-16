@@ -1,4 +1,4 @@
-"""The four architectures of Table I and the configurations of Tables III-VI.
+"""The four architectures of Table I and the configurations of Tables IV-VII (and C1-C12).
 
 * SRSR: one reservoir of N neurons, one ridge (n = 10 kernel qubits).
 * MRSR: k reservoirs of n neurons each, outputs concatenated (Eq. 4), one ridge
@@ -22,7 +22,7 @@ SMALL_TOTALS = (10, 15, 25)
 
 @dataclass(frozen=True)
 class CellSpec:
-    """Structure of one architecture configuration (one row of Tables III-VI)."""
+    """Structure of one architecture configuration (one row of Tables IV-VII)."""
 
     architecture: str
     label: str

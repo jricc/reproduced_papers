@@ -1,5 +1,5 @@
 {
-  "description": "E2 (Table IV, C4-C6, Fig. 5): MRSR, 8 configurations x 9 cells, full-n kernels.",
+  "description": "E2 (Table V, C4-C6, Fig. 5): MRSR, 8 configurations x 9 cells, full-n kernels.",
   "experiment": {
     "id": "E2",
     "variant": "original",

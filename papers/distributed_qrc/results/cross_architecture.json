@@ -1,4 +1,5 @@
 {
+ "paper_reference": "Table VIII (best model per total neurons)",
  "paper": {
   "10": {
    "best_architecture": "mrsr",

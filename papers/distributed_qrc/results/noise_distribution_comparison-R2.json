@@ -1,4 +1,5 @@
 {
+ "paper_reference": "Sec. III-B; noisy fully quantum cells of Tables C3, C6, C9, C12; device mapping Table III",
  "mrsr-vs-srsr@10": {
   "ours_diff": 0.0001442996508287525,
   "ours_diff_in_pooled_std": 0.42744651893322905,

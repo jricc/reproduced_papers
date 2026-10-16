@@ -31,11 +31,12 @@ READOUT_COLOURS = {
     "quantum_kernel_noisy": "#C44E52",
 }
 RESERVOIR_MARKERS = {"classical": "s", "quantum_ideal": "o", "quantum_noisy": "^"}
+# Experiment id, and the paper's figure and tables for each architecture.
 TITLES = {
-    "srsr": "SRSR (E1)",
-    "mrsr": "MRSR (E2)",
-    "srmr": "SRMR (E3)",
-    "mrmr": "MRMR (E4)",
+    "srsr": "SRSR (E1; paper Fig. 4, Tables IV and C1-C3)",
+    "mrsr": "MRSR (E2; paper Fig. 5, Tables V and C4-C6)",
+    "srmr": "SRMR (E3; paper Fig. 6, Tables VI and C7-C9)",
+    "mrmr": "MRMR (E4; paper Fig. 7, Tables VII and C10-C12)",
 }
 
 

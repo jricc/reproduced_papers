@@ -1,4 +1,4 @@
-"""Runtime entry point: one architecture grid (Tables III-VI) for one seed.
+"""Runtime entry point: one architecture grid (Tables IV-VII, C1-C12) for one seed.
 
 For every configuration (row) of the experiment, the runner builds the reservoir
 features of each requested reservoir type (classical, quantum ideal, quantum

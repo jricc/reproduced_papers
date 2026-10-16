@@ -1,5 +1,5 @@
 {
-  "description": "E3 (Table V, C7-C9, Fig. 6): SRMR, 8 configurations x 9 cells, full-n kernels. Approved to run on gpu-reproduced-papers-1.",
+  "description": "E3 (Table VI, C7-C9, Fig. 6): SRMR, 8 configurations x 9 cells, full-n kernels. Approved to run on gpu-reproduced-papers-1.",
   "experiment": {
     "id": "E3",
     "variant": "original",
