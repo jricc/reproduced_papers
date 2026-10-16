@@ -1,0 +1,70 @@
+# validate_logging.py over every phase-03 sweep and standalone run, 2026-10-14T23:05:19Z
+## papers/distributed_qrc/outdir/sweep_E1
+Logging validation passed: 3 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_E2
+Logging validation passed: 3 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_E3
+Logging validation passed: 3 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_E4
+Logging validation passed: 3 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_GAP-CLASSICAL-MRMR
+Logging validation passed: 20 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_GAP-CLASSICAL-MRSR
+Logging validation passed: 20 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_GAP-CLASSICAL-SRMR
+Logging validation passed: 20 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_GAP-CLASSICAL-SRSR
+Logging validation passed: 20 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_GAP-INTERCEPT
+Logging validation passed: 6 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_GAP-NOISE-SCALE
+Logging validation passed: 9 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_GAP-SHOTS
+Logging validation passed: 8 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_GAP-SHOTS-RETRY
+Logging validation passed: 1 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_P1-R6R7
+Logging validation passed: 12 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_P1-ROBUST
+Logging validation passed: 9 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_XCHECK-E3
+Logging validation passed: 1 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_XCHECK-E4
+Logging validation passed: 1 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/sweep_smoke_check
+Logging validation passed: 4 run(s), 1 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/run_20261014-122322
+Logging validation passed: 1 run(s), 0 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/run_20261014-131710
+Logging validation passed: 1 run(s), 0 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/run_20261014-154743
+Logging validation passed: 1 run(s), 0 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/run_20261014-154815
+Logging validation passed: 1 run(s), 0 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/run_20261014-223030
+Logging validation passed: 1 run(s), 0 sweep(s).
+exit=0
+## papers/distributed_qrc/outdir/run_20261014-234827
+Logging validation passed: 1 run(s), 0 sweep(s).
+exit=0

@@ -1,0 +1,31 @@
+{
+  "description": "Phase-05 fair classical baselines for E4 (mrmr): B0 classical and ideal-quantum reservoirs (in-run anchors) and the tuned ESN (B4), each with linear ridge and RBF kernel ridge (B2b); 8 configurations, full-n kernels. Independent controls, not the paper's method.",
+  "experiment": {
+    "id": "E4-CLASSICAL",
+    "variant": "classical",
+    "architecture": "mrmr",
+    "sizes": [
+      "2x5",
+      "2x10",
+      "2x20",
+      "3x5",
+      "3x10",
+      "3x20",
+      "5x5",
+      "5x10"
+    ],
+    "reservoir_types": [
+      "classical",
+      "quantum_ideal",
+      "esn_tuned"
+    ],
+    "readout_types": [
+      "linear",
+      "rbf_kernel"
+    ]
+  },
+  "readout": {
+    "kernel_selection_subsample": 8000,
+    "kernel_fit_subsample": null
+  }
+}
