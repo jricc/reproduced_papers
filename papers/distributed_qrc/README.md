@@ -121,7 +121,7 @@ Each architecture has 8 configurations at 10–60 total neurons, each with 3 res
 
 ```text
 papers/distributed_qrc/
-├── README.md, INSIGHTS.md, notebook.ipynb, cli.json, requirements.txt
+├── README.md, notebook.ipynb, cli.json, requirements.txt
 ├── configs/
 │   ├── defaults.json                 # smoke run and every shared setting
 │   ├── e{1..4}_*_original.json       # paper grids (SRSR, MRSR, SRMR, MRMR)
