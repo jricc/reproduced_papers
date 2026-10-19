@@ -13,7 +13,7 @@ confound recorded in LOG.md: under the paper's device mapping (Table III) SRSR
 runs on ibm_brisbane only, while distributed components also use the less
 noisy ibm_marrakesh and IonQ Aria-1.
 
-Writes ``results/noise_distribution_comparison<suffix>.json`` (``-R2`` for the evidence sweeps).
+Writes ``results/data/noise_distribution_comparison.json`` (``-R2`` for the evidence sweeps).
 
 Usage (from the repository root)::
 
@@ -60,9 +60,9 @@ def main() -> int:
     outdir = Path(sys.argv[1])
     suffix = sys.argv[2] if len(sys.argv) > 2 else ""
     paper = {}
-    for c in json.loads((PAPER_DIR / "results" / "paper_tables.json").read_text())[
-        "cells"
-    ]:
+    for c in json.loads(
+        (PAPER_DIR / "results" / "data" / "paper_tables.json").read_text()
+    )["cells"]:
         if (c["reservoir_type"], c["readout_type"]) == CELL:
             paper[(c["architecture"], total(c["configuration"]))] = c["mae"]
     ours = {a: our_values(outdir, a, suffix) for a in SWEEPS}
@@ -87,7 +87,7 @@ def main() -> int:
             print(
                 f"{architecture}-vs-srsr {n:3d} | {diff:+32.5f} {diff / pooled:+12.2f} | {paper_diff:+10.4f}"
             )
-    out = PAPER_DIR / "results" / f"noise_distribution_comparison{suffix}.json"
+    out = PAPER_DIR / "results" / "data" / "noise_distribution_comparison.json"
     result = {
         "paper_reference": "Sec. III-B; noisy fully quantum cells of Tables C3, C6, C9, C12; device mapping Table III",
         **result,

@@ -19,6 +19,7 @@
       "quantum_ideal",
       "esn_tuned"
     ],
+    "_comment_reservoir_types": "classical = ReservoirPy defaults (paper baseline B0); quantum_ideal = ideal quantum reservoir; esn_tuned = B4, the same ReservoirPy reservoir with spectral radius, leak rate and input scaling tuned on the eval split (12 settings).",
     "readout_types": [
       "linear",
       "rbf_kernel"

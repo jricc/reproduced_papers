@@ -10,6 +10,7 @@
     "reservoir_types": [
       "raw_lags"
     ],
+    "_comment_reservoir_types": "raw_lags = no reservoir: the readouts see the 4-lag window directly (B1 persistence and AR(4), B3 kernels on raw lags).",
     "readout_types": [
       "persistence",
       "linear",

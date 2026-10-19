@@ -1,6 +1,6 @@
 """Extract the paper's Appendix C tables (C1-C12) from the cached arXiv LaTeX source.
 
-Writes ``results/paper_tables.json``: one record per cell with the paper's MAE,
+Writes ``results/data/paper_tables.json``: one record per cell with the paper's MAE,
 RMSE and R2, keyed like this reproduction's ``metrics.json`` cells
 (architecture, configuration label, reservoir type, readout type).
 
@@ -93,7 +93,7 @@ def extract(tex: str) -> list[dict]:
 def main() -> int:
     source = Path(sys.argv[1])
     records = extract(source.read_text(encoding="utf-8"))
-    out = PAPER_DIR / "results" / "paper_tables.json"
+    out = PAPER_DIR / "results" / "data" / "paper_tables.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps({"source": str(source), "cells": records}, indent=1),

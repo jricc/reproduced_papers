@@ -1,6 +1,6 @@
 """Headline-statistics figure: paper vs reproduction (average and peak error reductions, E7).
 
-Reads ``results/headline_statistics.json`` (from ``utils/headline_statistics.py``)
+Reads ``results/data/headline_statistics.json`` (from ``utils/headline_statistics.py``)
 and writes ``results/headline_reductions.png``. Bars: the paper's reported rule
 applied to the paper's tables and to each of our seeds (mean +/- std).
 
@@ -25,7 +25,9 @@ ARCHITECTURES = ("srsr", "mrsr", "srmr", "mrmr")
 
 
 def main() -> int:
-    data = json.loads((PAPER_DIR / "results" / "headline_statistics.json").read_text())
+    data = json.loads(
+        (PAPER_DIR / "results" / "data" / "headline_statistics.json").read_text()
+    )
     fig, axes = plt.subplots(1, 4, figsize=(15, 3.8), sharey=True)
     panels = [
         ("mae", "average"),

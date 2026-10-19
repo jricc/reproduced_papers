@@ -62,22 +62,28 @@ logger = logging.getLogger(__name__)
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 RESERVOIR_TYPES = (
-    "classical",
-    "quantum_ideal",
-    "quantum_noisy",
-    "photonic",
-    "esn_tuned",
-    "raw_lags",
+    # From the paper:
+    "classical",  # ReservoirPy reservoir, library defaults (baseline B0)
+    "quantum_ideal",  # 4-qubit quantum neurons, ideal simulator
+    "quantum_noisy",  # same circuits with the hardware-informed noise model
+    # MerLin adaptation (phase 04):
+    "photonic",  # one frozen 4-mode, 2-photon chip per neuron
+    # Phase-05 classical controls (not the paper's method):
+    "esn_tuned",  # B4: ReservoirPy ESN with B0's matrices, hyperparameters tuned on eval
+    "raw_lags",  # B1/B3: no reservoir, the readout sees the 4-lag window directly
 )
 # Seed stream that separates the photonic chips from the gate-model randomness.
 PHOTONIC_STREAM = 7
 READOUT_TYPES = (
-    "linear",
-    "quantum_kernel_ideal",
-    "quantum_kernel_noisy",
-    "photonic_kernel",
-    "rbf_kernel",
-    "persistence",
+    # From the paper:
+    "linear",  # classical ridge (Eq. 5; intercept added by default, see --linear-intercept)
+    "quantum_kernel_ideal",  # "quantum ridge": fidelity-kernel ridge, ideal simulator
+    "quantum_kernel_noisy",  # "quantum ridge" with the noise model
+    # MerLin adaptation (phase 04):
+    "photonic_kernel",  # 2-photon fidelity-kernel ridge
+    # Phase-05 classical controls (not the paper's method):
+    "rbf_kernel",  # B2b/B3: RBF kernel ridge, gamma and lambda tuned on eval
+    "persistence",  # B1: forecast = newest observed hour (raw_lags only)
 )
 SPLITS = ("train", "eval", "test")
 _LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO, "warning": logging.WARNING}
@@ -225,7 +231,8 @@ def _fit_cell(
                 fit_subsample=rcfg["kernel_fit_subsample"],
             )
         elif readout_type == "persistence":
-            # The cell tag is "<arch>:<config>|<reservoir>|<readout>".
+            # The cell tag is "<arch>:<config>|<reservoir>|<readout>". Persistence
+            # (B1) predicts the newest lag, so it needs the raw window (raw_lags).
             if cell_tag.split("|")[1] != "raw_lags" or len(chunks) != 1:
                 raise ValueError(
                     "persistence needs the raw_lags reservoir and one readout instance"
@@ -475,6 +482,7 @@ def train_and_evaluate(cfg: dict[str, Any], run_dir: Path) -> None:
                 started = time.perf_counter()
                 reservoir_selection = None
                 if reservoir_type == "esn_tuned":
+                    # B4: try the 12 ESN settings, keep the best on eval (linear readout).
                     features, reservoir_selection = _tuned_esn_features(
                         cfg,
                         data,

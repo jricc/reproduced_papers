@@ -13,7 +13,7 @@ For our sweeps the table reports, per total neuron count:
   the pooled seed std, so that "distribution wins" can be told apart from
   seed noise.
 
-Writes ``results/cross_architecture.json``.
+Writes ``results/data/cross_architecture.json``.
 
 Usage (from the repository root)::
 
@@ -70,9 +70,9 @@ def our_cells(sweep_dirs: list[Path]) -> list[dict]:
 
 
 def paper_cells() -> list[dict]:
-    cells = json.loads((PAPER_DIR / "results" / "paper_tables.json").read_text())[
-        "cells"
-    ]
+    cells = json.loads(
+        (PAPER_DIR / "results" / "data" / "paper_tables.json").read_text()
+    )["cells"]
     return [
         {
             "architecture": c["architecture"],
@@ -132,7 +132,7 @@ def main() -> int:
         "ours": best_per_total(our_cells(sweep_dirs)),
         "sweeps": [str(s) for s in sweep_dirs],
     }
-    out = PAPER_DIR / "results" / "cross_architecture.json"
+    out = PAPER_DIR / "results" / "data" / "cross_architecture.json"
     result = {"paper_reference": "Table VIII (best model per total neurons)", **result}
     out.write_text(json.dumps(result, indent=1), encoding="utf-8")
     print(

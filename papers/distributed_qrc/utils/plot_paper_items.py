@@ -12,14 +12,15 @@ group (green), so that the origin of each value is explicit.
   ± sample std over seeds 0-2, sweeps ``E{1..4}-R2``, full data).
 * Descriptive tables (I-III, B1-B2): the paper's content and what is implemented
   (configurations, data rows, device mapping, calibration values used).
-* Figures 4-7: the paper's per-cell values (open markers, from Tables C1-C12)
-  and ours (filled, mean ± std). Figures 1-3 and A1 are diagrams and circuits:
+* Figures 4-7: the paper's per-cell values (left column, from Tables C1-C12)
+  and ours (right column, seed mean), drawn in the paper's style (x ordered by
+  total neurons, linear y), MAE and RMSE rows on a shared y axis. Figures 1-3 and A1 are diagrams and circuits:
   they show this implementation (circuits drawn by Qiskit from the same gates as
   ``lib/quantum_neuron.py`` and ``lib/kernels.py``); the paper's drawings are not
   copied, compare with the paper.
 
 Paper values come from the cached arXiv LaTeX source (Tables I-VIII, B1-B2) and
-from ``results/paper_tables.json`` (Tables C1-C12, extracted by
+from ``results/data/paper_tables.json`` (Tables C1-C12, extracted by
 ``utils/extract_paper_tables.py``).
 
 Usage (from the repository root)::
@@ -131,9 +132,9 @@ def load_ours(outdir: Path) -> dict:
 
 
 def load_paper_cells() -> dict:
-    cells = json.loads((PAPER_DIR / "results" / "paper_tables.json").read_text())[
-        "cells"
-    ]
+    cells = json.loads(
+        (PAPER_DIR / "results" / "data" / "paper_tables.json").read_text()
+    )["cells"]
     return {
         (
             c["architecture"],
@@ -247,7 +248,7 @@ LEGENDS = {
     "TABLE_MAIN": [
         "config: configuration label. " + LEGEND_CONFIG,
         "Paper columns: the cell the paper reports as best for this configuration (reservoir type, ridge type) and its test metrics. 'Same model' is that cell, identified by its printed values in Tables C1-C12.",
-        "Reproduction, same model as the paper: our test metrics for that same cell. Reproduction, our best model: test metrics of our cell with the highest seed-mean R² among the 8 quantum/hybrid cells (the paper's selection rule); this cell can differ from the paper's (the cell of every seed is listed in results/headline_statistics.json).",
+        "Reproduction, same model as the paper: our test metrics for that same cell. Reproduction, our best model: test metrics of our cell with the highest seed-mean R² among the 8 quantum/hybrid cells (the paper's selection rule); this cell can differ from the paper's (the cell of every seed is listed in results/data/headline_statistics.json).",
         LEGEND_TYPES,
         LEGEND_METRICS,
     ],
@@ -259,12 +260,12 @@ LEGENDS = {
         LEGEND_METRICS,
     ],
     "TABLE_B1": [
-        "specification: calibration quantity reported by the paper for each IBM device. Paper columns: the printed values.",
-        "Reproduction columns: the value of configs/defaults.json used by our noise model, '-' when the quantity is not used for that device; use in lib/noise.py: how it enters the model.",
+        "specification: calibration quantity printed in the paper's App. B for each IBM device. Paper columns: the printed values.",
+        "value used: the error rate our noise model takes from that row; how it enters our noise model: where the error is applied, or why the row is not used.",
     ],
     "TABLE_B2": [
-        "specification: calibration quantity reported by the paper for IonQ Aria-1. Paper: the printed value.",
-        "value used: the parameter of configs/defaults.json derived from it; relation: how it is derived, or why it is not used.",
+        "specification: calibration quantity printed in the paper's App. B for IonQ Aria-1. Paper: the printed value.",
+        "error rate used: the rate our noise model takes from that row; how it enters our noise model: where the error is applied, or why the row is not used.",
     ],
     "TABLE_C": [
         "config: configuration label. " + LEGEND_CONFIG,
@@ -809,20 +810,51 @@ def table_8(tex: str, ours: dict, paper: dict) -> None:
     )
 
 
+# How each App. B calibration quantity enters lib/noise.py (or why it does not).
+SINGLE_QUBIT_ROLE = (
+    "1-qubit depolarizing error after every native 1-qubit gate"
+    "\n(2 per RX, 1 per H, 1 per qubit around each CX; RZ and P are virtual, error free)"
+)
+TWO_QUBIT_ROLE = "2-qubit depolarizing error after every CX"
+READOUT_ROLE = "each measured qubit is flipped with this probability"
+DECOHERENCE_ROLE = (
+    "not used: the gate errors above (randomized benchmarking) already include"
+    "\ndecoherence during the gates; idle time is neglected"
+)
+
+
 def table_b(tex: str) -> None:
     cfg = json.loads((PAPER_DIR / "configs" / "defaults.json").read_text())["noise"][
         "devices"
     ]
+    # spec -> (device whose value is used, or None for both; config key; role)
     used = {
-        "Median ECR error": ("ibm_brisbane", "error_2q"),
-        "Median CZ error": ("ibm_marrakesh", "error_2q"),
-        "Median SX error": (None, "error_1q"),
-        "Median readout error": (None, "readout_error"),
+        "Median ECR error": (
+            "ibm_brisbane",
+            "error_2q",
+            TWO_QUBIT_ROLE + "\n(ECR is Brisbane's native 2-qubit gate)",
+        ),
+        "Median CZ error": (
+            "ibm_marrakesh",
+            "error_2q",
+            TWO_QUBIT_ROLE + "\n(CZ is Marrakesh's native 2-qubit gate)",
+        ),
+        "Median SX error": (None, "error_1q", SINGLE_QUBIT_ROLE),
+        "Median readout error": (None, "readout_error", READOUT_ROLE),
+    }
+    not_used = {
+        "2Q error (best)": "not used: best qubit pair only; we use the median"
+        "\n2-qubit error of each device (ECR / CZ rows)",
+        "2Q error (layered)": "not used: error per layered gate (whole-chip benchmark);"
+        "\nwe apply a per-gate error instead (ECR / CZ rows)",
+        "Median T1": DECOHERENCE_ROLE,
+        "Median T2": DECOHERENCE_ROLE,
+        "Processor Type": "not used",
     }
     rows = []
     for spec, bris, marr in latex_spec_rows(tex, "tabAppA", 3):
         if spec in used:
-            device, key = used[spec]
+            device, key, role = used[spec]
             ours_b = (
                 sci(cfg["ibm_brisbane"][key])
                 if device in (None, "ibm_brisbane")
@@ -833,33 +865,22 @@ def table_b(tex: str) -> None:
                 if device in (None, "ibm_marrakesh")
                 else "-"
             )
-            rows.append([spec, bris, marr, ours_b, ours_m, f"used as {key}"])
-        elif spec == "Processor Type":
-            rows.append([spec, bris, marr, "-", "-", "not used"])
+            rows.append([spec, bris, marr, ours_b, ours_m, role])
         else:
-            rows.append(
-                [
-                    spec,
-                    bris,
-                    marr,
-                    "-",
-                    "-",
-                    "not used (no T1/T2 or best / layered 2Q error in our model)",
-                ]
-            )
+            rows.append([spec, bris, marr, "-", "-", not_used[spec]])
     header = [
         [
             ("", 1, None),
             ("Paper", 2, "paper"),
-            ("Reproduction (configs/defaults.json)", 3, "repro"),
+            ("Reproduction", 3, "repro"),
         ],
         [
             ("specification", 1, None),
             ("IBM Brisbane", 1, "paper"),
             ("IBM Marrakesh", 1, "paper"),
-            ("IBM Brisbane", 1, "repro"),
-            ("IBM Marrakesh", 1, "repro"),
-            ("use in lib/noise.py", 1, "repro"),
+            ("value used\nBrisbane", 1, "repro"),
+            ("value used\nMarrakesh", 1, "repro"),
+            ("how it enters our noise model", 1, "repro"),
         ],
     ]
     draw_table(
@@ -868,41 +889,38 @@ def table_b(tex: str) -> None:
         header,
         rows,
         [None, "paper", "paper", "repro", "repro", "repro"],
-        [2.0, 1.3, 1.3, 1.3, 1.3, 4.2],
+        [2.0, 1.3, 1.3, 1.3, 1.3, 5.6],
         [
-            "Reproduction noise model: depolarizing after each native 1q / 2q gate and a symmetric readout flip, from the medians (lib/noise.py)."
+            "The paper does not say how it built its noise models (R15). Ours uses only these medians"
+            " (configs/defaults.json, lib/noise.py), so it is a simplified version of a full device noise model.",
+            "'-' = value not used for that device. The quantum_noisy cells use these rates as printed;"
+            " the C6 control (Fair Baselines) also multiplies them by 10.",
         ],
     )
     ion = cfg["ionq_aria1"]
     keys = {
-        "Measurement fidelity (median)": "readout_error",
-        "1Q fidelity (median)": "error_1q",
-        "2Q fidelity (median)": "error_2q",
+        "Measurement fidelity (median)": ("readout_error", READOUT_ROLE),
+        "1Q fidelity (median)": ("error_1q", SINGLE_QUBIT_ROLE),
+        "2Q fidelity (median)": ("error_2q", TWO_QUBIT_ROLE),
     }
     rows = []
     for spec, value in latex_spec_rows(tex, "tabAppB", 2):
         if spec in keys:
-            rows.append(
-                [
-                    spec,
-                    value,
-                    f"{keys[spec]} = {ion[keys[spec]]:.4g}",
-                    "error = 1 − fidelity",
-                ]
-            )
+            key, role = keys[spec]
+            rows.append([spec, value, f"{ion[key]:.4g}\n(= 1 − {value})", role])
         else:
-            rows.append([spec, value, "not used", "no T1/T2 in our model"])
+            rows.append([spec, value, "-", DECOHERENCE_ROLE])
     header = [
         [
             ("", 1, None),
             ("Paper", 1, "paper"),
-            ("Reproduction (configs/defaults.json)", 2, "repro"),
+            ("Reproduction", 2, "repro"),
         ],
         [
             ("specification", 1, None),
             ("IonQ Aria-1", 1, "paper"),
-            ("value used", 1, "repro"),
-            ("relation", 1, "repro"),
+            ("error rate used", 1, "repro"),
+            ("how it enters our noise model", 1, "repro"),
         ],
     ]
     draw_table(
@@ -911,9 +929,12 @@ def table_b(tex: str) -> None:
         header,
         rows,
         [None, "paper", "repro", "repro"],
-        [2.6, 1.2, 2.2, 2.2],
+        [2.6, 1.2, 1.5, 5.6],
         [
-            "Reproduction noise model: error = 1 − median fidelity for readout, 1Q and 2Q gates (lib/noise.py)."
+            "IonQ reports fidelities; the error rate used is 1 − fidelity. The same gate counts as for IBM are applied"
+            " (the IonQ native gate set is not modelled).",
+            "The paper does not say how it built its noise models (R15). Ours uses only these medians"
+            " (configs/defaults.json, lib/noise.py).",
         ],
     )
 
@@ -962,74 +983,141 @@ def table_c(number: int, ours: dict, paper: dict) -> None:
         [0.7] + [0.68] * 9 + [0.85] * 9,
         [
             FOOT,
-            f"Relative differences per cell: results/{ARCHS[arch]}-R2_vs_paper.csv (column paper_table = C{number}).",
+            f"Relative differences per cell: results/data/{arch}_vs_paper.csv (column paper_table = C{number}).",
         ],
         fontsize=7.5,
     )
 
 
 # ------------------------------------------------------------------ figures
+# Style of the paper's Figs. 4-7 (Figures/comb-arch*.png in the arXiv source):
+# one colour, marker and line style per (reservoir, ridge) model, legend order
+# grouped by ridge type.
+PAPER_FIGURE_STYLE = {
+    ("classical", "linear"): ("tab:blue", "o", "-"),
+    ("quantum_ideal", "linear"): ("tab:orange", "s", "-"),
+    ("quantum_noisy", "linear"): ("tab:green", "s", "--"),
+    ("classical", "quantum_kernel_ideal"): ("tab:red", "o", "-"),
+    ("quantum_ideal", "quantum_kernel_ideal"): ("tab:purple", "d", "-"),
+    ("quantum_noisy", "quantum_kernel_ideal"): ("tab:brown", "d", "--"),
+    ("classical", "quantum_kernel_noisy"): ("tab:pink", "*", "-"),
+    ("quantum_ideal", "quantum_kernel_noisy"): ("tab:gray", "*", "-"),
+    ("quantum_noisy", "quantum_kernel_noisy"): ("tab:olive", "^", "--"),
+}
+PAPER_FIGURE_LABEL = {
+    "classical": "Classical Reservoir",
+    "quantum_ideal": "Quantum Reservoir(Sim)",
+    "quantum_noisy": "Quantum Reservoir(Noisy)",
+    "linear": "Classical Ridge",
+    "quantum_kernel_ideal": "Quantum Ridge(Sim)",
+    "quantum_kernel_noisy": "Quantum Ridge(Noisy)",
+}
+
+
 def figures_4_to_7(ours: dict, paper: dict) -> None:
-    colours = {
-        "linear": "tab:gray",
-        "quantum_kernel_ideal": "tab:blue",
-        "quantum_kernel_noisy": "tab:red",
-    }
-    markers = {"classical": "s", "quantum_ideal": "o", "quantum_noisy": "^"}
+    # Paper on the left, reproduction on the right; each row shares its y axis.
+    sides = (
+        ("paper", "Paper (single run, as printed)"),
+        ("repro", "Reproduction (mean over seeds 0, 1, 2)"),
+    )
     for arch, number in zip(ARCHS, (4, 5, 6, 7)):
-        configs = config_order(arch)
-        fig, axes = plt.subplots(1, 2, figsize=(14, 4.6))
-        for ax, metric in zip(axes, ("mae", "rmse")):
-            for j, (res, ro) in enumerate((r, o) for r in RESERVOIRS for o in READOUTS):
-                x = np.arange(len(configs)) + (j - 4) * 0.06
-                mean = [ours[arch][(c, res, ro)][metric][0] for c in configs]
-                std = [ours[arch][(c, res, ro)][metric][1] for c in configs]
-                ax.errorbar(
-                    x,
-                    mean,
-                    yerr=std,
-                    fmt=markers[res],
-                    color=colours[ro],
-                    ms=4,
-                    lw=0.8,
-                    capsize=2,
-                    label=f"{RES_LABEL[res]} / {RIDGE_LABEL[ro]}",
-                )
-                ax.scatter(
-                    x,
-                    [paper[(arch, c, res, ro)][metric] for c in configs],
-                    marker=markers[res],
-                    facecolors="none",
-                    edgecolors=colours[ro],
-                    s=36,
-                )
-            ax.set_xticks(range(len(configs)), configs)
-            ax.set_yscale("log")
-            ax.set_xlabel("configuration")
-            ax.set_ylabel(f"test {metric.upper()} (normalized)")
-            ax.grid(alpha=0.3, which="both")
-        axes[0].legend(
-            fontsize=6,
-            title="reservoir / ridge (colour = ridge, marker = reservoir)",
-            title_fontsize=6,
+        # The paper orders configurations by total neurons. SRSR and SRMR use a
+        # numeric axis of total neurons, MRSR and MRMR one tick per k x n label.
+        configs = sorted(config_order(arch), key=lambda c: total_neurons(arch, c))
+        totals = [total_neurons(arch, c) for c in configs]
+        if arch in ("srsr", "srmr"):
+            x, ticks, tick_labels = totals, totals, [str(t) for t in totals]
+            xlabel = "Number of Reservoir Neurons"
+        else:
+            x = list(range(len(configs)))
+            ticks, tick_labels = x, configs
+            xlabel = "Number of Reservoirs x Number of Reservoir Neurons"
+        first_c = 3 * number - 11
+        fig, axes = plt.subplots(2, 2, figsize=(15, 10), sharex=True, sharey="row")
+        for row, metric in enumerate(("mae", "rmse")):
+            for col, (side, _) in enumerate(sides):
+                ax = axes[row, col]
+                ax.set_facecolor(GROUP_COLOURS[side][1])
+                for ro in READOUTS:
+                    for res in RESERVOIRS:
+                        colour, marker, line_style = PAPER_FIGURE_STYLE[(res, ro)]
+                        if side == "paper":
+                            y = [paper[(arch, c, res, ro)][metric] for c in configs]
+                        else:
+                            y = [ours[arch][(c, res, ro)][metric][0] for c in configs]
+                        label = f"{PAPER_FIGURE_LABEL[res]}-{PAPER_FIGURE_LABEL[ro]}"
+                        if (res, ro) == ("classical", "linear"):
+                            label += "(Baseline)"
+                        ax.plot(
+                            x,
+                            y,
+                            color=colour,
+                            marker=marker,
+                            ls=line_style,
+                            ms=6 if marker == "*" else 5,
+                            lw=1.4,
+                            label=label,
+                        )
+                ax.set_xticks(ticks, tick_labels)
+                ax.grid(True)
+                if col == 0:
+                    ax.set_ylabel(f"test {metric.upper()} (normalized)", fontsize=11)
+                if row == 1:
+                    ax.set_xlabel(xlabel, fontsize=11)
+        for col, (side, title) in enumerate(sides):
+            axes[0, col].set_title(
+                title,
+                fontsize=11,
+                fontweight="bold",
+                pad=10,
+                bbox={
+                    "boxstyle": "square,pad=0.4",
+                    "facecolor": GROUP_COLOURS[side][0],
+                    "edgecolor": "none",
+                },
+            )
+        handles, labels = axes[0, 0].get_legend_handles_labels()
+        fig.legend(
+            handles,
+            labels,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.095),
+            ncol=3,
+            fontsize=9,
+            frameon=True,
+            shadow=True,
         )
         fig.suptitle(
-            f"Figure {number} — MAE and RMSE for all {ARCH_NAMES[arch]} models. Paper: open markers (Tables C{3 * number - 11}-C{3 * number - 9}). Reproduction: filled markers, mean ± std over 3 seeds.",
-            fontsize=10,
+            f"Figure {number} — MAE and RMSE for all {ARCH_NAMES[arch]} models"
+            f" (paper values from Tables C{first_c}-C{first_c + 2})",
+            fontsize=12,
         )
+        # Architecture-specific notes, one footnote line each.
+        extra_notes = {
+            "srmr": "SRMR: the number of ridge instances is 2 (10, 20, 40 neurons),"
+            " 3 (15, 30, 60) or 5 (25, 50).\n",
+            # The paper's own Fig. 5 (comb-arch2.png) draws this RMSE curve with
+            # the SRSR values of Table C1, not those of Table C4.
+            "mrsr": "Note: the left column plots Table C4. In the paper's printed Fig. 5,"
+            " the RMSE curve of Quantum Reservoir(Sim)-Classical Ridge repeats the SRSR"
+            " values of Table C1 (0.034, 0.0269, 0.0262, 0.038, ...), so it differs here.\n",
+        }
         fig.text(
             0.01,
             0.01,
-            "Legend: x axis = configuration ("
+            "Legend: left column = values printed in the paper (Tables C); right column = our reproduction. "
+            "Both panels of a row share the same y axis (linear, as in the paper).\n"
+            "x axis = configuration, ordered by total neurons as in the paper ("
             + LEGEND_CONFIG[len("Configuration labels: ") :]
-            + ")\n"
-            "y axis = test MAE (left) and RMSE (right) on the min-max-normalized load, log scale; lower is better.\n"
-            "Colour = ridge type (grey Classical, blue Quantum (Sim.), red Quantum (Noisy)); marker = reservoir type (square Classical, circle Quantum (Sim.), triangle Quantum (Noisy)).\n"
-            "Open markers = paper (single run, Tables C); filled markers with error bars = reproduction (mean ± sample std over seeds 0, 1, 2). Markers are offset horizontally for readability.",
-            fontsize=7.5,
+            + ").\n"
+            + extra_notes.get(arch, "")
+            + "y axis = test MAE (top) and RMSE (bottom) on the min-max-normalized load; lower is better. "
+            "Colours, markers and line styles follow the paper's figure.\n"
+            "Reproduction values are seed means; the seed spread is in the Tables C images (TABLE_C*.png) and results/data/<architecture>_vs_paper.csv.",
+            fontsize=8,
             va="bottom",
         )
-        fig.tight_layout(rect=(0, 0.13, 1, 0.97))
+        fig.tight_layout(rect=(0, 0.2, 1, 0.96))
         fig.savefig(OUT / f"FIGURE_{number}.png", dpi=150)
         plt.close(fig)
         print(f"wrote {OUT}/FIGURE_{number}.png")

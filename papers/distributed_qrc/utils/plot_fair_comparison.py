@@ -1,4 +1,4 @@
-"""Plot the phase-05 fair comparison from ``results/fair_comparison.json``.
+"""Plot the phase-05 fair comparison from ``results/data/fair_comparison.json``.
 
 Per architecture and configuration, seed-mean test MAE (normalized; error bars =
 sample std over seeds 0-2) of the eval-selected quantum/hybrid cell (R2), the
@@ -37,7 +37,9 @@ SELECTED = [
 
 def main() -> int:
     outdir = Path(sys.argv[1])
-    data = json.loads((PAPER_DIR / "results" / "fair_comparison.json").read_text())
+    data = json.loads(
+        (PAPER_DIR / "results" / "data" / "fair_comparison.json").read_text()
+    )
     fig, axes = plt.subplots(2, 2, figsize=(13, 8.5))
     for ax, arch in zip(axes.flat, ARCHS):
         a = data["architectures"][arch]
@@ -67,6 +69,7 @@ def main() -> int:
             markersize=3,
             capsize=2,
         )
+        # raw_lags = no reservoir, the readout sees the 4-lag window directly.
         for system, label, style in (
             (
                 "raw_lags|quantum_kernel_ideal",

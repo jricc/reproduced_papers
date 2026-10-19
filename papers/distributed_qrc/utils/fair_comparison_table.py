@@ -1,11 +1,11 @@
-"""Markdown comparison table of phase 05, generated from ``results/fair_comparison.json``.
+"""Markdown comparison table of phase 05, generated from ``results/data/fair_comparison.json``.
 
 One table per architecture at its declared headline configuration (SRSR 10,
 MRSR 3x20, SRMR 10/2, MRMR 2x5). Every system is listed with its role,
 provenance, result scope, successful / expected runs, test MAE (normalized;
 mean and sample std over seeds 0-2), matching basis, tuned resources, mean
 readout-fit seconds per cell, and comparison status. Paper-reported values come
-from ``results/paper_tables.json`` and are labelled as such; they are context,
+from ``results/data/paper_tables.json`` and are labelled as such; they are context,
 not part of any decision. Writes ``results/fair_comparison_table.md``.
 
 Usage (from the repository root)::
@@ -71,6 +71,7 @@ SYSTEMS = [
         "γ×λ (50)",
         "identical features to the quantum-kernel cell",
     ),
+    # esn_tuned = B4, ReservoirPy ESN tuned on eval; raw_lags = no reservoir (B1/B3).
     (
         "esn_tuned|linear",
         "fair baseline B4 (tuned ESN + linear ridge)",
@@ -130,7 +131,9 @@ def esc(text: str) -> str:
 
 
 def main() -> int:
-    data = json.loads((PAPER_DIR / "results" / "fair_comparison.json").read_text())
+    data = json.loads(
+        (PAPER_DIR / "results" / "data" / "fair_comparison.json").read_text()
+    )
     paper = {
         (
             c["architecture"],
@@ -138,9 +141,9 @@ def main() -> int:
             c["reservoir_type"],
             c["readout_type"],
         ): c["mae"]
-        for c in json.loads((PAPER_DIR / "results" / "paper_tables.json").read_text())[
-            "cells"
-        ]
+        for c in json.loads(
+            (PAPER_DIR / "results" / "data" / "paper_tables.json").read_text()
+        )["cells"]
     }
     seconds = data["readout_seconds_per_cell"]
     lines = [
@@ -151,6 +154,11 @@ def main() -> int:
         "scope for the reproduced cells; independent controls for B1-B4; adaptation for MerLin).",
         "Status: COMMENSURABLE = same task, data, split, metric, selection split and seeds,",
         "in-run anchors identical to R2.",
+        "",
+        "Cell names are `<reservoir type>|<readout type>`. Reservoir types: `classical` = ReservoirPy defaults (paper baseline B0);",
+        "`quantum_ideal` / `quantum_noisy` = quantum reservoir, ideal / noisy; `esn_tuned` = B4, the same ReservoirPy reservoir tuned on eval;",
+        "`raw_lags` = no reservoir, the readout sees the 4-lag window (B1/B3); `photonic` = MerLin adaptation. Readout types: `linear` ridge,",
+        "`quantum_kernel_ideal` (the paper's fidelity kernel), `rbf_kernel` (B2b/B3), `persistence` (B1: last observed hour), `photonic_kernel`.",
         "",
     ]
     for arch, a in data["architectures"].items():

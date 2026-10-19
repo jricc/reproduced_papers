@@ -155,7 +155,7 @@ from distributed_qrc.lib.quantum_neuron import neuron_expectations, neuron_funct
 from distributed_qrc.lib.baselines_classical import fit_persistence
 from distributed_qrc.lib.photonic_merlin import PhotonicKernelMap, build_neuron_layer, state_gram
 
-RESULTS = PAPER_DIR / "results"
+RESULTS = PAPER_DIR / "results" / "data"
 COLORS = {"quantum": "tab:blue", "classical": "tab:green", "merlin": "tab:red", "paper": "black", "b0": "tab:gray"}
 ARCHS = {"srsr": "E1", "mrsr": "E2", "srmr": "E3", "mrmr": "E4"}
 torch.set_num_threads(4)
@@ -373,6 +373,7 @@ We run the actual runner on **SRSR 10** for seeds 0–2, with a reduced kernel b
 
 code(r"""
 live_cfg = load_paper_config()
+# raw_lags = no reservoir: the readouts see the 4-lag window directly (floors B1/B3).
 live_cfg["experiment"].update(id="NOTEBOOK-LIVE", variant="notebook", architecture="srsr", sizes=[10],
                               reservoir_types=["classical", "quantum_ideal", "raw_lags"],
                               readout_types=["linear", "quantum_kernel_ideal", "rbf_kernel"])
@@ -429,7 +430,7 @@ The tables were aggregated from the raw `metrics.json` files by `utils/compare_w
 code(r"""
 rows = []
 for arch, exp in ARCHS.items():
-    df = pd.read_csv(RESULTS / f"{exp}-R2_vs_paper.csv")
+    df = pd.read_csv(RESULTS / f"{arch}_vs_paper.csv")
     for cell in ["quantum_ideal|quantum_kernel_ideal", "classical|quantum_kernel_ideal", "quantum_ideal|linear", "classical|linear", "quantum_noisy|quantum_kernel_noisy"]:
         g = df[(df.reservoir + "|" + df.readout) == cell]
         rows.append({"architecture": arch.upper(), "paper tables": ", ".join(sorted(set(g.paper_table), key=lambda t: int(t[1:]))), "cell": cell, "configs within 5 %": f"{int((g.mae_rel.abs() <= 0.05).sum())}/8", "configs within 12 %": f"{int((g.mae_rel.abs() <= 0.12).sum())}/8",
@@ -441,7 +442,7 @@ display(cell_table.style.format({"median rel. Δ MAE": "{:+.0%}", "ours (mean MA
 code(r"""
 fig, axes = plt.subplots(1, 4, figsize=(15, 3.3), sharey=True)
 for ax, (arch, exp) in zip(axes, ARCHS.items()):
-    df = pd.read_csv(RESULTS / f"{exp}-R2_vs_paper.csv")
+    df = pd.read_csv(RESULTS / f"{arch}_vs_paper.csv")
     for cell, c, m in (("quantum_ideal|quantum_kernel_ideal", COLORS["quantum"], "o"), ("classical|linear", COLORS["b0"], "s")):
         g = df[(df.reservoir + "|" + df.readout) == cell]
         x = np.arange(len(g))
@@ -497,17 +498,17 @@ md(r"""
 **Source:**
 - sweeps `E{1..4}-CLASSICAL`, `B1B3-RAW` and `C6-*`: 33 runs, seeds 0–2, full data, code `lib_sha256 086ec349…`;
 - rules frozen in `LOG.md#Phase 5 Comparison Plan` *before* any run;
-- aggregated by `utils/fair_comparison.py` into `results/fair_comparison.json`.
+- aggregated by `utils/fair_comparison.py` into `results/data/fair_comparison.json`.
 
 **Baselines (independent controls, not part of the paper):**
 
-| ID | Model | Why it is a credible competitor |
-|---|---|---|
-| B0 | ReservoirPy defaults + linear ridge | the paper's own baseline |
-| B1 | persistence; AR(4) linear ridge on the raw window | the floors: is a reservoir needed at all? |
-| B2b | RBF kernel ridge on the **same** reservoir features | the same readout *type* as the quantum kernel |
-| B3 | product kernel and RBF kernel on the raw 4 lags | is the reservoir needed when the readout is a kernel? |
-| B4 | ESN tuned on eval (12 settings), linear and RBF readouts | a tuned classical reservoir |
+| ID | Model | Cell name(s) in the tables | Why it is a credible competitor |
+|---|---|---|---|
+| B0 | ReservoirPy defaults + linear ridge | `classical\|linear` | the paper's own baseline |
+| B1 | persistence; AR(4) linear ridge on the raw window | `raw_lags\|persistence`, `raw_lags\|linear` (`raw_lags` = no reservoir) | the floors: is a reservoir needed at all? |
+| B2b | RBF kernel ridge on the **same** reservoir features | `classical\|rbf_kernel`, `quantum_ideal\|rbf_kernel` | the same readout *type* as the quantum kernel |
+| B3 | product kernel and RBF kernel on the raw 4 lags | `raw_lags\|quantum_kernel_ideal`, `raw_lags\|rbf_kernel` | is the reservoir needed when the readout is a kernel? |
+| B4 | ESN tuned on eval (12 settings), linear and RBF readouts | `esn_tuned\|linear`, `esn_tuned\|rbf_kernel` (`esn_tuned` = ReservoirPy reservoir with tuned hyperparameters) | a tuned classical reservoir |
 
 **What is matched, and what is not:**
 
@@ -550,6 +551,7 @@ for ax, arch in zip(axes, ARCHS):
         for i, s in enumerate(sub[seeds]):  # individual seeds
             ax.scatter([i] * 3, [float(v) for v in s.split()], color=color, s=8, alpha=0.5)
     ax.plot(x, sub["paper baseline B0"], color=COLORS["b0"], ls=":", marker="s", ms=3, label="paper baseline B0")
+    # B3 floor: the paper's product kernel on the raw lags (raw_lags = no reservoir).
     ax.axhline(fair["architectures"][arch]["per_configuration"][sub.config.iloc[0]]["raw_lags|quantum_kernel_ideal"]["mean"], color="k", ls="--", lw=0.8, label="B3: product kernel, no reservoir")
     ax.set_xticks(x, sub.config, rotation=45, fontsize=7); ax.set_yscale("log"); ax.set_title(arch.upper())
 axes[0].set_ylabel("test MAE (normalized, log)"); axes[0].legend(fontsize=6)
@@ -650,11 +652,11 @@ md(r"""
 md(r"""
 ## 10. Robustness and uncertainty
 
-**Robustness checks** (sweeps `P1-ROBUST-R2`, `P1-R6R7-R2` and `GAP-*-R2`, run with predeclared rules; verdicts in `results/r2_verdicts.json`):
+**Robustness checks** (sweeps `P1-ROBUST-R2`, `P1-R6R7-R2` and `GAP-*-R2`, run with predeclared rules; verdicts in `results/data/robustness_verdicts.json`):
 """)
 
 code(r"""
-verdicts = read_json("r2_verdicts.json")
+verdicts = read_json("robustness_verdicts.json")
 rows = []
 for cand, v in verdicts["S2-R2"].items():
     rows.append({"check": f"S2 robustness {cand}", "result": f"headline Δ {v['headline_delta']:+.3f} (unchanged: {v['headline_unchanged']}); cells moved beyond 1 std: {sum(x['material'] for x in v['cells'].values())}/{len(v['cells'])}"})
@@ -669,7 +671,7 @@ display(pd.DataFrame(rows).style.hide(axis="index"))
 code(r"""
 fig, axes = plt.subplots(1, 4, figsize=(16, 3.2), sharey=True)
 for ax, arch in zip(axes, ARCHS):
-    spread = read_json(f"GAP-CLASSICAL-{arch.upper()}-R2_spread.json")["configurations"]
+    spread = read_json(f"classical_seed_spread_{arch}.json")["configurations"]
     n = list(spread); x = np.arange(len(n))
     ax.vlines(x, [spread[k]["min"] for k in n], [spread[k]["max"] for k in n], color=COLORS["b0"], lw=6, alpha=0.4, label="B0: 20-seed range")
     ax.plot(x, [spread[k]["median"] for k in n], "_", color=COLORS["b0"], ms=14, label="B0 median")
@@ -789,7 +791,7 @@ md(r"""
 
 **Remaining uncertainty:**
 - Simulation only: no losses, no distinguishability, and no shot cost.
-- `merlin.FidelityKernel` could not be used. It deviated from the exact fidelity on these circuits (`ACTION_REQUIRED_SEND_TO_MERLIN_TEAM.md`).
+- `merlin.FidelityKernel` could not be used. It deviated from the exact fidelity on these circuits (`results/checks/merlin_fidelitykernel_repro.txt`; reported to the MerLin team).
 
 **Extension verdict:** a faithful photonic translation, with no photonic advantage. A natural next use is a *distributed-stack* proof of concept (README, *Next Steps*). It is not an accuracy claim.
 """)

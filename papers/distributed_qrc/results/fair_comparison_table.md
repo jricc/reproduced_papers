@@ -6,6 +6,11 @@ scope for the reproduced cells; independent controls for B1-B4; adaptation for M
 Status: COMMENSURABLE = same task, data, split, metric, selection split and seeds,
 in-run anchors identical to R2.
 
+Cell names are `<reservoir type>|<readout type>`. Reservoir types: `classical` = ReservoirPy defaults (paper baseline B0);
+`quantum_ideal` / `quantum_noisy` = quantum reservoir, ideal / noisy; `esn_tuned` = B4, the same ReservoirPy reservoir tuned on eval;
+`raw_lags` = no reservoir, the readout sees the 4-lag window (B1/B3); `photonic` = MerLin adaptation. Readout types: `linear` ridge,
+`quantum_kernel_ideal` (the paper's fidelity kernel), `rbf_kernel` (B2b/B3), `persistence` (B1: last observed hour), `photonic_kernel`.
+
 ## SRSR 10 (E1; reservoir and kernel cells on laptop CPU, B1/B3 on laptop CPU)
 
 | System | Role | Provenance | Scope | Successful / expected runs | Test MAE | Std | Matching basis | Tuned resources | Readout fit s/cell | Status |

@@ -13,7 +13,7 @@ the best paper-rule cell vs the classical + linear baseline at the smallest
 configuration of each architecture (where the peak reductions occur), and the
 quantum vs classical reservoir with the same ideal kernel readout.
 
-Writes ``results/diebold_mariano<suffix>.json`` (``-R2`` for the evidence sweeps) and prints a table.
+Writes ``results/data/diebold_mariano.json`` (``-R2`` for the evidence sweeps) and prints a table.
 
 Usage (from the repository root)::
 
@@ -96,7 +96,7 @@ def main() -> int:
                             "p_value": p_value,
                         }
                     )
-    out = PAPER_DIR / "results" / f"diebold_mariano{suffix}.json"
+    out = PAPER_DIR / "results" / "data" / "diebold_mariano.json"
     out.write_text(json.dumps(results, indent=1), encoding="utf-8")
     print(f"{'comparison':78s} {'loss':4s} {'lag':>3s} | DM (p) per seed")
     keys = dict.fromkeys(

@@ -1,7 +1,7 @@
 """Apply the predeclared R2 verdict rules (LOG.md, "Re-run with complete pre-execution plans (R2)").
 
-Reads the R2 sweeps' raw ``metrics.json`` files and ``results/paper_tables.json``
-and writes ``results/r2_verdicts.json`` with, exactly as declared before launch:
+Reads the R2 sweeps' raw ``metrics.json`` files and ``results/data/paper_tables.json``
+and writes ``results/data/robustness_verdicts.json`` with, exactly as declared before launch:
 
 * S2-R2: per cell, "material" if |delta mean| > the ``{}`` seed std of that cell;
   headline at N = 10 "unchanged" if |delta| < the ``{}`` headline seed std;
@@ -15,7 +15,7 @@ and writes ``results/r2_verdicts.json`` with, exactly as declared before launch:
 
 Usage (from the repository root)::
 
-    python papers/distributed_qrc/utils/r2_verdicts.py papers/distributed_qrc/outdir
+    python papers/distributed_qrc/utils/robustness_verdicts.py papers/distributed_qrc/outdir
 """
 
 from __future__ import annotations
@@ -87,9 +87,9 @@ def paper_rule_reduction(cells: dict, config: str) -> float:
 
 def main() -> int:
     outdir = Path(sys.argv[1])
-    paper = json.loads((PAPER_DIR / "results" / "paper_tables.json").read_text())[
-        "cells"
-    ]
+    paper = json.loads(
+        (PAPER_DIR / "results" / "data" / "paper_tables.json").read_text()
+    )["cells"]
     pmae = {
         (
             c["architecture"],
@@ -207,7 +207,7 @@ def main() -> int:
         }
     out["GAP-CLASSICAL-R2"] = gc
 
-    path = PAPER_DIR / "results" / "r2_verdicts.json"
+    path = PAPER_DIR / "results" / "robustness_verdicts.json"
     path.write_text(json.dumps(out, indent=1), encoding="utf-8")
     print(
         json.dumps(

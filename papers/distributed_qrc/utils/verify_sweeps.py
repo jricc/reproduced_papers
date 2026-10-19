@@ -14,7 +14,7 @@ recorded results:
    ranks, S3/S4 degradation ratios, E5 best architecture per total N;
 4. equivalence of the default behaviour across code changes (seed-42 smoke runs).
 
-Writes ``results/sweep_verification<suffix>.json`` (``-R2`` for the evidence sweeps) and prints a summary; exits 1 on any
+Writes ``results/checks/sweep_verification.json`` (``-R2`` for the evidence sweeps) and prints a summary; exits 1 on any
 mismatch.
 
 Usage (from the repository root)::
@@ -172,7 +172,7 @@ def recompute_s1(outdir: Path) -> dict:
 
 
 def recompute_headline(outdir: Path) -> dict:
-    recorded = load(PAPER_DIR / "results" / "headline_statistics.json")["ours"]
+    recorded = load(PAPER_DIR / "results" / "data" / "headline_statistics.json")["ours"]
     out = {}
     for sweep_id, architecture in (
         ("E1", "srsr"),
@@ -211,16 +211,19 @@ def recompute_headline(outdir: Path) -> dict:
 def recompute_classical_ranks(outdir: Path) -> dict:
     paper = {
         (c["architecture"], c["configuration"]): c["mae"]
-        for c in load(PAPER_DIR / "results" / "paper_tables.json")["cells"]
+        for c in load(PAPER_DIR / "results" / "data" / "paper_tables.json")["cells"]
         if (c["reservoir_type"], c["readout_type"]) == BASELINE
     }
     out = {}
     for architecture in ("srsr", "mrsr", "srmr", "mrmr"):
         sweep_id = f"GAP-CLASSICAL-{architecture.upper()}"
         runs = completed_runs(sweep_path(outdir, sweep_id))
-        recorded = load(PAPER_DIR / "results" / f"{sweep_id}_spread.json")[
-            "configurations"
-        ]
+        recorded = load(
+            PAPER_DIR
+            / "results"
+            / "data"
+            / f"classical_seed_spread_{architecture}.json"
+        )["configurations"]
         inside, matches = 0, True
         for config in recorded:
             values = np.array(
@@ -273,7 +276,9 @@ def recompute_ratios(outdir: Path) -> dict:
                 else "exact",
                 [],
             ).append(cells_of(run["metrics"]))
-    recorded = load(PAPER_DIR / "results" / "shot_gap_analysis.json")["candidates"]
+    recorded = load(PAPER_DIR / "results" / "data" / "shot_gap_analysis.json")[
+        "candidates"
+    ]
     out = {}
     for key, runs in groups.items():
         values = {
@@ -318,7 +323,7 @@ def recompute_cross_architecture(outdir: Path) -> dict:
                     rows.setdefault((architecture, config, f"{res}|{ro}"), []).append(
                         v["test.r2"]
                     )
-    recorded = load(PAPER_DIR / "results" / "cross_architecture.json")["ours"]
+    recorded = load(PAPER_DIR / "results" / "data" / "cross_architecture.json")["ours"]
     out = {}
     for n in sorted({total(c) for _, c, _ in rows}):
         group = {k: np.mean(v) for k, v in rows.items() if total(k[1]) == n}
@@ -399,7 +404,7 @@ def main() -> int:
     )
     report["checks"] = checks
     report["failures"] = failures
-    out = PAPER_DIR / "results" / f"sweep_verification{SUFFIX}.json"
+    out = PAPER_DIR / "results" / "checks" / "sweep_verification.json"
     out.write_text(json.dumps(report, indent=1, default=float), encoding="utf-8")
     print(f"failures: {len(failures)}; wrote {out}")
     return 1 if failures else 0

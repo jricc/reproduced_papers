@@ -1,8 +1,8 @@
 """Compare a completed seed sweep (E1-E4) with the paper's Appendix C tables, cell by cell.
 
 Reads ``<sweep_dir>/summary.json`` (written by ``utils/run_sweep.py`` from the
-runs' ``metrics.json``) and ``results/paper_tables.json`` (written by
-``utils/extract_paper_tables.py``). Writes ``results/<sweep_id>_vs_paper.csv``
+runs' ``metrics.json``) and ``results/data/paper_tables.json`` (written by
+``utils/extract_paper_tables.py``). Writes ``results/data/<architecture>_vs_paper.csv``
 and prints the table.
 
 Columns: our test MAE / RMSE mean and sample std over seeds, the paper value,
@@ -32,9 +32,9 @@ def compare(sweep_dir: Path) -> list[dict]:
     status = json.loads((sweep_dir / "sweep_status.json").read_text())
     if status["status"] != "COMPLETED":
         raise ValueError(f"{sweep_dir} is {status['status']}, not COMPLETED")
-    paper = json.loads((PAPER_DIR / "results" / "paper_tables.json").read_text())[
-        "cells"
-    ]
+    paper = json.loads(
+        (PAPER_DIR / "results" / "data" / "paper_tables.json").read_text()
+    )["cells"]
     metrics = json.loads((sweep_dir / status["runs"][0]["metrics_path"]).read_text())
     architecture = metrics["architecture"]
     index = {
@@ -79,7 +79,7 @@ def compare(sweep_dir: Path) -> list[dict]:
 def main() -> int:
     sweep_dir = Path(sys.argv[1])
     rows = compare(sweep_dir)
-    out = PAPER_DIR / "results" / f"{rows[0]['sweep']}_vs_paper.csv"
+    out = PAPER_DIR / "results" / "data" / f"{rows[0]['architecture']}_vs_paper.csv"
     with out.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()

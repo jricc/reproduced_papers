@@ -18,7 +18,7 @@ Two evaluations are produced for our sweeps:
   reductions are reported.
 
 The same paper rule is applied to the paper's own tables as a check
-(``results/paper_tables.json``). Writes ``results/headline_statistics.json``.
+(``results/data/paper_tables.json``). Writes ``results/data/headline_statistics.json``.
 
 Usage (from the repository root; any subset of E1-E4)::
 
@@ -104,9 +104,9 @@ def sweep_statistics(sweep_dir: Path) -> dict:
 
 
 def paper_statistics() -> dict:
-    cells = json.loads((PAPER_DIR / "results" / "paper_tables.json").read_text())[
-        "cells"
-    ]
+    cells = json.loads(
+        (PAPER_DIR / "results" / "data" / "paper_tables.json").read_text()
+    )["cells"]
     out = {}
     for architecture in ("srsr", "mrsr", "srmr", "mrmr"):
         table = {
@@ -129,7 +129,7 @@ def main() -> int:
     for arg in sys.argv[1:]:
         stats = sweep_statistics(Path(arg))
         result["ours"][stats["architecture"]] = stats
-    out = PAPER_DIR / "results" / "headline_statistics.json"
+    out = PAPER_DIR / "results" / "data" / "headline_statistics.json"
     result = {
         "paper_reference": "abstract; Tables IV-VII (best cells), computed from Tables C1-C12",
         **result,

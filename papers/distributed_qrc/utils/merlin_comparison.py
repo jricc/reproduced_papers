@@ -23,7 +23,7 @@ in >= 6 of its 8 configurations; otherwise the direction is reported as
 The in-run anchors classical|linear and quantum_ideal|linear must equal the R2
 values of the same seed (same code path); their max |difference| is reported.
 
-Writes ``results/merlin_comparison.json``.
+Writes ``results/data/merlin_comparison.json``.
 
 Usage (from the repository root)::
 
@@ -185,7 +185,7 @@ def main() -> int:
         }
         result[arch] = arch_out
 
-    path = PAPER_DIR / "results" / "merlin_comparison.json"
+    path = PAPER_DIR / "results" / "data" / "merlin_comparison.json"
     path.write_text(json.dumps(result, indent=1), encoding="utf-8")
     for arch in ARCHS:
         a = result[arch]

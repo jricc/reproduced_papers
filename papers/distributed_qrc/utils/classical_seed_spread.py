@@ -1,10 +1,10 @@
 """Gap diagnosis B: where does the paper's classical + linear baseline fall in our seed distribution?
 
 Reads a completed ``GAP-CLASSICAL-<ARCH>`` sweep (classical reservoir + linear
-ridge over the paper grid, many seeds) and ``results/paper_tables.json``. For
+ridge over the paper grid, many seeds) and ``results/data/paper_tables.json``. For
 each configuration it reports our test-MAE distribution over seeds (min,
 median, max) and the empirical rank of the paper value (fraction of our seeds
-with a lower MAE). Writes ``results/<sweep_id>_spread.json``.
+with a lower MAE). Writes ``results/data/classical_seed_spread_<architecture>.json``.
 
 Usage (from the repository root)::
 
@@ -33,9 +33,9 @@ def main() -> int:
     architecture = runs[0]["architecture"]
     paper = {
         c["configuration"]: c["mae"]
-        for c in json.loads((PAPER_DIR / "results" / "paper_tables.json").read_text())[
-            "cells"
-        ]
+        for c in json.loads(
+            (PAPER_DIR / "results" / "data" / "paper_tables.json").read_text()
+        )["cells"]
         if c["architecture"] == architecture
         and c["reservoir_type"] == "classical"
         and c["readout_type"] == "linear"
@@ -57,7 +57,7 @@ def main() -> int:
             "paper_rank": float((values < reference).mean()),
             "paper_within_range": bool(values.min() <= reference <= values.max()),
         }
-    out = PAPER_DIR / "results" / f"{status['sweep_id']}_spread.json"
+    out = PAPER_DIR / "results" / "data" / f"classical_seed_spread_{architecture}.json"
     out.write_text(
         json.dumps({"architecture": architecture, "configurations": rows}, indent=1),
         encoding="utf-8",

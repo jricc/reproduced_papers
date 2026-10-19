@@ -1,6 +1,6 @@
 """Gap diagnosis A: do finite shots reproduce the paper's noisy-cell degradation?
 
-Reads the completed runs of one or more sweeps over ``configs/gap_srsr10_original.json``
+Reads the completed runs of one or more sweeps over ``configs/diagnostics/gap_srsr10_original.json``
 (sweep S3 ``GAP-SHOTS`` and, if any, its retry sweep), groups them by
 candidate (shot setting), and computes the predeclared degradation ratios
 (test MAE, mean over seeds):
@@ -11,7 +11,7 @@ candidate (shot setting), and computes the predeclared degradation ratios
 * classical / kernel-noisy    vs classical / kernel-ideal
 
 and compares them with the same ratios in the paper's Tables C1-C3 (SRSR 10).
-Writes ``results/shot_gap_analysis.json``.
+Writes ``results/data/shot_gap_analysis.json``.
 
 Usage (from the repository root)::
 
@@ -80,9 +80,9 @@ def main() -> int:
 
     paper = {
         (c["reservoir_type"], c["readout_type"]): c["mae"]
-        for c in json.loads((PAPER_DIR / "results" / "paper_tables.json").read_text())[
-            "cells"
-        ]
+        for c in json.loads(
+            (PAPER_DIR / "results" / "data" / "paper_tables.json").read_text()
+        )["cells"]
         if c["architecture"] == "srsr" and c["configuration"] == "10"
     }
     paper_ratios = {name: paper[a] / paper[b] for name, (a, b) in RATIOS.items()}
@@ -114,7 +114,7 @@ def main() -> int:
         print(
             f"{cand}: seeds {entry['seeds']}; all four ratios within ±{TOLERANCE} of the paper: {within}"
         )
-    out = PAPER_DIR / "results" / "shot_gap_analysis.json"
+    out = PAPER_DIR / "results" / "data" / "shot_gap_analysis.json"
     out.write_text(json.dumps(result, indent=1), encoding="utf-8")
     print(f"wrote {out}")
     return 0

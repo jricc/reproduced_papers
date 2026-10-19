@@ -1,6 +1,6 @@
 """Plot the phase-04 MerLin adaptation against the R2 gate-model cells.
 
-Reads ``results/merlin_comparison.json`` (written by ``utils/merlin_comparison.py``)
+Reads ``results/data/merlin_comparison.json`` (written by ``utils/merlin_comparison.py``)
 and draws, per architecture, the seed-mean test MAE (normalized, error bars =
 sample std over seeds 0-2) of the full-quantum and reservoir-only cells, with the
 classical|linear baseline. Saves ``results/merlin_comparison.png`` and a copy in
@@ -34,7 +34,9 @@ SERIES = [
 
 def main() -> int:
     outdir = Path(sys.argv[1])
-    data = json.loads((PAPER_DIR / "results" / "merlin_comparison.json").read_text())
+    data = json.loads(
+        (PAPER_DIR / "results" / "data" / "merlin_comparison.json").read_text()
+    )
     fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharey=False)
     for ax, arch in zip(axes.flat, ARCHS):
         a = data[arch]

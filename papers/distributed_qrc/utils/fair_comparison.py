@@ -3,7 +3,7 @@
 Reads the raw ``sweep_status.json`` / ``metrics.json`` / ``test_predictions.npz``
 of the R2 gate-model sweeps (``E{1..4}-R2``), the phase-05 baseline sweeps
 (``E{1..4}-CLASSICAL``, ``B1B3-RAW``, ``C6-{SRSR,MRSR,MRMR}``) and the phase-04
-MerLin sweeps (``E{1..4}-MERLIN``), and writes ``results/fair_comparison.json``:
+MerLin sweeps (``E{1..4}-MERLIN``), and writes ``results/data/fair_comparison.json``:
 
 * integrity: coverage (seeds 0-2 completed), pinned code hash per sweep family,
   in-run anchors equal to R2, B1/B3 seed invariance;
@@ -47,10 +47,10 @@ QUANTUM_POOL_EXCLUDE = {BASELINE}
 FAIR_CLASSICAL = [
     ("classical", "linear"),  # B0, paper baseline
     ("classical", "rbf_kernel"),  # B2b on B0 features
-    ("esn_tuned", "linear"),  # B4
-    ("esn_tuned", "rbf_kernel"),  # B4 + kernel
-    ("raw_lags", "persistence"),  # B1
-    ("raw_lags", "linear"),  # B1 AR(4)
+    ("esn_tuned", "linear"),  # B4: tuned ESN (ReservoirPy, tuned on eval)
+    ("esn_tuned", "rbf_kernel"),  # B4 + RBF kernel readout
+    ("raw_lags", "persistence"),  # B1: no reservoir, next hour = newest lag
+    ("raw_lags", "linear"),  # B1: AR(4), linear ridge on the 4 raw lags
     ("raw_lags", "quantum_kernel_ideal"),  # B3 product kernel, evaluated classically
     ("raw_lags", "rbf_kernel"),  # B3 RBF
 ]
@@ -191,7 +191,7 @@ def analyse_architecture(
         problems.append(f"{arch}: anchors differ from R2 by {anchor:.2e}")
 
     def cell(seed: int, config: str, system: tuple[str, str]) -> dict:
-        if system[0] == "raw_lags":
+        if system[0] == "raw_lags":  # no-reservoir floors live in the B1B3-RAW sweep
             return raw[seed]["cells"][raw_cells[system]] | {
                 "source": "B1B3-RAW",
                 "seed_run": raw[seed],
@@ -489,7 +489,7 @@ def main() -> int:
         k: mean_std(v) for k, v in readout_seconds.items()
     }
 
-    path = PAPER_DIR / "results" / "fair_comparison.json"
+    path = PAPER_DIR / "results" / "data" / "fair_comparison.json"
     path.write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
     for arch, data in report["architectures"].items():
         print(f"== {arch}: anchors {data['anchor_max_abs_diff']:.1e}")

@@ -15,7 +15,7 @@ Re-derives from the raw ``run_status.json`` / ``metrics.json`` /
 5. hardware-aware fields per sweep: wall-clock per run, photonic kernel modes,
    photons, input states and Fock dimensions observed in the metrics.
 
-Writes ``results/merlin_sweep_verification.json``; exits 1 on any problem.
+Writes ``results/checks/merlin_sweep_verification.json``; exits 1 on any problem.
 
 Usage (from the repository root)::
 
@@ -174,7 +174,7 @@ def main() -> int:
     if tied[0] != FROZEN:
         problems.append(f"M0 selection {tied[0]} != frozen {FROZEN}")
     report["problems"] = problems
-    path = PAPER_DIR / "results" / "merlin_sweep_verification.json"
+    path = PAPER_DIR / "results" / "checks" / "merlin_sweep_verification.json"
     path.write_text(json.dumps(report, indent=1), encoding="utf-8")
     for sweep_id, v in report["sweeps"].items():
         print(

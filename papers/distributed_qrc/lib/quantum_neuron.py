@@ -154,12 +154,19 @@ def neuron_functional(
 def encoded_qubit_states(angles: np.ndarray, noise: DeviceNoise) -> np.ndarray:
     """Single-qubit density matrices after (noisy) ``RX(angle)|0>``; shape ``angles.shape + (2, 2)``."""
 
+    # RX(theta)|0> = c|0> - i s|1>, with c = cos(theta/2), s = sin(theta/2).
+    # rho = |psi><psi|, i.e. rho_ij = psi_i * conj(psi_j):
+    #   rho_00 = c^2, rho_11 = s^2, rho_01 = c * conj(-i s) = i c s, rho_10 = -i c s.
+    # The encoding acts on each qubit separately, so the neuron's input state is
+    # the product of these 2x2 matrices (contracted in neuron_expectations).
     c, s = np.cos(angles / 2), np.sin(angles / 2)
     rho = np.empty(angles.shape + (2, 2), dtype=np.complex128)
     rho[..., 0, 0] = c * c
     rho[..., 1, 1] = s * s
     rho[..., 0, 1] = 1j * c * s
     rho[..., 1, 0] = -1j * c * s
+    # Noisy device: depolarizing error of the native gates of RX shrinks the
+    # Bloch vector, rho -> p rho + (1 - p) I/2 (a mixed state, hence a density matrix).
     shrink = noise.bloch_shrink_1q**NATIVE_1Q_PER_RX
     if shrink != 1.0:
         rho = shrink * rho + (1 - shrink) * 0.5 * _I2
