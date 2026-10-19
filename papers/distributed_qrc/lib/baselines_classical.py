@@ -1,14 +1,14 @@
-"""Additional fair classical baselines of phase 05 (LOG.md#Phase 5 Comparison Plan).
+"""Additional fair classical baselines (README, *Fair Baselines*).
 
 These are independent controls, not part of the paper's method:
 
-* B1: persistence (``y(t+1) = x(t)``, the newest lag of the window) and AR(4),
+* No-reservoir control: persistence (``y(t+1) = x(t)``, the newest lag of the window) and AR(4),
   which is the linear ridge of :mod:`lib.readouts` on the raw lags;
-* B2b / B3: RBF kernel ridge, ``exp(-gamma ||x - x'||^2)``, with gamma and lambda
+* Classical-kernel and no-reservoir controls: RBF kernel ridge, ``exp(-gamma ||x - x'||^2)``, with gamma and lambda
   selected jointly on the evaluation split from the same training subsample as
-  the fidelity kernel (B2a, the paper's product kernel evaluated classically, is
-  the existing ``quantum_kernel_ideal`` readout);
-* B4: a ReservoirPy echo-state reservoir whose spectral radius, leak rate and
+  the fidelity kernel (the paper's product kernel evaluated classically needs no
+  separate baseline: it is the existing ``quantum_kernel_ideal`` readout);
+* Tuned ESN: a ReservoirPy echo-state reservoir whose spectral radius, leak rate and
   input scaling are tuned on the evaluation split (the grid is enumerated here;
   the runner evaluates each setting with the linear readout).
 """
@@ -32,7 +32,7 @@ NEWEST_LAG = -1
 
 
 def esn_settings(grid: dict[str, list[float]]) -> list[dict[str, float]]:
-    """B4 candidates in the declared nested order: spectral radius, leak rate, input scaling."""
+    """Tuned-ESN candidates in the declared nested order: spectral radius, leak rate, input scaling."""
 
     return [
         {"sr": float(sr), "lr": float(lr), "input_scaling": float(scale)}
@@ -54,7 +54,7 @@ def select_first_within_tolerance(scores: list[float]) -> int:
 def fit_persistence(
     features: dict[str, np.ndarray], targets: dict[str, np.ndarray]
 ) -> FittedReadout:
-    """B1 persistence forecast: the next hour equals the newest observed hour."""
+    """Persistence forecast (no-reservoir control): the next hour equals the newest observed hour."""
 
     predictions = {
         split: values[:, NEWEST_LAG].copy() for split, values in features.items()
@@ -115,7 +115,7 @@ def fit_rbf_kernel_ridge(
     selection_subsample: int | None,
     fit_subsample: int | None,
 ) -> FittedReadout:
-    """RBF kernel ridge (B2b, B3) with the fidelity-kernel protocol of :mod:`lib.readouts`.
+    """RBF kernel ridge (classical-kernel and no-reservoir controls) with the fidelity-kernel protocol of :mod:`lib.readouts`.
 
     Parameters
     ----------

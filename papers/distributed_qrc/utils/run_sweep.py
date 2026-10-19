@@ -11,7 +11,7 @@ A candidate is a JSON object of paper CLI flags, e.g.
 sweep has the single candidate ``{}`` (the config as is), which is how seed
 repetitions of E1-E4 are run.
 
-Selection (optional, predeclared in LOG.md): ``--select-cells`` lists
+Selection (optional, declared before the run): ``--select-cells`` lists
 ``reservoir|readout`` cells; each candidate's score is the mean over seeds and
 selected cells of ``--select-metric`` (default ``eval.rmse``), minimized.
 Candidates within ``--tie-tolerance`` (relative) of the best are tied; the tie is

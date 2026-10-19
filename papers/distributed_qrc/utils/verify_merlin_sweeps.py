@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -184,7 +185,7 @@ def main() -> int:
         )
     print(f"M0 selected {tied[0]} (tied: {tied})")
     print(f"problems: {problems or 'none'}")
-    print(f"wrote {path}")
+    print(f"wrote {os.path.relpath(path)}")
     return 1 if problems else 0
 
 

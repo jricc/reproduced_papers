@@ -1,4 +1,4 @@
-"""Cross-architecture comparison at equal total neuron count (E5, paper Table VIII, claim C3).
+"""Cross-architecture comparison at equal total neuron count (E5, paper Table VIII).
 
 For each total neuron count (10, 15, 20, 25, 30, 40, 50, 60), the paper reports
 the best model over all four architectures and observes that it always involves
@@ -23,6 +23,7 @@ Usage (from the repository root)::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -145,7 +146,7 @@ def main() -> int:
             f"{ours['best_architecture']:5s} {ours['best_configuration']:6s} {ours['best_cell']:28s} | "
             f"{ours.get('best_srsr_mae_mean', float('nan')):.5f} {ours.get('mae_gap_in_pooled_std', float('nan')):+8.2f}"
         )
-    print(f"wrote {out}")
+    print(f"wrote {os.path.relpath(out)}")
     return 0
 
 

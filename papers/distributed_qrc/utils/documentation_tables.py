@@ -4,7 +4,7 @@ Writes ``results/results_summary.md`` with:
 
 1. the paper-item table (paper value, reproduced value, delta, metric / trend
    agreement, claim support, seeds, comment) for Tables IV-VII (headline),
-   Tables C (per-cell agreement by cell type), Table VIII (C7) and the C6
+   Tables C (per-cell agreement by cell type), Table VIII (C5) and the noise side check of
    cross-architecture comparison, plus the fair-baseline rows of phase 05;
 2. the sweep index: every evidence sweep (R2, MerLin, phase 05) with its
    purpose, candidates, successful / expected runs, completeness, machine, code
@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -41,40 +42,40 @@ TABLES = {
 # Evidence sweeps (superseded phase-03 sweeps without the -R2 suffix are excluded).
 SWEEPS = {
     "P1-R6R7-R2": (
-        "S1: observable and update-order choice (R6, R7)",
+        "Choice of the neuron observable and of the reservoir update order",
         "min mean eval RMSE over quantum_ideal|linear and quantum_ideal|quantum_kernel_ideal; 1 % ties -> first listed",
         ["quantum_ideal|linear", "quantum_ideal|quantum_kernel_ideal"],
     ),
     "E1-R2": (
-        "E1 paper grid, SRSR (Table IV)",
+        "Paper grid, SRSR (Table IV)",
         "no selection; seed aggregation",
         None,
     ),
-    "E2-R2": ("E2 paper grid, MRSR (Table V)", "no selection; seed aggregation", None),
-    "E3-R2": ("E3 paper grid, SRMR (Table VI)", "no selection; seed aggregation", None),
+    "E2-R2": ("Paper grid, MRSR (Table V)", "no selection; seed aggregation", None),
+    "E3-R2": ("Paper grid, SRMR (Table VI)", "no selection; seed aggregation", None),
     "E4-R2": (
-        "E4 paper grid, MRMR (Table VII)",
+        "Paper grid, MRMR (Table VII)",
         "no selection; seed aggregation",
         None,
     ),
     "P1-ROBUST-R2": (
-        "S2: robustness to normalization (per split) and artifact handling (interpolate); the merge rule R12 was resolved analytically, not swept",
-        "no selection; materiality rule (results/data/robustness_verdicts.json, S2-R2)",
+        "Robustness to normalization (per split) and data artifacts (interpolated)",
+        "no selection; materiality rule (results/data/robustness_verdicts.json)",
         None,
     ),
     "GAP-SHOTS-R2": (
-        "S3: finite-shot hypothesis for the noisy gap",
-        "no selection; degradation-ratio categories (robustness_verdicts.json, S3-R2)",
+        "Do finite shots explain the paper's noisy degradation?",
+        "no selection; degradation-ratio categories (results/data/robustness_verdicts.json)",
         None,
     ),
     "GAP-NOISE-SCALE-R2": (
-        "S4: noise-strength scale for the noisy gap",
-        "closest scale by min sum |ratio - paper|; 1 % ties -> smaller (robustness_verdicts.json, S4-R2)",
+        "Which noise scale matches the paper's noisy degradation?",
+        "closest scale by min sum |ratio - paper|; 1 % ties -> smaller (results/data/robustness_verdicts.json)",
         None,
     ),
     "GAP-INTERCEPT-R2": (
-        "S5: missing-intercept hypothesis for the linear gap",
-        "no selection; >= 13/24 cells rule (robustness_verdicts.json, S5-R2)",
+        "Does the missing intercept of Eq. 5 explain the linear-readout gap?",
+        "no selection; >= 13/24 cells rule (results/data/robustness_verdicts.json)",
         None,
     ),
     "GAP-CLASSICAL-SRSR-R2": (
@@ -98,45 +99,62 @@ SWEEPS = {
         None,
     ),
     "XCHECK-E3-R2": (
-        "Local CPU vs gpu-1 equivalence, SRMR 10/2",
+        "Laptop CPU vs NVIDIA L4 equivalence, SRMR 10/2",
         "no selection; max |difference| (results/checks/local_vs_gpu_crosscheck.json)",
         None,
     ),
-    "XCHECK-E4-R2": ("Local CPU vs gpu-2 equivalence, MRMR 2x5", "as above", None),
+    "XCHECK-E4-R2": ("Laptop CPU vs NVIDIA L4 equivalence, MRMR 2x5", "as above", None),
     "P1-MERLIN-SCALES": (
-        "Phase 04 M0: photonic encoding scales",
+        "MerLin encoding-scale selection",
         "min mean eval RMSE over photonic|linear and photonic|photonic_kernel; 1 % ties -> first listed",
         ["photonic|linear", "photonic|photonic_kernel"],
     ),
     "E1-MERLIN": (
-        "Phase 04 MerLin grid, SRSR",
+        "MerLin grid, SRSR",
         "no selection; preservation tolerance (results/data/merlin_comparison.json)",
         None,
     ),
-    "E2-MERLIN": ("Phase 04 MerLin grid, MRSR", "as above", None),
-    "E3-MERLIN": ("Phase 04 MerLin grid, SRMR", "as above", None),
-    "E4-MERLIN": ("Phase 04 MerLin grid, MRMR", "as above", None),
+    "E2-MERLIN": ("MerLin grid, MRSR", "as above", None),
+    "E3-MERLIN": ("MerLin grid, SRMR", "as above", None),
+    "E4-MERLIN": ("MerLin grid, MRMR", "as above", None),
     "B1B3-RAW": (
-        "Phase 05 floors B1/B3 (no reservoir)",
+        "No-reservoir control",
         "no sweep selection; per-cell γ/λ on eval (results/data/fair_comparison.json)",
         None,
     ),
     "E1-CLASSICAL": (
-        "Phase 05 fair baselines, SRSR",
+        "Fair baselines, SRSR",
         "no sweep selection; ESN, γ, λ selected on eval per cell",
         None,
     ),
-    "E2-CLASSICAL": ("Phase 05 fair baselines, MRSR", "as above", None),
-    "E3-CLASSICAL": ("Phase 05 fair baselines, SRMR", "as above", None),
-    "E4-CLASSICAL": ("Phase 05 fair baselines, MRMR", "as above", None),
+    "E2-CLASSICAL": ("Fair baselines, MRSR", "as above", None),
+    "E3-CLASSICAL": ("Fair baselines, SRMR", "as above", None),
+    "E4-CLASSICAL": ("Fair baselines, MRMR", "as above", None),
     "C6-SRSR": (
-        "Phase 05 C6 control, SRSR, noise ×10",
+        "Noise side check (Sec. III-B5), SRSR, noise ×10",
         "no selection; decision rule of the Phase 5 plan",
         None,
     ),
-    "C6-MRSR": ("Phase 05 C6 control, MRSR, noise ×10", "as above", None),
-    "C6-MRMR": ("Phase 05 C6 control, MRMR, noise ×10", "as above", None),
+    "C6-MRSR": (
+        "Noise side check (Sec. III-B5), MRSR, noise ×10",
+        "as above",
+        None,
+    ),
+    "C6-MRMR": (
+        "Noise side check (Sec. III-B5), MRMR, noise ×10",
+        "as above",
+        None,
+    ),
 }
+
+
+def total_neurons(config: str) -> int:
+    """Total reservoir neurons of a configuration label: "10", "10/2" or "2x5"."""
+
+    if "x" in config:
+        k, n = config.split("x")
+        return int(k) * int(n)
+    return int(config.split("/")[0])
 
 
 def esc(text: str) -> str:
@@ -184,22 +202,22 @@ def main() -> int:
     lines = [
         "# Results summary (generated by `utils/documentation_tables.py`)",
         "",
-        "Test metrics on the normalized scale. Ours: mean over seeds 0-2 (full data, full-n kernels, simulation; `paper-accurate` protocol). Paper values: single runs from the paper's tables.",
+        "Test metrics on the normalized scale. Ours: mean over seeds 0-2 (full data, full-n kernels, simulation; `paper-accurate` protocol). Paper values: as printed in the paper's tables (one value per cell; no seeds or spread reported).",
         "",
         "## Paper items",
         "",
         "| Paper item | Claim tested | Paper value | Reproduced value | Delta | Metric agreement | Trend agreement | Claim support | Seeds | Comment |",
         "|---|---|---:|---:|---:|---|---|---|---:|---|",
     ]
-    for arch, exp in ARCHS.items():
+    for arch in ARCHS:
         p = head["paper"][arch]["mae"]
         o = head["ours"][arch]["paper_rule"]["mae"]
         for stat in ("average", "peak"):
-            pv, ov, os = p[stat], o[f"{stat}_mean"], o[f"{stat}_std"]
+            pv, ov, o_std = p[stat], o[f"{stat}_mean"], o[f"{stat}_std"]
             lines.append(
-                f"| Table {TABLES[arch].split(' / ')[0]} ({exp}): {stat} MAE reduction, paper rule vs B0 | C1 | {pv:.1%} | {ov:.1%} ± {os:.1%} | {ov - pv:+.1%} | {'within 1 std' if abs(ov - pv) <= os else 'outside 1 std'} | yes (large reductions vs B0) | supported vs B0 only; unsupported vs fair classical (phase 05) | 3 | B0 is seed-unstable; paper value recomputed from its tables{' (reported 25.6 %)' if arch == 'mrsr' and stat == 'average' else ''} |"
+                f"| Table {TABLES[arch].split(' / ')[0]} ({arch.upper()}): {stat} MAE reduction, paper rule vs B0 | C1 | {pv:.1%} | {ov:.1%} ± {o_std:.1%} | {ov - pv:+.1%} | {'within 1 std' if abs(ov - pv) <= o_std else 'outside 1 std'} | yes (large reductions vs B0) | supported vs B0 only; unsupported vs fair classical (fair baselines) | 3 | B0 is seed-unstable; paper value recomputed from its tables{' (reported 25.6 %)' if arch == 'mrsr' and stat == 'average' else ''} |"
             )
-    for arch, exp in ARCHS.items():
+    for arch in ARCHS:
         rows = list(
             csv.DictReader(
                 open(PAPER_DIR / "results" / "data" / f"{arch}_vs_paper.csv")
@@ -221,11 +239,11 @@ def main() -> int:
             paper = np.array([float(r["mae_paper"]) for r in g])
             within = int(np.sum(np.abs(rel) <= 0.12))
             lines.append(
-                f"| Tables {TABLES[arch].split(' / ')[1]} ({exp}): `{esc(cell)}` over 8 configurations | {'C1, C2, C4' if 'quantum_kernel' in cell else 'C1'}{', C5' if 'noisy' in cell else ''} | {paper.min():.4f}–{paper.max():.4f} | {ours.min():.4f}–{ours.max():.4f} | median {np.median(rel):+.0%} | {within}/8 within 12 % | {'yes' if within >= 6 else 'partial'} | see claim rows | 3 | per-cell values: `results/data/{arch}_vs_paper.csv` |"
+                f"| Tables {TABLES[arch].split(' / ')[1]} ({arch.upper()}): `{esc(cell)}` over 8 configurations | {'C1, C2, C3' if 'quantum_kernel' in cell else 'C1'}{', C4' if 'noisy' in cell else ''} | {paper.min():.4f}–{paper.max():.4f} | {ours.min():.4f}–{ours.max():.4f} | median {np.median(rel):+.0%} | {within}/8 within 12 % | {'yes' if within >= 6 else 'partial'} | see claim rows | 3 | per-cell values: `results/data/{arch}_vs_paper.csv` |"
             )
-    c7 = fair["C7"]
+    c7 = fair["C5_best_model"]
     lines.append(
-        f"| Table VIII / Table V: best overall model, MRSR 3x20 classical reservoir + quantum kernel | C7 | 0.0113 | {c7['hybrid_3x20']['mean']:.4f} ± {c7['hybrid_3x20']['std']:.4f} | {c7['hybrid_3x20']['mean'] - 0.0113:+.4f} | no | no (not the best model in our runs) | unsupported | 3 | ties with the fair classical models ({c7['fair_classical_3x20']['mean']:.4f} ± {c7['fair_classical_3x20']['std']:.4f}) |"
+        f"| Table VIII / Table V: best overall model, MRSR 3x20 classical reservoir + quantum kernel | C5 | 0.0113 | {c7['hybrid_3x20']['mean']:.4f} ± {c7['hybrid_3x20']['std']:.4f} | {c7['hybrid_3x20']['mean'] - 0.0113:+.4f} | no | no (not the best model in our runs) | unsupported | 3 | ties with the fair classical models ({c7['fair_classical_3x20']['mean']:.4f} ± {c7['fair_classical_3x20']['std']:.4f}) |"
     )
     same_sign = sum(
         v["same_sign"] for k, v in noise.items() if k.startswith("mrsr-vs-srsr@")
@@ -235,26 +253,50 @@ def main() -> int:
         for k, v in noise.items()
         if k.startswith("mrsr-vs-srsr@")
     )
-    c6 = fair["C6_x10"]
+    c6 = fair["noise_side_check_x10"]
     lines.append(
-        f"| Sec. III-B: noisy fully quantum MRSR vs SRSR at equal N (×1, paper mapping) | C6 | MRSR better at 8/8 | same sign as paper at {same_sign}/8, abs Δ ≤ 1 pooled std at {within}/8 | — | no | no | unsupported | 3 | `results/data/noise_distribution_comparison.json` |"
+        f"| Sec. III-B: noisy fully quantum MRSR vs SRSR at equal N (×1, paper mapping) | side check (not a tracked claim) | MRSR better at 8/8 | same sign as paper at {same_sign}/8, abs Δ ≤ 1 pooled std at {within}/8 | — | no | no | unsupported | 3 | `results/data/noise_distribution_comparison.json` |"
     )
     lines.append(
-        f"| Sec. III-B, controlled (phase 05): MRSR vs SRSR at noise ×10 | C6 | MRSR better at 8/8 | paper mapping {c6['paper']['mrsr_vs_srsr']['better']}/8; same device {c6['ibm_brisbane']['mrsr_vs_srsr']['better']}/8 | — | N/A (noise model differs) | only under the paper's device mapping | unsupported as a distribution effect | 3 | `results/data/fair_comparison.json` → `C6_x10` |"
+        f"| Sec. III-B, controlled (fair baselines): MRSR vs SRSR at noise ×10 | side check (not a tracked claim) | MRSR better at 8/8 | paper mapping {c6['paper']['mrsr_vs_srsr']['better']}/8; same device {c6['ibm_brisbane']['mrsr_vs_srsr']['better']}/8 | — | N/A (noise model differs) | only under the paper's device mapping | unsupported as a distribution effect | 3 | `results/data/fair_comparison.json` → `C6_x10` |"
     )
-    for arch, exp in ARCHS.items():
+    for arch in ARCHS:
         a = fair["architectures"][arch]
         cl = a["claims"]["C1_vs_fair_classical"]["counts"]
         h = a["E7_headline_vs_fair_classical"]["mae"]
         lines.append(
-            f"| Phase 05 ({exp}): eval-selected quantum vs eval-selected fair classical (B0-B4) | C1 | N/A (no fair baseline in the paper) | {h['average']['mean']:+.1%} ± {h['average']['std']:.1%} average MAE reduction; better in {cl['better']}/8, tie {cl['tie']}/8, worse {cl['worse']}/8 | — | N/A | N/A | unsupported | 3 | `results/fair_comparison_table.md` |"
+            f"| Fair baselines ({arch.upper()}): eval-selected quantum vs eval-selected best classical (B0 and the additional baselines) | C1 | N/A (no fair baseline in the paper) | {h['average']['mean']:+.1%} ± {h['average']['std']:.1%} average MAE reduction; better in {cl['better']}/8, tie {cl['tie']}/8, worse {cl['worse']}/8 | — | N/A | N/A | unsupported | 3 | `results/fair_comparison_table.md` |"
         )
+
+    lines += [
+        "",
+        "## Headline reductions, configuration by configuration",
+        "",
+        "Reduction = 1 - MAE(best quantum/hybrid cell) / MAE(B0), with B0 = `classical|linear` and the best cell taken among the 8 quantum or hybrid cells by highest test R2 (our reading of the paper's rule, which the paper does not state). Paper: computed from its Tables C. Ours: the best cell is chosen per seed (listed per seed when it differs); B0 MAE, best MAE and reduction are means over seeds 0-2. Averaging a reduction column over the 8 configurations gives the headline average of the README. The headline peak is the maximum over configurations taken per run (one run for the paper, each seed for us) and then averaged over seeds, so our peak can exceed the maximum of the column below when the seeds peak at different configurations (MRSR: 57.9 % vs 47.6 %).",
+        "",
+        "| Architecture | Configuration | Paper: B0 MAE | Paper: best cell | Paper: best MAE | Paper: reduction | Ours: B0 MAE | Ours: best cell | Ours: best MAE | Ours: reduction |",
+        "|---|---|---:|---|---:|---:|---:|---|---:|---:|",
+    ]
+    for arch in ARCHS:
+        paper_rows = head["paper"][arch]["mae"]["per_config"]
+        seed_rows = [
+            s["per_config"] for s in head["ours"][arch]["paper_rule"]["mae"]["per_seed"]
+        ]
+        for config in sorted(paper_rows, key=total_neurons):
+            pr = paper_rows[config]
+            ours = [s[config] for s in seed_rows]
+            cells = [o["best_cell"] for o in ours]
+            cell_text = cells[0] if len(set(cells)) == 1 else " / ".join(cells)
+            lines.append(
+                f"| {arch.upper()} | {config} | {pr['baseline']:.4f} | `{esc(pr['best_cell'])}` | {pr['best']:.4f} | {pr['reduction']:.1%} "
+                f"| {np.mean([o['baseline'] for o in ours]):.4f} | `{esc(cell_text)}` | {np.mean([o['best'] for o in ours]):.4f} | {np.mean([o['reduction'] for o in ours]):.1%} |"
+            )
 
     lines += [
         "",
         "## Sweep index",
         "",
-        "Every evidence sweep. The full candidate-by-cell table of each sweep (mean and std over seeds of every split and metric) is its coordinator's `summary.json`. Superseded phase-03 sweeps (no `-R2` suffix) are kept on disk but are not evidence (`LOG.md#Re-run with complete pre-execution plans (R2)`).",
+        "Every evidence sweep. The full candidate-by-cell table of each sweep (mean and std over seeds of every split and metric) is its coordinator's `summary.json`. The suffix `-R2` marks the second, fully pre-planned run of the reproduction; an earlier pass was superseded and is not evidence.",
         "",
         "| Sweep | Purpose | Candidates | Successful / expected runs | Completeness | Machine | Code (`lib_sha256`) | Declared rule | Result (recomputed from raw metrics) | Full table |",
         "|---|---|---:|---:|---|---|---|---|---|---|",
@@ -278,7 +320,7 @@ def main() -> int:
         )
     path = PAPER_DIR / "results" / "results_summary.md"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"wrote {path}")
+    print(f"wrote {os.path.relpath(path)}")
     return 0
 
 

@@ -1,4 +1,4 @@
-"""Apply the predeclared R2 verdict rules (LOG.md, "Re-run with complete pre-execution plans (R2)").
+"""Apply the verdict rules declared before the reproduction sweeps (suffix -R2) were run.
 
 Reads the R2 sweeps' raw ``metrics.json`` files and ``results/data/paper_tables.json``
 and writes ``results/data/robustness_verdicts.json`` with, exactly as declared before launch:
@@ -21,6 +21,7 @@ Usage (from the repository root)::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -231,7 +232,7 @@ def main() -> int:
             indent=1,
         )
     )
-    print(f"wrote {path}")
+    print(f"wrote {os.path.relpath(path)}")
     return 0
 
 

@@ -1,4 +1,4 @@
-"""Phase-05 fair comparison, applying the rules frozen in LOG.md#Phase 5 Comparison Plan.
+"""Phase-05 fair comparison, applying the decision rules declared before the runs.
 
 Reads the raw ``sweep_status.json`` / ``metrics.json`` / ``test_predictions.npz``
 of the R2 gate-model sweeps (``E{1..4}-R2``), the phase-05 baseline sweeps
@@ -6,13 +6,13 @@ of the R2 gate-model sweeps (``E{1..4}-R2``), the phase-05 baseline sweeps
 MerLin sweeps (``E{1..4}-MERLIN``), and writes ``results/data/fair_comparison.json``:
 
 * integrity: coverage (seeds 0-2 completed), pinned code hash per sweep family,
-  in-run anchors equal to R2, B1/B3 seed invariance;
+  in-run anchors equal to R2, no-reservoir seed invariance;
 * per configuration: every system's test MAE (mean, sample std over seeds);
 * eval-selected cells: per seed and configuration, the cell with the minimum
   eval RMSE within the quantum/hybrid pool, the fair classical pool and the
   MerLin photonic pool;
-* claim outcomes C1, C2, C5, C6, C7 (decision rules of the plan) and the C3
-  characterization; the E7 headline vs the best fair classical cell;
+* claim outcomes C1, C2, C4, C5 (decision rules of the plan; C4 = noisy cells, C5 = best
+  model), the best architecture per size and the noise side check of Sec. III-B5; the E7 headline vs the best fair classical cell;
 * Diebold-Mariano tests at SRSR 10, MRSR 3x20, SRMR 10/2 and MRMR 2x5;
 * wall-clock: per sweep and run, and mean readout seconds per cell type.
 
@@ -27,6 +27,7 @@ Usage (from the repository root)::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -46,13 +47,16 @@ BASELINE = ("classical", "linear")
 QUANTUM_POOL_EXCLUDE = {BASELINE}
 FAIR_CLASSICAL = [
     ("classical", "linear"),  # B0, paper baseline
-    ("classical", "rbf_kernel"),  # B2b on B0 features
-    ("esn_tuned", "linear"),  # B4: tuned ESN (ReservoirPy, tuned on eval)
-    ("esn_tuned", "rbf_kernel"),  # B4 + RBF kernel readout
-    ("raw_lags", "persistence"),  # B1: no reservoir, next hour = newest lag
-    ("raw_lags", "linear"),  # B1: AR(4), linear ridge on the 4 raw lags
-    ("raw_lags", "quantum_kernel_ideal"),  # B3 product kernel, evaluated classically
-    ("raw_lags", "rbf_kernel"),  # B3 RBF
+    ("classical", "rbf_kernel"),  # classical-kernel control on B0 features
+    ("esn_tuned", "linear"),  # tuned ESN (ReservoirPy, tuned on eval)
+    ("esn_tuned", "rbf_kernel"),  # tuned ESN + RBF kernel readout
+    ("raw_lags", "persistence"),  # no reservoir, next hour = newest lag
+    ("raw_lags", "linear"),  # no reservoir: AR(4), linear ridge on the 4 raw lags
+    (
+        "raw_lags",
+        "quantum_kernel_ideal",
+    ),  # no reservoir: the paper's kernel, evaluated classically
+    ("raw_lags", "rbf_kernel"),  # no reservoir: RBF kernel
 ]
 MERLIN_POOL = [
     ("photonic", "linear"),
@@ -285,7 +289,7 @@ def analyse_architecture(
             sys_mae(("classical", "quantum_kernel_ideal")),
             sys_mae(("classical", "rbf_kernel")),
         ),
-        "C5_noisy_fully_quantum_vs_fair_classical": compare(
+        "C4_noisy_fully_quantum_vs_fair_classical": compare(
             sys_mae(("quantum_noisy", "quantum_kernel_noisy")),
             sel_mae("fair_classical"),
         ),
@@ -359,7 +363,7 @@ def main() -> int:
     for k in raw[0]["cells"]:
         maes = [raw[s]["cells"][k]["test"]["mae"] for s in SEEDS]
         if max(maes) != min(maes):
-            problems.append(f"B1B3 not seed-invariant: {k}")
+            problems.append(f"no-reservoir cell not seed-invariant: {k}")
 
     report: dict = {"problems": problems, "architectures": {}}
     wallclock: dict = {}
@@ -369,7 +373,7 @@ def main() -> int:
             arch, exp, outdir, raw, raw_cells, problems, wallclock, readout_seconds
         )
 
-    # C7: MRSR 3x20 hybrid vs eval-selected fair classical.
+    # C5: MRSR 3x20 hybrid (the paper's best model) vs eval-selected fair classical.
     mrsr = report["architectures"]["mrsr"]
     hybrid = mrsr["per_configuration"]["3x20"]["classical|quantum_kernel_ideal"]
     fair = [
@@ -385,7 +389,7 @@ def main() -> int:
         ]
     )
     verdict, delta, pooled = decide(h, np.array(fair))
-    report["C7"] = {
+    report["C5_best_model"] = {
         "hybrid_3x20": hybrid,
         "fair_classical_3x20": mean_std(fair),
         "paper_value": 0.0113,
@@ -395,7 +399,7 @@ def main() -> int:
         "outcome": "SUPPORTED" if verdict == "better" else "UNSUPPORTED",
     }
 
-    # C3 characterization: per total N, which architecture has the lowest seed-mean test MAE.
+    # Best architecture per total N (lowest seed-mean test MAE).
     totals = {"srsr": {}, "mrsr": {}, "srmr": {}, "mrmr": {}}
     for arch, data in report["architectures"].items():
         for config, sel in data["eval_selected"].items():
@@ -420,9 +424,9 @@ def main() -> int:
             ),
             "values": row,
         }
-    report["C3_characterization"] = c3
+    report["best_architecture_per_size"] = c3
 
-    # C6: same-device control at x10.
+    # Noise side check (Sec. III-B5 remark): same-device control at x10.
     c6 = {}
     sweeps = {
         a: load_sweep(outdir, f"C6-{a.upper()}", LIB["CLASSICAL"], problems)
@@ -479,7 +483,7 @@ def main() -> int:
             wallclock[f"C6-{arch.upper()} {label}"] = [
                 sweeps[arch][candidate][s]["seconds"] for s in SEEDS
             ]
-    report["C6_x10"] = c6
+    report["noise_side_check_x10"] = c6
 
     wallclock["B1B3-RAW"] = [raw[s]["seconds"] for s in SEEDS]
     report["wallclock_run_seconds"] = {
@@ -515,14 +519,14 @@ def main() -> int:
             + "  ".join(f"{r['dm']:+.2f} (p {r['p_value']:.1e})" for r in dm)
         )
     print(
-        f"C7: {report['C7']['outcome']} ({report['C7']['verdict']}), hybrid {report['C7']['hybrid_3x20']}, fair {report['C7']['fair_classical_3x20']}"
+        f"C5: {report['C5_best_model']['outcome']} ({report['C5_best_model']['verdict']}), hybrid {report['C5_best_model']['hybrid_3x20']}, fair {report['C5_best_model']['fair_classical_3x20']}"
     )
-    for label, v in report["C6_x10"].items():
+    for label, v in report["noise_side_check_x10"].items():
         print(
-            f"C6 {label}: MRSR {v['mrsr_vs_srsr']['outcome']} ({v['mrsr_vs_srsr']['better']}/8), MRMR {v['mrmr_vs_srsr_from_40']['outcome']} ({v['mrmr_vs_srsr_from_40']['better']}/3)"
+            f"noise side check {label}: MRSR {v['mrsr_vs_srsr']['outcome']} ({v['mrsr_vs_srsr']['better']}/8), MRMR {v['mrmr_vs_srsr_from_40']['outcome']} ({v['mrmr_vs_srsr_from_40']['better']}/3)"
         )
     print(f"problems: {problems or 'none'}")
-    print(f"wrote {path}")
+    print(f"wrote {os.path.relpath(path)}")
     return 1 if problems else 0
 
 

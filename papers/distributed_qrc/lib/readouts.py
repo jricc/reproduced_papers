@@ -6,8 +6,8 @@
   intercept), which the paper does not specify.
 * Regularization uses the n-normalized convention ``(A + n lambda I)`` so that a
   lambda selected on a training subsample transfers to the full training set.
-  lambda is selected on the evaluation split from a predeclared grid (R10,
-  LOG.md#Fair Baseline Plan): minimum evaluation RMSE, ties within 1 % relative
+  lambda is selected on the evaluation split from a predeclared grid:
+  minimum evaluation RMSE, ties within 1 % relative
   going to the larger lambda.
 * A distributed readout (SRMR, MRMR) splits the feature vector into m contiguous
   chunks, fits one independent ridge per chunk and averages the m predictions
@@ -104,8 +104,8 @@ def _cholesky_solve(
 
     torch's Cholesky is used on every device. ``scipy.linalg.cho_factor`` (SciPy
     1.18.1 with Accelerate, macOS / Python 3.14) was found to write outside its
-    arrays and corrupt unrelated data on the development machine; see
-    LOG.md#Strategy and Key Decisions (2026-10-14).
+    arrays and corrupt unrelated data on the development machine (an Accelerate
+    upper-triangle Cholesky bug on macOS 27.0.x).
     """
 
     gram.diagonal().add_(shift)

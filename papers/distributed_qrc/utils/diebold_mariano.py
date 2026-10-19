@@ -8,7 +8,7 @@ and a Bartlett (Newey-West) long-run variance with ``lag`` autocovariances:
 autocorrelation of hourly load errors. Two-sided p-values use Student-t with
 T - 1 degrees of freedom. Negative statistics mean cell A has the lower loss.
 
-Comparisons (predeclared in LOG.md#Fair Baseline Plan, "Headline comparisons"):
+Comparisons (declared before the runs):
 the best paper-rule cell vs the classical + linear baseline at the smallest
 configuration of each architecture (where the peak reductions occur), and the
 quantum vs classical reservoir with the same ideal kernel readout.
@@ -23,6 +23,7 @@ Usage (from the repository root)::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -120,7 +121,7 @@ def main() -> int:
         label = f"{key[0]} {key[1]}: {key[2]} vs {key[3]}"
         cells = "  ".join(f"{r['dm']:+7.2f} ({r['p_value']:.1e})" for r in rows)
         print(f"{label:78s} {key[4]:4s} {key[5]:3d} | {cells}")
-    print(f"wrote {out}")
+    print(f"wrote {os.path.relpath(out)}")
     return 0
 
 

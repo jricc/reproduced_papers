@@ -1,4 +1,4 @@
-"""Minimal reproducer for the MerLin-team report (ACTION_REQUIRED_SEND_TO_MERLIN_TEAM.md).
+"""Minimal reproducer of the `merlin.FidelityKernel` deviation reported to the MerLin team.
 
 On a frozen 5-mode, 2-photon re-uploading circuit (the phase-04 kernel chip,
 ``lib.photonic_merlin.PhotonicKernelMap``), compare four Gram matrices on 6 points:

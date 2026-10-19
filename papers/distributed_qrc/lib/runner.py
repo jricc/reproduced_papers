@@ -69,8 +69,8 @@ RESERVOIR_TYPES = (
     # MerLin adaptation (phase 04):
     "photonic",  # one frozen 4-mode, 2-photon chip per neuron
     # Phase-05 classical controls (not the paper's method):
-    "esn_tuned",  # B4: ReservoirPy ESN with B0's matrices, hyperparameters tuned on eval
-    "raw_lags",  # B1/B3: no reservoir, the readout sees the 4-lag window directly
+    "esn_tuned",  # ReservoirPy ESN with B0's matrices, hyperparameters tuned on eval
+    "raw_lags",  # no reservoir: the readout sees the 4-lag window directly
 )
 # Seed stream that separates the photonic chips from the gate-model randomness.
 PHOTONIC_STREAM = 7
@@ -82,8 +82,8 @@ READOUT_TYPES = (
     # MerLin adaptation (phase 04):
     "photonic_kernel",  # 2-photon fidelity-kernel ridge
     # Phase-05 classical controls (not the paper's method):
-    "rbf_kernel",  # B2b/B3: RBF kernel ridge, gamma and lambda tuned on eval
-    "persistence",  # B1: forecast = newest observed hour (raw_lags only)
+    "rbf_kernel",  # classical RBF kernel ridge, gamma and lambda tuned on eval
+    "persistence",  # forecast = newest observed hour (raw_lags only)
 )
 SPLITS = ("train", "eval", "test")
 _LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO, "warning": logging.WARNING}
@@ -101,6 +101,72 @@ def _child_seed(seed: int, *path: int) -> np.random.SeedSequence:
     return np.random.SeedSequence([seed, *path])
 
 
+def sub_reservoir_features(
+    cfg: dict[str, Any],
+    data: ForecastData,
+    n_neurons: int,
+    cell_index: int,
+    sub: int,
+    reservoir_type: str,
+    device_name: str | None,
+    classical_params: dict[str, Any] | None = None,
+) -> list[np.ndarray]:
+    """Features of one sub-reservoir for every split, in ``SPLITS`` order.
+
+    One sub-reservoir is one branch of a distributed architecture: it depends only
+    on the seed, the configuration index and its own index, so it can be computed
+    on its own process, node or QPU (see :mod:`lib.distributed`).
+    """
+
+    seed = int(cfg["seed"])
+    lags = int(cfg["dataset"]["lags"])
+    sequence = _child_seed(seed, cell_index, sub)
+    if reservoir_type == "classical":
+        params = classical_params or _section(cfg, "classical_reservoir")
+        node_seed = int(sequence.generate_state(1)[0])
+        outputs = ClassicalReservoir(n_neurons, params, node_seed).transform_sequence(
+            [data.inputs[split] for split in SPLITS]
+        )
+    elif reservoir_type in ("quantum_ideal", "quantum_noisy"):
+        qcfg = _section(cfg, "quantum_reservoir")
+        structure_rng, shot_rng = (np.random.default_rng(s) for s in sequence.spawn(2))
+        reservoir_spec = sample_quantum_reservoir(n_neurons, lags, structure_rng)
+        device = device_from_config(
+            device_name, cfg["noise"]["devices"], float(cfg["noise"]["scale"])
+        )
+        # Finite shots model the noisy (hardware-informed) simulator only; the
+        # paper's ideal "Sim." columns match exact expectations.
+        shots = qcfg["shots"] if reservoir_type == "quantum_noisy" else None
+        reservoir = QuantumReservoir(
+            reservoir_spec,
+            noise_for(reservoir_type, device),
+            observable=qcfg["observable"],
+            passes=int(qcfg["passes"]),
+            update=qcfg["update"],
+            shots=shots,
+            rng=shot_rng if shots is not None else None,
+        )
+        outputs = [reservoir.transform(data.inputs[split]) for split in SPLITS]
+    elif reservoir_type == "photonic":
+        # MerLin adaptation (phase 04): same wiring as the gate reservoir of
+        # this seed, photonic neuron chips with their own fixed interferometers.
+        pcfg = _section(cfg, "photonic")
+        structure_rng = np.random.default_rng(sequence.spawn(2)[0])
+        reservoir_spec = sample_quantum_reservoir(n_neurons, lags, structure_rng)
+        reservoir = PhotonicReservoir(
+            reservoir_spec,
+            scale=float(pcfg["neuron_scale"]),
+            passes=int(_section(cfg, "quantum_reservoir")["passes"]),
+            sequence=_child_seed(seed, cell_index, sub, PHOTONIC_STREAM),
+        )
+        outputs = [reservoir.transform(data.inputs[split]) for split in SPLITS]
+    else:
+        raise ValueError(
+            f"reservoir type must be one of {RESERVOIR_TYPES}, got {reservoir_type!r}"
+        )
+    return outputs
+
+
 def _reservoir_features(
     cfg: dict[str, Any],
     data: ForecastData,
@@ -110,59 +176,24 @@ def _reservoir_features(
     devices: list[str],
     classical_params: dict[str, Any] | None = None,
 ) -> dict[str, np.ndarray]:
-    seed = int(cfg["seed"])
-    lags = int(cfg["dataset"]["lags"])
     if reservoir_type == "raw_lags":
-        # B1/B3 (phase 05): no reservoir, the readout sees the 4-lag window itself.
+        # No-reservoir control: the readout sees the 4-lag window itself.
         return {split: data.inputs[split] for split in SPLITS}
     per_split: dict[str, list[np.ndarray]] = {split: [] for split in SPLITS}
     for sub, n_neurons in enumerate(spec.reservoir_sizes):
-        sequence = _child_seed(seed, cell_index, sub)
-        if reservoir_type == "classical":
-            params = classical_params or _section(cfg, "classical_reservoir")
-            node_seed = int(sequence.generate_state(1)[0])
-            outputs = ClassicalReservoir(
-                n_neurons, params, node_seed
-            ).transform_sequence([data.inputs[split] for split in SPLITS])
-        elif reservoir_type in ("quantum_ideal", "quantum_noisy"):
-            qcfg = _section(cfg, "quantum_reservoir")
-            structure_rng, shot_rng = (
-                np.random.default_rng(s) for s in sequence.spawn(2)
-            )
-            reservoir_spec = sample_quantum_reservoir(n_neurons, lags, structure_rng)
-            device = device_from_config(
-                devices[sub], cfg["noise"]["devices"], float(cfg["noise"]["scale"])
-            )
-            # Finite shots model the noisy (hardware-informed) simulator only; the
-            # paper's ideal "Sim." columns match exact expectations.
-            shots = qcfg["shots"] if reservoir_type == "quantum_noisy" else None
-            reservoir = QuantumReservoir(
-                reservoir_spec,
-                noise_for(reservoir_type, device),
-                observable=qcfg["observable"],
-                passes=int(qcfg["passes"]),
-                update=qcfg["update"],
-                shots=shots,
-                rng=shot_rng if shots is not None else None,
-            )
-            outputs = [reservoir.transform(data.inputs[split]) for split in SPLITS]
-        elif reservoir_type == "photonic":
-            # MerLin adaptation (phase 04): same wiring as the gate reservoir of
-            # this seed, photonic neuron chips with their own fixed interferometers.
-            pcfg = _section(cfg, "photonic")
-            structure_rng = np.random.default_rng(sequence.spawn(2)[0])
-            reservoir_spec = sample_quantum_reservoir(n_neurons, lags, structure_rng)
-            reservoir = PhotonicReservoir(
-                reservoir_spec,
-                scale=float(pcfg["neuron_scale"]),
-                passes=int(_section(cfg, "quantum_reservoir")["passes"]),
-                sequence=_child_seed(seed, cell_index, sub, PHOTONIC_STREAM),
-            )
-            outputs = [reservoir.transform(data.inputs[split]) for split in SPLITS]
-        else:
-            raise ValueError(
-                f"reservoir type must be one of {RESERVOIR_TYPES}, got {reservoir_type!r}"
-            )
+        outputs = sub_reservoir_features(
+            cfg,
+            data,
+            n_neurons,
+            cell_index,
+            sub,
+            reservoir_type,
+            # Only quantum reservoirs carry a device noise profile.
+            devices[sub]
+            if reservoir_type in ("quantum_ideal", "quantum_noisy")
+            else None,
+            classical_params,
+        )
         for split, values in zip(SPLITS, outputs):
             per_split[split].append(values)
     return {split: np.concatenate(parts, axis=1) for split, parts in per_split.items()}
@@ -232,7 +263,7 @@ def _fit_cell(
             )
         elif readout_type == "persistence":
             # The cell tag is "<arch>:<config>|<reservoir>|<readout>". Persistence
-            # (B1) predicts the newest lag, so it needs the raw window (raw_lags).
+            # (no-reservoir control) predicts the newest lag, so it needs the raw window (raw_lags).
             if cell_tag.split("|")[1] != "raw_lags" or len(chunks) != 1:
                 raise ValueError(
                     "persistence needs the raw_lags reservoir and one readout instance"
@@ -306,7 +337,7 @@ def _tuned_esn_features(
     readout_devices: list[str],
     tag: str,
 ) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
-    """B4 (phase 05): ReservoirPy reservoir tuned on the evaluation split.
+    """Tuned-ESN baseline: ReservoirPy reservoir tuned on the evaluation split.
 
     Every setting of ``classical_baselines.esn_grid`` reuses B0's random matrices
     (same node seeds) and is scored by the evaluation RMSE of the merged linear
@@ -482,7 +513,7 @@ def train_and_evaluate(cfg: dict[str, Any], run_dir: Path) -> None:
                 started = time.perf_counter()
                 reservoir_selection = None
                 if reservoir_type == "esn_tuned":
-                    # B4: try the 12 ESN settings, keep the best on eval (linear readout).
+                    # Tuned ESN: try the 12 settings, keep the best on eval (linear readout).
                     features, reservoir_selection = _tuned_esn_features(
                         cfg,
                         data,

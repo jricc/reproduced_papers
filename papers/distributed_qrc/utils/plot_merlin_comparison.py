@@ -14,6 +14,7 @@ Usage (from the repository root)::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -77,7 +78,7 @@ def main() -> int:
     ]
     for path in targets:
         fig.savefig(path, dpi=130)
-        print(f"wrote {path}")
+        print(f"wrote {os.path.relpath(path)}")
     return 0
 
 

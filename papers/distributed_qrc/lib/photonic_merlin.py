@@ -1,7 +1,7 @@
 """MerLin photonic adaptation of the paper's reservoir and kernel readout (phase 04).
 
-This is an **adaptation**, not the paper's method. See ``LOG.md#Phase 4
-Adaptation Plan`` for the scope (`PARTIAL_MERLIN_TRANSLATION`).
+This is an **adaptation**, not the paper's method. See the README, *Photonic Assessment and
+MerLin Extension*, for the scope (`PARTIAL_MERLIN_TRANSLATION`).
 
 * Photonic neuron (mapping M1): each reservoir neuron is a small frozen
   linear-optical chip: 4 modes, 2 photons in ``[1, 0, 1, 0]``, a fixed random

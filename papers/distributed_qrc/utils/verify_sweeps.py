@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -406,7 +407,7 @@ def main() -> int:
     report["failures"] = failures
     out = PAPER_DIR / "results" / "checks" / "sweep_verification.json"
     out.write_text(json.dumps(report, indent=1, default=float), encoding="utf-8")
-    print(f"failures: {len(failures)}; wrote {out}")
+    print(f"failures: {len(failures)}; wrote {os.path.relpath(out)}")
     return 1 if failures else 0
 
 

@@ -1,4 +1,4 @@
-"""Phase-05 fair classical baselines: RBF kernel ridge, persistence, tuned ESN (B1-B4)."""
+"""Additional classical baselines: RBF kernel ridge, persistence, tuned ESN."""
 
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ def test_tiny_baseline_grid_runs_and_esn_reuses_b0_matrices(tmp_path):
     from distributed_qrc.lib import runner as paper_runner
 
     cfg = load_runtime_ready_config()
-    # raw_lags = no reservoir (B1/B3); esn_tuned = ESN tuned on eval (B4).
+    # raw_lags = no reservoir; esn_tuned = ESN tuned on eval.
     cfg["experiment"].update(
         sizes=[4],
         reservoir_types=["raw_lags", "classical", "esn_tuned"],

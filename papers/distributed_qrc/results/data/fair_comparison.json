@@ -1736,7 +1736,7 @@
      },
      "outcome": "UNSUPPORTED"
     },
-    "C5_noisy_fully_quantum_vs_fair_classical": {
+    "C4_noisy_fully_quantum_vs_fair_classical": {
      "configurations": {
       "10": {
        "a_mean": 0.014471090666828395,
@@ -3740,7 +3740,7 @@
      },
      "outcome": "UNSUPPORTED"
     },
-    "C5_noisy_fully_quantum_vs_fair_classical": {
+    "C4_noisy_fully_quantum_vs_fair_classical": {
      "configurations": {
       "2x5": {
        "a_mean": 0.014615390317657148,
@@ -5744,7 +5744,7 @@
      },
      "outcome": "UNSUPPORTED"
     },
-    "C5_noisy_fully_quantum_vs_fair_classical": {
+    "C4_noisy_fully_quantum_vs_fair_classical": {
      "configurations": {
       "10/2": {
        "a_mean": 0.015762009456340032,
@@ -7748,7 +7748,7 @@
      },
      "outcome": "UNSUPPORTED"
     },
-    "C5_noisy_fully_quantum_vs_fair_classical": {
+    "C4_noisy_fully_quantum_vs_fair_classical": {
      "configurations": {
       "2x5": {
        "a_mean": 0.014909744998141147,
@@ -8018,7 +8018,7 @@
    }
   }
  },
- "C7": {
+ "C5_best_model": {
   "hybrid_3x20": {
    "mean": 0.01459294052726374,
    "std": 0.0009671020846385087
@@ -8033,7 +8033,7 @@
   "pooled_std": 0.000719453966770193,
   "outcome": "UNSUPPORTED"
  },
- "C3_characterization": {
+ "best_architecture_per_size": {
   "10": {
    "best_quantum_architecture": "srsr",
    "best_fair_classical_architecture": "srsr",
@@ -8211,7 +8211,7 @@
    }
   }
  },
- "C6_x10": {
+ "noise_side_check_x10": {
   "paper": {
    "candidate": {
     "noise_mapping": "paper",

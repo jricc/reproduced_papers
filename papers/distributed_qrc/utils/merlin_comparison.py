@@ -1,6 +1,6 @@
 """Phase-04 comparisons of the MerLin adaptation with the R2 reproduction.
 
-Applies the rules declared in ``LOG.md#Phase 4 Adaptation Plan`` before the runs.
+Applies the rules declared before the runs (tolerance below).
 Per configuration, the test MAE (normalized) is averaged over seeds 0-2:
 
 * (a) photonic|photonic_kernel vs R2 quantum_ideal|quantum_kernel_ideal;
@@ -33,6 +33,7 @@ Usage (from the repository root)::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -205,7 +206,7 @@ def main() -> int:
                 f"peak {h['mae']['peak_mean']:.1%}; RMSE avg {h['rmse']['average_mean']:.1%} "
                 f"peak {h['rmse']['peak_mean']:.1%}; best {h['best_cell_counts']}"
             )
-    print(f"wrote {path}")
+    print(f"wrote {os.path.relpath(path)}")
     return 0
 
 

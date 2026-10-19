@@ -12,6 +12,7 @@ Usage (from the repository root)::
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import matplotlib
@@ -46,7 +47,7 @@ def main() -> int:
             100 * data["ours"][a]["paper_rule"][metric][f"{kind}_std"]
             for a in ARCHITECTURES
         ]
-        ax.bar(x - 0.2, paper, 0.4, color="#BBBBBB", label="paper (single run)")
+        ax.bar(x - 0.2, paper, 0.4, color="#BBBBBB", label="paper (as printed)")
         ax.bar(
             x + 0.2,
             ours,
@@ -69,7 +70,7 @@ def main() -> int:
     fig.tight_layout()
     out = PAPER_DIR / "results" / "headline_reductions.png"
     fig.savefig(out, dpi=150)
-    print(f"wrote {out}")
+    print(f"wrote {os.path.relpath(out)}")
     return 0
 
 

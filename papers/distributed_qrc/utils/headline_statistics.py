@@ -28,6 +28,7 @@ Usage (from the repository root; any subset of E1-E4)::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -148,7 +149,7 @@ def main() -> int:
                     s = ours[rule][metric]
                     row += f" {100 * s['average_mean']:7.1f}% ± {100 * s['average_std']:4.1f}  {100 * s['peak_mean']:6.1f}% ± {100 * s['peak_std']:4.1f} |"
             print(row)
-    print(f"wrote {out}")
+    print(f"wrote {os.path.relpath(out)}")
     return 0
 
 

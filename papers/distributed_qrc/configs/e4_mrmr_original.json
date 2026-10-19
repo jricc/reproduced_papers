@@ -1,5 +1,5 @@
 {
-  "description": "E4 (Table VII, C10-C12, Fig. 7): MRMR, 8 configurations x 9 cells, full-n kernels. Approved to run on gpu-reproduced-papers-2.",
+  "description": "E4 (Table VII, C10-C12, Fig. 7): MRMR, 8 configurations x 9 cells, full-n kernels. Run on an NVIDIA L4 GPU.",
   "experiment": {
     "id": "E4",
     "variant": "original",

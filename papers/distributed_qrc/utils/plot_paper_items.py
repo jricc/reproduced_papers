@@ -8,7 +8,7 @@ here in Arabic: TABLE_4 is the paper's Table IV).
 Every table has a **Paper** column group (blue) and a **Reproduction** column
 group (green), so that the origin of each value is explicit.
 
-* Result tables (IV-VIII, C1-C12): the paper's single-run values and ours (mean
+* Result tables (IV-VIII, C1-C12): the paper's reported values and ours (mean
   ± sample std over seeds 0-2, sweeps ``E{1..4}-R2``, full data).
 * Descriptive tables (I-III, B1-B2): the paper's content and what is implemented
   (configurations, data rows, device mapping, calibration values used).
@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import sys
 from pathlib import Path
@@ -101,7 +102,7 @@ RIDGE_LABEL = {
 }
 RESERVOIRS = ("classical", "quantum_ideal", "quantum_noisy")
 READOUTS = ("linear", "quantum_kernel_ideal", "quantum_kernel_noisy")
-FOOT = "Paper: single run, as printed. Reproduction: mean ± sample std over seeds 0, 1, 2 (sweeps E1-R2 … E4-R2; full data; full training set for every kernel; simulation)."
+FOOT = "Paper: values as printed (one value per cell; the paper reports no seeds or spread). Reproduction: mean ± sample std over seeds 0, 1, 2 (reproduction sweeps; full data; full training set for every kernel; simulation)."
 
 # Column groups: None (row labels / common), "paper", "repro".
 GROUP_COLOURS = {
@@ -420,7 +421,7 @@ def draw_table(
     )
     fig.savefig(OUT / f"{name}.png", dpi=150, bbox_inches="tight", pad_inches=0.12)
     plt.close(fig)
-    print(f"wrote {OUT / name}.png")
+    print(f"wrote {os.path.relpath(OUT / name)}.png")
 
 
 def box(ax, x, y, w, h, text, color="#dbe9f6"):
@@ -522,7 +523,7 @@ def circuit_text_figure(
     fig.text(0.01, 0.01, "\n".join(notes), fontsize=7, va="bottom")
     fig.savefig(OUT / f"{name}.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"wrote {OUT / name}.png")
+    print(f"wrote {os.path.relpath(OUT / name)}.png")
 
 
 # ------------------------------------------------------------------ tables
@@ -891,10 +892,10 @@ def table_b(tex: str) -> None:
         [None, "paper", "paper", "repro", "repro", "repro"],
         [2.0, 1.3, 1.3, 1.3, 1.3, 5.6],
         [
-            "The paper does not say how it built its noise models (R15). Ours uses only these medians"
+            "The paper does not say how it built its noise models. Ours uses only these medians"
             " (configs/defaults.json, lib/noise.py), so it is a simplified version of a full device noise model.",
             "'-' = value not used for that device. The quantum_noisy cells use these rates as printed;"
-            " the C6 control (Fair Baselines) also multiplies them by 10.",
+            " the noise side check (Fair Baselines) also multiplies them by 10.",
         ],
     )
     ion = cfg["ionq_aria1"]
@@ -933,7 +934,7 @@ def table_b(tex: str) -> None:
         [
             "IonQ reports fidelities; the error rate used is 1 − fidelity. The same gate counts as for IBM are applied"
             " (the IonQ native gate set is not modelled).",
-            "The paper does not say how it built its noise models (R15). Ours uses only these medians"
+            "The paper does not say how it built its noise models. Ours uses only these medians"
             " (configs/defaults.json, lib/noise.py).",
         ],
     )
@@ -1017,7 +1018,7 @@ PAPER_FIGURE_LABEL = {
 def figures_4_to_7(ours: dict, paper: dict) -> None:
     # Paper on the left, reproduction on the right; each row shares its y axis.
     sides = (
-        ("paper", "Paper (single run, as printed)"),
+        ("paper", "Paper (as printed)"),
         ("repro", "Reproduction (mean over seeds 0, 1, 2)"),
     )
     for arch, number in zip(ARCHS, (4, 5, 6, 7)):
@@ -1120,7 +1121,7 @@ def figures_4_to_7(ours: dict, paper: dict) -> None:
         fig.tight_layout(rect=(0, 0.2, 1, 0.96))
         fig.savefig(OUT / f"FIGURE_{number}.png", dpi=150)
         plt.close(fig)
-        print(f"wrote {OUT}/FIGURE_{number}.png")
+        print(f"wrote {os.path.relpath(OUT)}/FIGURE_{number}.png")
 
 
 def figures_diagrams() -> None:
@@ -1154,7 +1155,7 @@ def figures_diagrams() -> None:
         fig.tight_layout(rect=(0, 0.1, 1, 0.97))
         fig.savefig(OUT / f"{name}.png", dpi=150)
         plt.close(fig)
-        print(f"wrote {OUT / name}.png")
+        print(f"wrote {os.path.relpath(OUT / name)}.png")
 
     from qiskit import QuantumCircuit
     from qiskit.circuit import ParameterVector

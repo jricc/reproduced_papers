@@ -21,6 +21,7 @@ Usage (from the repository root)::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -116,7 +117,7 @@ def main() -> int:
         )
     out = PAPER_DIR / "results" / "data" / "shot_gap_analysis.json"
     out.write_text(json.dumps(result, indent=1), encoding="utf-8")
-    print(f"wrote {out}")
+    print(f"wrote {os.path.relpath(out)}")
     return 0
 
 

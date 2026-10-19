@@ -101,7 +101,7 @@ def devices_for_components(count: int, mapping: str) -> list[str]:
     """Device names for ``count`` reservoirs or ridge instances.
 
     ``mapping`` is ``"paper"`` (Table III) or a single device name used for every
-    component (the same-device control for claim C6).
+    component (the same-device noise side check).
     """
 
     if mapping == "paper":

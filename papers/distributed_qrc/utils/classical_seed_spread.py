@@ -14,6 +14,7 @@ Usage (from the repository root)::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -74,7 +75,7 @@ def main() -> int:
         )
     inside = sum(r["paper_within_range"] for r in rows.values())
     print(
-        f"paper value within our [min, max]: {inside}/{len(rows)} configurations; wrote {out}"
+        f"paper value within our [min, max]: {inside}/{len(rows)} configurations; wrote {os.path.relpath(out)}"
     )
     return 0
 

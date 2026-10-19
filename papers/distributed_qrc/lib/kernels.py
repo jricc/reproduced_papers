@@ -11,9 +11,10 @@ states and the fidelity kernel factorizes exactly:
 
     K(x, x') = prod_q |<phi_q(x)|phi_q(x')>|^2 = prod_q (1 + b_q(x) . b_q(x')) / 2,
 
-with ``b_q`` the Bloch vector of qubit q. This is the exact statevector value of
-Eq. 6 (checked against Qiskit in ``tests/test_kernels.py``) and it is
-classically computable in O(n d) per pair.
+with ``b_q`` the Bloch vector of qubit q (our derivation; the paper gives only the
+circuit and Eq. 6). This is the exact statevector value of Eq. 6 (checked against
+Qiskit in ``tests/test_kernels.py``); it costs O(d) per point for the Bloch vectors,
+then O(n) per pair.
 
 Noisy kernel (compute-uncompute circuit ``Phi(x')^dagger Phi(x)`` measured in Z,
 probability of all zeros): with the depolarizing model of :mod:`lib.noise`, each

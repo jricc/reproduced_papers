@@ -18,7 +18,7 @@ CFG = load_project_defaults()
 pytestmark = pytest.mark.skipif(
     not (dataset_dir(CFG) / RAW_SUBDIR).is_dir()
     and not (dataset_dir(CFG) / "processed").is_dir(),
-    reason="IPTO data not acquired; see LOG.md#Data Acquisition Log",
+    reason="IPTO data not acquired; see the README Data section",
 )
 
 

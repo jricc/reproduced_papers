@@ -4,7 +4,7 @@ merlinquantum==0.4.2
 torch==2.12.1
 numpy==2.5.4
 # Not imported by this paper's code (ReservoirPy needs it). Do not use
-# scipy.linalg factorizations: they corrupted memory on macOS (LOG.md, 2026-10-14).
+# scipy.linalg factorizations: they corrupted memory on macOS 27.0.x (Accelerate bug).
 scipy==1.18.1
 # Reads the legacy .xls daily files of the IPTO RealTimeSCADASystemLoad dataset.
 xlrd==2.0.1

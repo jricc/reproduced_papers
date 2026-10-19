@@ -5,4 +5,4 @@ E3-MERLIN: COMPLETED 3/3 on cuda:0, run wall-clock 1576-1579 s, kernel shapes [(
 E4-MERLIN: COMPLETED 3/3 on cuda:0, run wall-clock 1583-1585 s, kernel shapes [(5, 15), (10, 55)]
 M0 selected {'neuron_scale': 1.0, 'kernel_scale': 2.0} (tied: [{'neuron_scale': 1.0, 'kernel_scale': 2.0}, {'neuron_scale': 1.0, 'kernel_scale': 3.14159}])
 problems: none
-wrote /Users/jerome/git/repro_papers_project/reproduced_papers/papers/distributed_qrc/results/merlin_sweep_verification.json
+wrote papers/distributed_qrc/results/merlin_sweep_verification.json

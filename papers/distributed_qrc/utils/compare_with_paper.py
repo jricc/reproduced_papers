@@ -7,7 +7,7 @@ and prints the table.
 
 Columns: our test MAE / RMSE mean and sample std over seeds, the paper value,
 the difference in units of our seed std (``z``) and the relative difference.
-The paper reports one run per cell, so ``z`` measures how far the paper value
+The paper reports one value per cell (no seeds or spread), so ``z`` measures how far the paper value
 lies from our seed distribution, not a formal test.
 
 Usage (from the repository root)::
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -92,7 +93,7 @@ def main() -> int:
             f"{r['configuration']:7s} {r['reservoir']:13s} {r['readout']:20s} "
             f"{r['mae_ours']:.4f} ± {r['mae_ours_std']:.4f}    {r['mae_paper']:.4f} {100 * r['mae_rel']:+6.0f}% {r['mae_z']:+6.1f}"
         )
-    print(f"wrote {out}")
+    print(f"wrote {os.path.relpath(out)}")
     return 0
 
 

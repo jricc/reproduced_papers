@@ -1,4 +1,4 @@
-"""E6 / claim C6: does distributing the quantum components mitigate noise?
+"""E6 / noise side check (Sec. III-B5 remark): does distributing the quantum components mitigate noise?
 
 Reproduces the paper's own comparison (Sec. III-B, cross-architecture
 paragraph) on our sweeps: the fully quantum noisy cell
@@ -9,7 +9,7 @@ SRMR does not.
 
 For each pair the table gives our test-MAE difference (distributed - SRSR),
 mean over seeds, the pooled seed std, and the paper's difference. Note the
-confound recorded in LOG.md: under the paper's device mapping (Table III) SRSR
+confound: under the paper's device mapping (Table III) SRSR
 runs on ibm_brisbane only, while distributed components also use the less
 noisy ibm_marrakesh and IonQ Aria-1.
 
@@ -23,6 +23,7 @@ Usage (from the repository root)::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -93,7 +94,7 @@ def main() -> int:
         **result,
     }
     out.write_text(json.dumps(result, indent=1), encoding="utf-8")
-    print(f"wrote {out}")
+    print(f"wrote {os.path.relpath(out)}")
     return 0
 
 

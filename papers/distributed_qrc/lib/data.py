@@ -4,8 +4,7 @@ The paper (arXiv:2605.04991, Sec. III-A) uses 35,064 consecutive hourly loads
 from the IPTO (ADMIE) portal, a 4-hour sliding window to predict the next hour,
 a 24,539 / 5,258 / 5,267 train / evaluation / test split and min-max
 normalization. The window 2020-10-22 .. 2024-10-21 (first 24 hourly columns of
-each daily file) was identified in phase 01 from the Table II anchors; see
-``LOG.md#Data Acquisition Log``.
+each daily file) was identified from the Table II anchors and the reported length (README, *Data*).
 """
 
 from __future__ import annotations
@@ -29,7 +28,7 @@ HOURS_PER_DAY = 24
 SPLIT_NAMES = ("train", "eval", "test")
 
 # Fingerprint of the paper window read with the first-24-columns rule and the
-# artifact values kept as published (LOG.md#Data Acquisition Log).
+# artifact values kept as published (README, *Data*).
 PAPER_WINDOW = ("2020-10-22", "2024-10-21")
 PAPER_WINDOW_LENGTH = 35_064
 PAPER_WINDOW_SUM = 165_669_294
@@ -101,8 +100,8 @@ def load_hourly_series(directory: Path, start: str, end: str) -> np.ndarray:
     raw_dir = directory / RAW_SUBDIR
     if not raw_dir.is_dir():
         raise FileNotFoundError(
-            f"Raw IPTO files not found at {raw_dir}. See LOG.md#Data Acquisition Log "
-            "for the re-acquisition command."
+            f"Raw IPTO files not found at {raw_dir}. See the README *Data* section "
+            "for the source and download."
         )
     first, last = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
     days = [first + dt.timedelta(days=i) for i in range((last - first).days + 1)]

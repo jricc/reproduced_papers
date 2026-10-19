@@ -67,7 +67,7 @@
     "rc_connectivity": 0.1
   },
   "classical_baselines": {
-    "_comment": "Phase-05 fair classical baselines (LOG.md#Phase 5 Comparison Plan): B4 ESN grid (nested order sr, lr, input_scaling) and B2b/B3 RBF gamma = factor / n_features.",
+    "_comment": "Fair classical baselines (grids declared before the runs): tuned-ESN grid (nested order sr, lr, input_scaling) and RBF gamma = factor / n_features.",
     "esn_grid": {
       "sr": [
         0.5,
