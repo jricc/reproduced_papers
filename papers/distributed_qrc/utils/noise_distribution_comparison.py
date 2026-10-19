@@ -13,7 +13,7 @@ confound recorded in LOG.md: under the paper's device mapping (Table III) SRSR
 runs on ibm_brisbane only, while distributed components also use the less
 noisy ibm_marrakesh and IonQ Aria-1.
 
-Writes ``results/noise_distribution_comparison.json``.
+Writes ``results/noise_distribution_comparison<suffix>.json`` (``-R2`` for the evidence sweeps).
 
 Usage (from the repository root)::
 

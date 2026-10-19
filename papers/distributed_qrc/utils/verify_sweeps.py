@@ -14,7 +14,7 @@ recorded results:
    ranks, S3/S4 degradation ratios, E5 best architecture per total N;
 4. equivalence of the default behaviour across code changes (seed-42 smoke runs).
 
-Writes ``results/sweep_verification.json`` and prints a summary; exits 1 on any
+Writes ``results/sweep_verification<suffix>.json`` (``-R2`` for the evidence sweeps) and prints a summary; exits 1 on any
 mismatch.
 
 Usage (from the repository root)::

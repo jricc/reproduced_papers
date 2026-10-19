@@ -13,7 +13,7 @@ the best paper-rule cell vs the classical + linear baseline at the smallest
 configuration of each architecture (where the peak reductions occur), and the
 quantum vs classical reservoir with the same ideal kernel readout.
 
-Writes ``results/diebold_mariano.json`` and prints a table.
+Writes ``results/diebold_mariano<suffix>.json`` (``-R2`` for the evidence sweeps) and prints a table.
 
 Usage (from the repository root)::
 
