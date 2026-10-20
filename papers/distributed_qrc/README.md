@@ -129,7 +129,7 @@ Claims of the paper's introduction and conclusions (arXiv v1), plus C6, which mo
 | C1: quantum-enhanced models beat the paper baseline, average MAE reductions 25.6–54.2 % (Sec. III-B1–B4, pp. 5–8) | **Reproduced** against the paper baseline; **not confirmed** against fair classical models (Message 2) |
 | C2: the quantum-kernel readout is the most consistent contributor (Sec. I, p. 2) | **Reproduced**, but a classical kernel does as well (Message 2) |
 | C3: fully quantum models beat hybrids below 30 neurons and are more stable (Sec. IV, p. 9) | **Partially reproduced:** stable, but the margin over hybrids is within seed variance |
-| C4: the gains persist under noise (Sec. I, p. 2) | **Partially reproduced:** our noise model degrades results far less than the paper's (14–35 %), and noisy models never beat fair classical ones |
+| C4: the gains persist under noise (Sec. I, p. 2) | **Partially reproduced:** the paper's noisy cells have a 19–38 % higher MAE than ours (median per architecture): its noise degrades more. Noisy models never beat fair classical ones |
 | C5: the best model is a 3×20 classical reservoir + quantum kernel hybrid, MAE 0.0113 (Table VIII, p. 9) | **Not reproduced:** MAE 0.0146 ± 0.0010, tied with the best classical model (0.0137) |
 | C6: the architectures suit multi-QPU deployment (qualitative; Sec. IV, p. 9) | **Not tested on hardware;** the branches run independently (Message 3) |
 
@@ -179,7 +179,7 @@ A proof of concept running the MRMR branches on separate nodes, then QPUs, start
 ## Limitations
 
 - Simulation only; the noise model is rebuilt from calibration medians, and the paper's construction is unknown.
-- Two gaps with the paper remain unexplained: its linear readouts on quantum features are 10–49 % worse than ours, and its noisy cells degrade more.
+- Two gaps with the paper remain unexplained: its linear readouts on quantum features have a 15–33 % higher MAE than ours, and its noisy cells a 19–38 % higher one (medians per architecture).
 - 3 seeds per cell; small multi-readout sizes have large seed variance.
 - The classical baselines were often selected at the edge of their tuning grids, which can only under-tune them.
 - MerLin adaptation with 2 photons only.
