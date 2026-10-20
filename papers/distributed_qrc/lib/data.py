@@ -61,7 +61,7 @@ def dataset_dir(cfg: dict[str, Any]) -> Path:
 
 
 def series_fingerprint(values: np.ndarray) -> str:
-    """SHA-256 of the integer values joined by commas (the phase-01 fingerprint)."""
+    """SHA-256 of the integer values joined by commas (the paper-window fingerprint)."""
 
     text = ",".join(str(int(v)) for v in values)
     return hashlib.sha256(text.encode("ascii")).hexdigest()
@@ -186,11 +186,11 @@ def build_forecast_data(cfg: dict[str, Any]) -> ForecastData:
     if (start, end) == PAPER_WINDOW:
         if series.size != PAPER_WINDOW_LENGTH or int(series.sum()) != PAPER_WINDOW_SUM:
             raise ValueError(
-                "Paper window does not match the phase-01 length/sum fingerprint"
+                "Paper window does not match the expected length/sum fingerprint"
             )
         if series_fingerprint(series) != PAPER_WINDOW_SHA256:
             raise ValueError(
-                "Paper window does not match the phase-01 SHA-256 fingerprint"
+                "Paper window does not match the expected SHA-256 fingerprint"
             )
 
     replaced = np.array([], dtype=int)
@@ -205,7 +205,7 @@ def build_forecast_data(cfg: dict[str, Any]) -> ForecastData:
         raise ValueError(
             f"split_sizes {split_sizes} do not sum to the series length {series.size}"
         )
-    # Chronological split on raw values; windows are built inside each split (R2).
+    # Chronological split on raw values; windows are built inside each split.
     bounds = np.cumsum([0, *split_sizes])
     raw_splits = {
         split: series[bounds[i] : bounds[i + 1]] for i, split in enumerate(SPLIT_NAMES)
@@ -216,7 +216,7 @@ def build_forecast_data(cfg: dict[str, Any]) -> ForecastData:
         shared = SplitScaler(float(train.min()), float(train.max()))
         scalers = dict.fromkeys(SPLIT_NAMES, shared)
     elif normalization == "per_split":
-        # Paper-faithful reading of Eq. 9 ("in each of our datasets"), see R3.
+        # Paper-faithful reading of Eq. 9 ("in each of our datasets").
         scalers = {
             split: SplitScaler(float(v.min()), float(v.max()))
             for split, v in raw_splits.items()

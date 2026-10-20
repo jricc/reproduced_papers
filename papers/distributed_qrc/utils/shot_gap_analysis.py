@@ -1,4 +1,4 @@
-"""Gap diagnosis A: do finite shots reproduce the paper's noisy-cell degradation?
+"""Do finite shots reproduce the paper's noisy-cell degradation?
 
 Reads the completed runs of one or more sweeps over ``configs/diagnostics/gap_srsr10_original.json``
 (sweep S3 ``GAP-SHOTS`` and, if any, its retry sweep), groups them by

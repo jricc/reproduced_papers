@@ -1,8 +1,8 @@
-"""Phase-05 fair comparison, applying the decision rules declared before the runs.
+"""Comparison with the additional classical baselines, applying the decision rules declared before the runs.
 
 Reads the raw ``sweep_status.json`` / ``metrics.json`` / ``test_predictions.npz``
-of the R2 gate-model sweeps (``E{1..4}-R2``), the phase-05 baseline sweeps
-(``E{1..4}-CLASSICAL``, ``B1B3-RAW``, ``C6-{SRSR,MRSR,MRMR}``) and the phase-04
+of the gate-model reproduction sweeps (``E{1..4}-R2``), the classical-baseline sweeps
+(``E{1..4}-CLASSICAL``, ``B1B3-RAW``, ``C6-{SRSR,MRSR,MRMR}``) and the
 MerLin sweeps (``E{1..4}-MERLIN``), and writes ``results/data/fair_comparison.json``:
 
 * integrity: coverage (seeds 0-2 completed), pinned code hash per sweep family,
@@ -12,7 +12,7 @@ MerLin sweeps (``E{1..4}-MERLIN``), and writes ``results/data/fair_comparison.js
   eval RMSE within the quantum/hybrid pool, the fair classical pool and the
   MerLin photonic pool;
 * claim outcomes C1, C2, C4, C5 (decision rules of the plan; C4 = noisy cells, C5 = best
-  model), the best architecture per size and the noise side check of Sec. III-B5; the E7 headline vs the best fair classical cell;
+  model), the best architecture per size and the noise side check of Sec. III-B5; the headline reduction vs the best fair classical cell;
 * Diebold-Mariano tests at SRSR 10, MRSR 3x20, SRMR 10/2 and MRMR 2x5;
 * wall-clock: per sweep and run, and mean readout seconds per cell type.
 
@@ -46,8 +46,11 @@ LIB = {
 BASELINE = ("classical", "linear")
 QUANTUM_POOL_EXCLUDE = {BASELINE}
 FAIR_CLASSICAL = [
-    ("classical", "linear"),  # B0, paper baseline
-    ("classical", "rbf_kernel"),  # classical-kernel control on B0 features
+    ("classical", "linear"),  # paper baseline
+    (
+        "classical",
+        "rbf_kernel",
+    ),  # classical-kernel control on the paper baseline's features
     ("esn_tuned", "linear"),  # tuned ESN (ReservoirPy, tuned on eval)
     ("esn_tuned", "rbf_kernel"),  # tuned ESN + RBF kernel readout
     ("raw_lags", "persistence"),  # no reservoir, next hour = newest lag
@@ -171,7 +174,7 @@ def analyse_architecture(
     wallclock: dict,
     readout_seconds: dict,
 ) -> dict:
-    """Per-configuration tables, eval-selected cells, claim counts, E7 and DM for one architecture."""
+    """Per-configuration tables, eval-selected cells, claim counts, headline and DM for one architecture."""
 
     r2 = load_sweep(outdir, f"{exp}-R2", LIB["R2"], problems)["{}"]
     cl = load_sweep(outdir, f"{exp}-CLASSICAL", LIB["CLASSICAL"], problems)["{}"]
@@ -280,7 +283,7 @@ def analyse_architecture(
 
     claims = {
         "C1_vs_fair_classical": compare(sel_mae("quantum"), sel_mae("fair_classical")),
-        "C1_vs_paper_baseline_B0": compare(sel_mae("quantum"), sys_mae(BASELINE)),
+        "C1_vs_paper_baseline": compare(sel_mae("quantum"), sys_mae(BASELINE)),
         "C2_quantum_features": compare(
             sys_mae(("quantum_ideal", "quantum_kernel_ideal")),
             sys_mae(("quantum_ideal", "rbf_kernel")),
@@ -297,7 +300,7 @@ def analyse_architecture(
             sel_mae("merlin"), sel_mae("fair_classical")
         ),
     }
-    # E7 headline vs the best fair classical cell (eval-selected on both sides).
+    # Headline reduction vs the best fair classical cell (eval-selected on both sides).
     reductions = {"mae": [], "rmse": []}
     for i in range(len(SEEDS)):
         for metric in reductions:
@@ -350,7 +353,7 @@ def analyse_architecture(
         "per_configuration": per_config,
         "eval_selected": selected,
         "claims": claims,
-        "E7_headline_vs_fair_classical": headline,
+        "headline_vs_best_classical": headline,
         "diebold_mariano": {"configuration": dm_config, "rows": dm_rows},
     }
 
@@ -499,9 +502,9 @@ def main() -> int:
         print(f"== {arch}: anchors {data['anchor_max_abs_diff']:.1e}")
         for name, claim in data["claims"].items():
             print(f"  {name:42s} {claim['outcome']:20s} {claim['counts']}")
-        h = data["E7_headline_vs_fair_classical"]["mae"]
+        h = data["headline_vs_best_classical"]["mae"]
         print(
-            f"  E7 vs fair classical: MAE avg {h['average']['mean']:+.1%} ± {h['average']['std']:.1%}, peak {h['peak']['mean']:+.1%}"
+            f"  headline vs fair classical: MAE avg {h['average']['mean']:+.1%} ± {h['average']['std']:.1%}, peak {h['peak']['mean']:+.1%}"
         )
         for config, sel in data["eval_selected"].items():
             print(

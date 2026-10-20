@@ -53,14 +53,14 @@ SYSTEMS = [
     ),
     (
         "classical|linear",
-        "paper baseline B0 (ReservoirPy defaults + linear ridge)",
+        "paper baseline (ReservoirPy defaults + linear ridge)",
         "R2",
         "λ (10)",
         MATCH,
     ),
     (
         "classical|rbf_kernel",
-        "classical-kernel control (RBF kernel on B0 features)",
+        "classical-kernel control (RBF kernel on the paper baseline's features)",
         "CLASSICAL",
         "γ×λ (50)",
         MATCH,
@@ -156,7 +156,7 @@ def main() -> int:
         "Status: COMMENSURABLE = same task, data, split, metric, selection split and seeds,",
         "in-run anchors identical to the reproduction runs.",
         "",
-        "Cell names are `<reservoir type>|<readout type>`. Reservoir types: `classical` = ReservoirPy defaults (paper baseline B0);",
+        "Cell names are `<reservoir type>|<readout type>`. Reservoir types: `classical` = ReservoirPy defaults (paper baseline);",
         "`quantum_ideal` / `quantum_noisy` = quantum reservoir, ideal / noisy; `esn_tuned` = the same ReservoirPy reservoir tuned on eval;",
         "`raw_lags` = no reservoir, the readout sees the 4-lag window; `photonic` = MerLin adaptation. Readout types: `linear` ridge,",
         "`quantum_kernel_ideal` (the paper's fidelity kernel), `rbf_kernel` (classical RBF kernel), `persistence` (last observed hour), `photonic_kernel`.",
@@ -176,7 +176,7 @@ def main() -> int:
             ("quantum", "eval-selected quantum/hybrid cell (8-cell pool)"),
             (
                 "fair_classical",
-                "eval-selected best classical cell (B0 and the additional baselines)",
+                "eval-selected best classical cell (the paper baseline and the additional baselines)",
             ),
             ("merlin", "eval-selected MerLin photonic cell"),
         ):
@@ -226,7 +226,7 @@ def main() -> int:
                 f"| `{esc(system)}` | {role} | {prov} | {scope} | 3 / 3 | {pc[system]['mean']:.5f} | {pc[system]['std']:.5f} | {matching} | {tuned} | {secs} | COMMENSURABLE |"
             )
         for system, role in (
-            ("classical|linear", "paper baseline B0"),
+            ("classical|linear", "paper baseline"),
             ("classical|quantum_kernel_ideal", "paper hybrid"),
             ("quantum_ideal|quantum_kernel_ideal", "paper fully quantum (ideal)"),
         ):
@@ -250,7 +250,7 @@ def main() -> int:
             "",
         ]
     lines += [
-        "## Claim outcomes (decision rules of the Phase 5 Comparison Plan)",
+        "## Claim outcomes (decision rules declared before the runs)",
         "",
         "| Claim | SRSR | MRSR | SRMR | MRMR |",
         "|---|---|---|---|---|",
@@ -262,7 +262,7 @@ def main() -> int:
         ]
         lines.append(f"| {claim} | " + " | ".join(cells) + " |")
     headline = [
-        data["architectures"][a]["E7_headline_vs_fair_classical"]["mae"] for a in EXP
+        data["architectures"][a]["headline_vs_best_classical"]["mae"] for a in EXP
     ]
     lines.append(
         "| Headline MAE reduction vs fair classical (avg / peak) | "

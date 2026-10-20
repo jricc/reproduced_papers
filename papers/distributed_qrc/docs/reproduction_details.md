@@ -1,6 +1,6 @@
 # Reproduction details
 
-Reference material for the [README](../README.md): the choices made where the paper is silent, the names used in configs and results, the command-line flags, and how to rerun and analyse the sweeps.
+Reference material for the [README](../README.md): the choices made where the paper is silent, how the circuits are simulated, the names used in configs and results, the command-line flags, and how to rerun and analyse the sweeps.
 
 ## Deviations and choices
 
@@ -14,17 +14,37 @@ Reference material for the [README](../README.md): the choices made where the pa
 | Quantum kernel | Eq. 6 written K(R, Y) | K(r(t), r(t')) between reservoir outputs | Kernel ridge needs a kernel between inputs; read literally, K(R, Y) would compare reservoir outputs with targets. The feature map is a product state, so K is evaluated in closed form |
 | λ | Not given | 10-value log grid, n-normalized, selected on eval RMSE | Same protocol for every readout |
 | Distributed merge | Not given | Contiguous feature partition, mean of the instance predictions | Summing would double the prediction, and giving the full r(t) to every instance would make the linear SRMR cells identical to SRSR, which the paper's tables contradict |
-| Classical reservoir | ReservoirPy, no hyperparameters | Library defaults (baseline B0) | Most plausible reading of an unreported configuration; an ESN tuned on the evaluation split is added as an additional baseline |
+| Classical reservoir | ReservoirPy, no hyperparameters | Library defaults (paper baseline) | Most plausible reading of an unreported configuration; an ESN tuned on the evaluation split is added as an additional baseline |
 | Noise construction | Not given | Depolarizing channels after native gates and a symmetric readout flip, from the App. B medians; exact expectations, no shots | Uses only the numbers the paper reports (see `results/paper_items/TABLE_B1.png`, `TABLE_B2.png`) |
 | Best-cell selection | Best of 8 cells, chosen on test | Reported with the paper's rule and with selection on the evaluation split | The paper's rule uses the test set for selection |
 
+## Simulation engine
+
+The paper simulates its circuits with Qiskit and, for an unstated part, NVIDIA CUDA-Q. We simulate the same circuits exactly with a small numpy implementation instead:
+
+- **Quantum neuron** (`lib/quantum_neuron.py`): the part of the circuit after the encoding, its noise and the observable do not depend on the data. They are folded once per neuron into a 16 × 16 matrix, so each input window costs one small tensor contraction.
+- **Quantum kernel** (`lib/kernels.py`): the feature map has no entangling gate, so the fidelity is a product of single-qubit overlaps (our derivation), computed from one Bloch vector per qubit and input.
+
+Both match Qiskit to 1e-10 or better, ideal (Statevector) and noisy (Aer density matrix): see `tests/test_quantum_neuron.py`, `tests/test_kernels.py` and Section 2 of the notebook. We chose this for three reasons: the paper's setup cannot be copied as described (it does not say which simulations use CUDA-Q, nor give versions or simulator settings), CUDA-Q has no macOS ARM build, and the neuron is the bulk of the cost. A timing on the ideal circuits (Apple M5 CPU, Qiskit 2.5.2, single run; `results/checks/simulation_benchmark.txt`):
+
+| Circuit | Qiskit | Ours |
+|---|---|---|
+| Quantum neuron, one 60-neuron reservoir (60 neurons × 3 passes × 35,064 windows) | 30 min (`StatevectorEstimator`, one batched job) | 8 s |
+| Quantum kernel, Gram matrix on the full training split (24,539 points, 20 features on 10 qubits) | 38 s (one statevector per point, then one matrix product) | 8 s |
+
+The gain is large for the neuron (about 230×; a reproduction run evaluates many reservoirs, noisy ones included) and small for the kernel, where a well-written Qiskit implementation is also fast. Noisy Qiskit simulation was not timed. To rerun the timing, from the repository root:
+
+```bash
+python papers/distributed_qrc/utils/benchmark_simulation.py
+```
+
 ## Cell names
 
-A cell is `<reservoir type>|<readout type>`; these names are used in configs, `metrics.json` and `results/`. For example, `classical|linear` is the paper's baseline B0.
+A cell is `<reservoir type>|<readout type>`; these names are used in configs, `metrics.json` and `results/`. For example, `classical|linear` is the paper baseline.
 
 | Reservoir type | In the paper? | Meaning |
 |---|---|---|
-| `classical` | yes | ReservoirPy reservoir with library defaults (baseline B0) |
+| `classical` | yes | ReservoirPy reservoir with library defaults (paper baseline) |
 | `quantum_ideal` | yes | Network of 4-qubit quantum neurons, exact ideal simulation |
 | `quantum_noisy` | yes | Same circuits with the hardware-informed noise model (App. B, Table III mapping) |
 | `photonic` | no (MerLin adaptation) | One frozen 4-mode, 2-photon chip per neuron |
@@ -80,17 +100,20 @@ python papers/distributed_qrc/utils/run_sweep.py --sweep-id C6-SRSR --config con
 
 ## Analysis
 
-Each script reads the raw `metrics.json` files of the sweeps and writes to `results/`:
+Each script reads the sweeps' raw `metrics.json` files and writes to `results/` (from the repository root, with `O=papers/distributed_qrc/outdir` and `U=papers/distributed_qrc/utils`):
 
-```bash
-python papers/distributed_qrc/utils/compare_with_paper.py papers/distributed_qrc/outdir/sweep_E1-R2      # per-cell vs paper
-python papers/distributed_qrc/utils/headline_statistics.py papers/distributed_qrc/outdir/sweep_E{1,2,3,4}-R2
-python papers/distributed_qrc/utils/merlin_comparison.py papers/distributed_qrc/outdir
-python papers/distributed_qrc/utils/fair_comparison.py papers/distributed_qrc/outdir
-python papers/distributed_qrc/utils/fair_comparison_table.py
-python papers/distributed_qrc/utils/documentation_tables.py papers/distributed_qrc/outdir            # results_summary.md
-python papers/distributed_qrc/utils/plot_paper_items.py papers/distributed_qrc/outdir data/distributed_qrc/sources/arxiv_source_v1/tqe_tran.tex
-```
+| Supports | Script | Output |
+|---|---|---|
+| Message 1: the numbers reproduce | `python $U/compare_with_paper.py $O/sweep_E1-R2` (one sweep per architecture) | `results/data/<arch>_vs_paper.csv` |
+| | `python $U/headline_statistics.py $O/sweep_E{1,2,3,4}-R2` | `results/data/headline_statistics.json` |
+| | `python $U/plot_paper_items.py $O data/distributed_qrc/sources/arxiv_source_v1/tqe_tran.tex` | `results/paper_items/` |
+| Message 2: the gain is not quantum | `python $U/fair_comparison.py $O`, then `fair_comparison_table.py` and `plot_fair_comparison.py $O` | `results/data/fair_comparison.json`, `results/fair_comparison_table.md`, `results/fair_comparison.png` |
+| Message 3: the architecture holds | `python $U/merlin_comparison.py $O` | `results/data/merlin_comparison.json` |
+| Claims C3–C5 and the gaps in *Limitations* | `cross_architecture_table.py`, `robustness_verdicts.py`, `shot_gap_analysis.py`, `noise_distribution_comparison.py`, `classical_seed_spread.py`, `diebold_mariano.py` | `results/data/` |
+| Checks | `verify_sweeps.py`, `verify_merlin_sweeps.py`, `benchmark_simulation.py`, `merlin_fidelitykernel_repro.py` | `results/checks/` |
+| Summary | `python $U/documentation_tables.py $O`; `build_notebook.py`, then `run_notebook.py` | `results/results_summary.md`, `notebook.ipynb` |
+
+Each script's docstring gives its exact arguments.
 
 Each run writes `outdir/run_YYYYMMDD-HHMMSS/` with:
 

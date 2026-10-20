@@ -1,5 +1,5 @@
 {
-  "description": "MerLin adaptation (phase 04) of E2 (mrsr): photonic reservoir and photonic fidelity-kernel readout, anchored by classical and gate-quantum reservoirs; 8 configurations, full-n kernels. Not the paper's method.",
+  "description": "MerLin adaptation of the MRSR grid: photonic reservoir and photonic fidelity-kernel readout, anchored by classical and gate-quantum reservoirs; 8 configurations, full-n kernels. Not the paper's method.",
   "experiment": {
     "id": "E2-MERLIN",
     "variant": "merlin",

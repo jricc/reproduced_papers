@@ -1,5 +1,5 @@
 {
- "S2-R2": {
+ "preprocessing_robustness": {
   "{\"normalization\": \"per_split\"}": {
    "cells": {
     "10|classical|linear": {
@@ -55,7 +55,7 @@
    "headline_unchanged": true
   }
  },
- "S3-R2": {
+ "finite_shots": {
   "{}": {
    "ratios": {
     "Q-noisy/linear vs Q-ideal/linear": 0.9873995721997785,
@@ -87,8 +87,8 @@
    "sum_abs_dev": 7.876219319093693
   }
  },
- "S3-R2_H1_supported": false,
- "S4-R2": {
+ "finite_shots_explain_noisy_gap": false,
+ "noise_scale": {
   "candidates": {
    "{\"noise_scale\": 3}": {
     "ratios": {
@@ -120,7 +120,7 @@
     "category": "mixed",
     "sum_abs_dev": 14.8404929809748
    },
-   "{\"noise_scale\": 1} (= S3-R2 exact)": {
+   "{\"noise_scale\": 1} (= exact, shot-free)": {
     "ratios": {
      "Q-noisy/linear vs Q-ideal/linear": 0.9873995721997785,
      "Q-ideal/kernel-noisy vs Q-ideal/kernel-ideal": 1.0069139902316382,
@@ -140,12 +140,12 @@
   "Q-noisy/kernel-noisy vs Q-ideal/kernel-ideal": 1.5177304964539007,
   "classical/kernel-noisy vs classical/kernel-ideal": 1.0565552699228793
  },
- "S5-R2": {
+ "missing_intercept": {
   "cells_within_seed_std": 3,
   "cells": 24,
   "intercept_hypothesis": "rejected"
  },
- "GAP-CLASSICAL-R2": {
+ "paper_baseline_seed_spread": {
   "srsr": {
    "inside": 4,
    "configurations": 8,

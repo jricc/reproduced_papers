@@ -6,9 +6,9 @@ Circuit of one neuron with fixed parameters ``w = (w0, w1, w2, w3)``:
 * ansatz: ``B = 2`` structural blocks, each ``RX(w_j)`` on every qubit, then for
   ``j = 1, 2, 3`` the sequence ``CX(j-1 -> j)``, ``RZ(w[j-1] - w[j])`` on qubit
   ``j``, ``CX(j-1 -> j)`` (Fig. 2b, a rendered Qiskit circuit; it is followed
-  instead of Eq. 1, whose angle factors differ, see R4);
+  instead of Eq. 1, whose angle factors differ);
 * output: the expectation of a Pauli-Z observable (Eq. 2; which qubits is not
-  stated, see R6).
+  stated; ``z_all`` is our choice, see `docs/reproduction_details.md`).
 
 Qiskit conventions are used: ``RX(t) = exp(-i t X / 2)``, ``RZ(t) = exp(-i t Z / 2)``.
 Tensor axes are ordered qubit 0 .. qubit 3.

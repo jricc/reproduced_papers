@@ -1,4 +1,4 @@
-"""Cross-architecture comparison at equal total neuron count (E5, paper Table VIII).
+"""Cross-architecture comparison at equal total neuron count (paper Table VIII).
 
 For each total neuron count (10, 15, 20, 25, 30, 40, 50, 60), the paper reports
 the best model over all four architectures and observes that it always involves

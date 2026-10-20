@@ -1,6 +1,7 @@
 """Run the branches of an MRMR model independently, as separate processes, nodes or QPUs would.
 
-In MRMR, branch i is sub-reservoir i followed by its own ridge readout, and the
+In MRMR, branch i is sub-reservoir i followed by its own readout (linear ridge or
+kernel ridge), and the
 forecast is the mean of the branch forecasts (Fig. 1, Table I). A branch needs only
 the input window and its own seeds, and only its forecast leaves it, so
 :func:`branch_forecast` is a self-contained unit of work. Its result equals, up to floating-point rounding,
@@ -16,8 +17,7 @@ import numpy as np
 from .architectures import CellSpec
 from .data import ForecastData
 from .noise import devices_for_components
-from .readouts import fit_linear_ridge
-from .runner import SPLITS, sub_reservoir_features
+from .runner import SPLITS, fit_readout_instance, sub_reservoir_features
 
 
 def branch_forecast(
@@ -27,8 +27,9 @@ def branch_forecast(
     cell_index: int,
     branch: int,
     reservoir_type: str = "quantum_ideal",
+    readout_type: str = "linear",
 ) -> dict[str, np.ndarray]:
-    """Forecast of one MRMR branch: its sub-reservoir and its own linear ridge readout.
+    """Forecast of one MRMR branch: its sub-reservoir and its own readout.
 
     Parameters
     ----------
@@ -45,6 +46,8 @@ def branch_forecast(
     reservoir_type : str
         Reservoir type of :data:`lib.runner.RESERVOIR_TYPES`. Default value is
         ``"quantum_ideal"``.
+    readout_type : str
+        Readout type of :data:`lib.runner.READOUT_TYPES`. Default value is ``"linear"``.
 
     Returns
     -------
@@ -67,11 +70,16 @@ def branch_forecast(
         devices[branch],
     )
     features = dict(zip(SPLITS, outputs))
-    rcfg = cfg["readout"]
-    fitted = fit_linear_ridge(
+    # Same tag as the runner, so seeded readouts (shots, photonic chips) match it.
+    cell_tag = f"mrmr:{spec.label}|{reservoir_type}|{readout_type}"
+    fitted = fit_readout_instance(
+        cfg,
+        data,
         features,
-        data.targets,
-        rcfg["lambda_grid"],
-        intercept=bool(rcfg["linear_intercept"]),
+        readout_type,
+        spec.kernel_qubits,
+        devices[branch],
+        cell_tag,
+        branch,
     )
     return fitted.predictions

@@ -1,4 +1,4 @@
-"""Compare a completed seed sweep (E1-E4) with the paper's Appendix C tables, cell by cell.
+"""Compare a completed reproduction sweep with the paper's Appendix C tables, cell by cell.
 
 Reads ``<sweep_dir>/summary.json`` (written by ``utils/run_sweep.py`` from the
 runs' ``metrics.json``) and ``results/data/paper_tables.json`` (written by

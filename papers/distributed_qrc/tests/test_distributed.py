@@ -21,7 +21,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_branches_reproduce_the_sequential_mrmr_forecast():
+@pytest.mark.parametrize("readout_type", ["linear", "quantum_kernel_ideal"])
+def test_branches_reproduce_the_sequential_mrmr_forecast(readout_type):
     cfg = dict(CFG, seed=0, device="cpu")
     data = build_forecast_data(cfg)
     spec = build_cell_spec("mrmr", "2x5")
@@ -34,10 +35,13 @@ def test_branches_reproduce_the_sequential_mrmr_forecast():
         data,
         spec,
         features,
-        "linear",
+        readout_type,
         devices_for_components(spec.n_instances, mapping),
-        "mrmr:2x5|quantum_ideal|linear",
+        f"mrmr:2x5|quantum_ideal|{readout_type}",
     )
-    branches = [branch_forecast(cfg, data, spec, 0, b)["test"] for b in range(2)]
+    branches = [
+        branch_forecast(cfg, data, spec, 0, b, readout_type=readout_type)["test"]
+        for b in range(2)
+    ]
     distributed = merge_predictions(branches, cfg["readout"]["merge"])
     np.testing.assert_allclose(distributed, sequential["test"], rtol=0, atol=1e-10)

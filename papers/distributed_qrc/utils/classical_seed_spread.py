@@ -1,4 +1,4 @@
-"""Gap diagnosis B: where does the paper's classical + linear baseline fall in our seed distribution?
+"""Where does the paper's value of the paper baseline fall in our 20-seed distribution?
 
 Reads a completed ``GAP-CLASSICAL-<ARCH>`` sweep (classical reservoir + linear
 ridge over the paper grid, many seeds) and ``results/data/paper_tables.json``. For

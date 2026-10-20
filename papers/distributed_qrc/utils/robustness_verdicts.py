@@ -1,17 +1,20 @@
-"""Apply the verdict rules declared before the reproduction sweeps (suffix -R2) were run.
+"""Apply the verdict rules declared before the robustness and gap sweeps were run.
 
-Reads the R2 sweeps' raw ``metrics.json`` files and ``results/data/paper_tables.json``
+Reads the sweeps' raw ``metrics.json`` files and ``results/data/paper_tables.json``
 and writes ``results/data/robustness_verdicts.json`` with, exactly as declared before launch:
 
-* S2-R2: per cell, "material" if |delta mean| > the ``{}`` seed std of that cell;
-  headline at N = 10 "unchanged" if |delta| < the ``{}`` headline seed std;
-* S3-R2 / S4-R2: per candidate, consistent / over-degrades / under-degrades /
-  mixed from the 4 degradation ratios (tolerance 0.15); S4 closest scale by the
-  minimum sum of |ratio - paper| (ties within 1 % -> smaller scale);
-* S5-R2: intercept hypothesis supported if >= 13/24 linear cells have
-  |no-intercept mean - paper| <= no-intercept seed std;
-* GAP-CLASSICAL-*-R2: per architecture, "consistent with seed variance" if the
-  paper value is within our 20-seed [min, max] for >= 5/8 configurations.
+* ``preprocessing_robustness`` (sweep P1-ROBUST-R2): per cell, "material" if
+  |delta mean| > the ``{}`` seed std of that cell; headline at N = 10 "unchanged"
+  if |delta| < the ``{}`` headline seed std;
+* ``finite_shots`` / ``noise_scale`` (sweeps GAP-SHOTS-R2, GAP-NOISE-SCALE-R2): per
+  candidate, consistent / over-degrades / under-degrades / mixed from the 4
+  degradation ratios (tolerance 0.15); closest noise scale by the minimum sum of
+  |ratio - paper| (ties within 1 % -> smaller scale);
+* ``missing_intercept`` (sweep GAP-INTERCEPT-R2): hypothesis supported if >= 13/24
+  linear cells have |no-intercept mean - paper| <= no-intercept seed std;
+* ``paper_baseline_seed_spread`` (sweeps GAP-CLASSICAL-*-R2): per architecture,
+  "consistent with seed variance" if the paper value is within our 20-seed
+  [min, max] for >= 5/8 configurations.
 
 Usage (from the repository root)::
 
@@ -102,7 +105,7 @@ def main() -> int:
     }
     out = {}
 
-    # S2-R2
+    # Preprocessing robustness (sweep P1-ROBUST-R2).
     g = by_candidate(runs(outdir / "sweep_P1-ROBUST-R2"))
     base = g["{}"]
     s2 = {}
@@ -126,9 +129,9 @@ def main() -> int:
             "headline_base_std": float(hb.std(ddof=1)),
             "headline_unchanged": bool(abs(hc.mean() - hb.mean()) < hb.std(ddof=1)),
         }
-    out["S2-R2"] = s2
+    out["preprocessing_robustness"] = s2
 
-    # S3-R2 and S4-R2
+    # Finite shots and noise scale (sweeps GAP-SHOTS-R2, GAP-NOISE-SCALE-R2).
     paper_ratio = {
         n: pmae[("srsr", "10", *a)] / pmae[("srsr", "10", *b)]
         for n, (a, b) in RATIOS.items()
@@ -155,34 +158,34 @@ def main() -> int:
             "category": cat,
             "sum_abs_dev": float(sum(abs(d) for d in dev.values())),
         }
-    out["S3-R2"] = {k: v for k, v in categories.items() if k in shot}
-    out["S3-R2_H1_supported"] = any(
+    out["finite_shots"] = {k: v for k, v in categories.items() if k in shot}
+    out["finite_shots_explain_noisy_gap"] = any(
         v["category"] == "consistent"
         for k, v in categories.items()
         if k in shot and k != "{}"
     )
     s4 = {k: v for k, v in categories.items() if k in scale}
-    s4['{"noise_scale": 1} (= S3-R2 exact)'] = categories["{}"]
+    s4['{"noise_scale": 1} (= exact, shot-free)'] = categories["{}"]
     best = min(v["sum_abs_dev"] for v in s4.values())
     tied = sorted(
         (k for k, v in s4.items() if v["sum_abs_dev"] <= best * 1.01),
         key=lambda k: float(k.split(":")[1].split("}")[0]),
     )
-    out["S4-R2"] = {
+    out["noise_scale"] = {
         "candidates": s4,
         "closest_scale": tied[0],
         "any_consistent": any(v["category"] == "consistent" for v in s4.values()),
     }
     out["paper_ratios"] = paper_ratio
 
-    # S5-R2
+    # Missing intercept (sweep GAP-INTERCEPT-R2).
     g5 = by_candidate(runs(outdir / "sweep_GAP-INTERCEPT-R2"))
     noint = g5[json.dumps({"linear_intercept": False})]
     within = 0
     for key in noint[0]:
         v = np.array([r[key]["mae"] for r in noint])
         within += int(abs(v.mean() - pmae[("srsr", *key)]) <= v.std(ddof=1))
-    out["S5-R2"] = {
+    out["missing_intercept"] = {
         "cells_within_seed_std": within,
         "cells": len(noint[0]),
         "intercept_hypothesis": "supported" if within >= 13 else "rejected",
@@ -206,14 +209,14 @@ def main() -> int:
             "configurations": len(configs),
             "consistent_with_seed_variance": inside >= 5,
         }
-    out["GAP-CLASSICAL-R2"] = gc
+    out["paper_baseline_seed_spread"] = gc
 
-    path = PAPER_DIR / "results" / "robustness_verdicts.json"
+    path = PAPER_DIR / "results" / "data" / "robustness_verdicts.json"
     path.write_text(json.dumps(out, indent=1), encoding="utf-8")
     print(
         json.dumps(
             {
-                "S2": {
+                "preprocessing": {
                     k: {
                         "material_cells": [
                             c for c, x in v["cells"].items() if x["material"]
@@ -222,11 +225,15 @@ def main() -> int:
                     }
                     for k, v in s2.items()
                 },
-                "S3": {k: v["category"] for k, v in out["S3-R2"].items()},
-                "H1": out["S3-R2_H1_supported"],
-                "S4": {k: v["category"] for k, v in s4.items()},
-                "S4 closest": out["S4-R2"]["closest_scale"],
-                "S5": out["S5-R2"],
+                "finite shots": {
+                    k: v["category"] for k, v in out["finite_shots"].items()
+                },
+                "finite shots explain the noisy gap": out[
+                    "finite_shots_explain_noisy_gap"
+                ],
+                "noise scale": {k: v["category"] for k, v in s4.items()},
+                "closest noise scale": out["noise_scale"]["closest_scale"],
+                "missing intercept": out["missing_intercept"],
                 "classical": gc,
             },
             indent=1,

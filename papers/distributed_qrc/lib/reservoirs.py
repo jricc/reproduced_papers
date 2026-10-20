@@ -1,6 +1,6 @@
 """Quantum and classical reservoirs (paper Sec. II, Figs. 1 and A1).
 
-Quantum reservoir (R7 records the unstated details and the choices made here):
+Quantum reservoir (the paper leaves the wiring and update unstated; our choices are in `docs/reproduction_details.md`):
 
 * each of the N neurons is a 4-qubit circuit (:mod:`lib.quantum_neuron`) with
   4 inputs; ``k_i`` in {0, 1, 2} of them (drawn uniformly per neuron) are outputs
@@ -50,7 +50,7 @@ class QuantumReservoirSpec:
 def sample_quantum_reservoir(
     n_neurons: int, n_lags: int, rng: np.random.Generator
 ) -> QuantumReservoirSpec:
-    """Draw the ansatz parameters and the wiring of an N-neuron reservoir (R5, R7)."""
+    """Draw the ansatz parameters and the wiring of an N-neuron reservoir."""
 
     if n_lags != N_QUBITS:
         raise ValueError(
@@ -76,7 +76,7 @@ class QuantumReservoir:
     noise : DeviceNoise
         Device noise model; ``IDEAL`` for the ideal simulator.
     observable : str
-        ``"z_all"`` or ``"z0"`` (R6).
+        ``"z_all"`` or ``"z0"``.
     passes : int
         Number of propagations through the reservoir (3 in the paper).
     update : str
@@ -154,8 +154,8 @@ class ClassicalReservoir:
     """ReservoirPy echo-state reservoir driven by the 4-lag window.
 
     ``params`` holds ``lr``, ``sr``, ``input_scaling``, ``input_connectivity`` and
-    ``rc_connectivity``; the paper does not report them (R14), so the paper-like
-    baseline B0 uses the ReservoirPy 0.4.2 defaults (1.0, 1.0, 1.0, 0.1, 0.1).
+    ``rc_connectivity``; the paper does not report them, so the paper
+    baseline uses the ReservoirPy 0.4.2 defaults (1.0, 1.0, 1.0, 0.1, 0.1).
     """
 
     def __init__(self, n_neurons: int, params: dict[str, Any], seed: int):

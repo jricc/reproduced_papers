@@ -1,4 +1,4 @@
-"""MerLin photonic adaptation (phase 04): neuron chips, reservoir wiring, photonic fidelity kernel.
+"""MerLin photonic adaptation: neuron chips, reservoir wiring, photonic fidelity kernel.
 
 Ground truth is computed independently with Perceval (circuit unitaries + SLOS).
 """

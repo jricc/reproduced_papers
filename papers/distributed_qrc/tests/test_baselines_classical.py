@@ -126,7 +126,7 @@ def test_tiny_baseline_grid_runs_and_esn_reuses_b0_matrices(tmp_path):
     rbf = [c for c in cells if c["readout_type"] == "rbf_kernel"][0]["instances"][0]
     assert rbf["kernel"] == "rbf" and rbf["selection_points"] == 150
 
-    # The tuned ESN at B0's own setting reproduces B0's features exactly (same node seed).
+    # The tuned ESN at the paper baseline's own setting reproduces the paper baseline's features exactly (same node seed).
     data = paper_runner.build_forecast_data(cfg)
     spec = paper_runner.build_cell_spec("srsr", 4)
     b0 = paper_runner._reservoir_features(cfg, data, spec, 0, "classical", [])

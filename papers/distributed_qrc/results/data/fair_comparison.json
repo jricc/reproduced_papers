@@ -1538,7 +1538,7 @@
      },
      "outcome": "UNSUPPORTED"
     },
-    "C1_vs_paper_baseline_B0": {
+    "C1_vs_paper_baseline": {
      "configurations": {
       "10": {
        "a_mean": 0.0141428995810439,
@@ -1869,7 +1869,7 @@
      "outcome": "UNSUPPORTED"
     }
    },
-   "E7_headline_vs_fair_classical": {
+   "headline_vs_best_classical": {
     "mae": {
      "average": {
       "mean": -0.03126860544794421,
@@ -3542,7 +3542,7 @@
      },
      "outcome": "UNSUPPORTED"
     },
-    "C1_vs_paper_baseline_B0": {
+    "C1_vs_paper_baseline": {
      "configurations": {
       "2x5": {
        "a_mean": 0.014361731788635266,
@@ -3873,7 +3873,7 @@
      "outcome": "UNSUPPORTED"
     }
    },
-   "E7_headline_vs_fair_classical": {
+   "headline_vs_best_classical": {
     "mae": {
      "average": {
       "mean": -0.03856784185506949,
@@ -5546,7 +5546,7 @@
      },
      "outcome": "UNSUPPORTED"
     },
-    "C1_vs_paper_baseline_B0": {
+    "C1_vs_paper_baseline": {
      "configurations": {
       "10/2": {
        "a_mean": 0.014960207798693578,
@@ -5877,7 +5877,7 @@
      "outcome": "UNSUPPORTED"
     }
    },
-   "E7_headline_vs_fair_classical": {
+   "headline_vs_best_classical": {
     "mae": {
      "average": {
       "mean": -0.0633815600538276,
@@ -7550,7 +7550,7 @@
      },
      "outcome": "UNSUPPORTED"
     },
-    "C1_vs_paper_baseline_B0": {
+    "C1_vs_paper_baseline": {
      "configurations": {
       "2x5": {
        "a_mean": 0.014790663088617357,
@@ -7881,7 +7881,7 @@
      "outcome": "UNSUPPORTED"
     }
    },
-   "E7_headline_vs_fair_classical": {
+   "headline_vs_best_classical": {
     "mae": {
      "average": {
       "mean": -0.04350377543417002,

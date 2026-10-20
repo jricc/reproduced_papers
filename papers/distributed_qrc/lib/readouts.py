@@ -11,7 +11,7 @@
   going to the larger lambda.
 * A distributed readout (SRMR, MRMR) splits the feature vector into m contiguous
   chunks, fits one independent ridge per chunk and averages the m predictions
-  (R12; ``merge = "sum"`` is the variant).
+  (our choice; ``merge = "sum"`` is the variant).
 """
 
 from __future__ import annotations
@@ -289,7 +289,7 @@ def fit_kernel_ridge(
 
 
 def partition_features(n_features: int, n_instances: int) -> list[np.ndarray]:
-    """Contiguous, as-equal-as-possible feature chunks, one per ridge instance (R12)."""
+    """Contiguous, as-equal-as-possible feature chunks, one per ridge instance."""
 
     if n_instances > n_features:
         raise ValueError(

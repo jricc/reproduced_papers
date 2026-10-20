@@ -1,4 +1,4 @@
-"""Independent verification of all phase-03 sweep evidence (audit P3-07, P3-08, P3-09).
+"""Independent verification of the reproduction sweep evidence.
 
 Re-derives everything from the runs' raw ``metrics.json`` / ``run_status.json``
 files, without importing the other analysis utilities, and compares with the
@@ -9,9 +9,9 @@ recorded results:
 2. integrity: every completed run's metrics are finite, its config snapshot
    matches its recorded SHA-256, and its dataset fingerprint is the paper window
    (or none for interpolated data);
-3. recomputation with the predeclared rules: S1 selection, E7 headline
-   statistics (paper rule: max test R2 per configuration), GAP-CLASSICAL paper
-   ranks, S3/S4 degradation ratios, E5 best architecture per total N;
+3. recomputation with the predeclared rules: observable/update selection,
+   headline statistics (paper rule: max test R2 per configuration), paper-baseline
+   seed ranks, noisy degradation ratios, best architecture per total N;
 4. equivalence of the default behaviour across code changes (seed-42 smoke runs).
 
 Writes ``results/checks/sweep_verification.json`` (``-R2`` for the evidence sweeps) and prints a summary; exits 1 on any

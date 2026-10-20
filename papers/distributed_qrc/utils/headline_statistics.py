@@ -1,4 +1,4 @@
-"""Headline statistics of the paper (E7) and the cross-architecture table (E5, Table VIII).
+"""Headline statistics of the paper (MAE and RMSE reductions vs the paper baseline).
 
 Paper rule (Sec. III-B; Tables IV-VII): for each configuration, one "best" model
 is taken among the 8 quantum or hybrid cells, and both its MAE and its RMSE are

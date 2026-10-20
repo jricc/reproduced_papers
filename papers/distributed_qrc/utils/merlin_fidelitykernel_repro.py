@@ -1,6 +1,6 @@
 """Minimal reproducer of the `merlin.FidelityKernel` deviation reported to the MerLin team.
 
-On a frozen 5-mode, 2-photon re-uploading circuit (the phase-04 kernel chip,
+On a frozen 5-mode, 2-photon re-uploading circuit (the kernel chip of the MerLin adaptation,
 ``lib.photonic_merlin.PhotonicKernelMap``), compare four Gram matrices on 6 points:
 
 * ``exact``: |<psi(x')|psi(x)>|^2 from the builder-built ``QuantumLayer`` FOCK

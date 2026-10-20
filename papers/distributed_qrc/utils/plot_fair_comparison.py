@@ -1,11 +1,11 @@
-"""Plot the phase-05 fair comparison from ``results/data/fair_comparison.json``.
+"""Plot the fair comparison from ``results/data/fair_comparison.json``.
 
 Per architecture and configuration, seed-mean test MAE (normalized; error bars =
 sample std over seeds 0-2) of the eval-selected quantum/hybrid cell (reproduction), the
 eval-selected fair classical cell, the eval-selected MerLin photonic cell
-(adaptation), and the paper's baseline B0. The no-reservoir controls (linear ridge,
+(adaptation), and the paper baseline. The no-reservoir controls (linear ridge,
 i.e. AR(4), and the paper's kernel on the raw lags) are horizontal lines. Log scale, because
-B0 is 2-5x higher than the other systems. Every value is locally executed and
+The paper baseline is 2-5x higher than the other systems. Every value is locally executed and
 simulated; none is a paper-reported value.
 
 Saves ``results/fair_comparison.png`` and a copy in every ``outdir/sweep_E*-CLASSICAL``.
@@ -72,21 +72,26 @@ def main() -> int:
             x,
             [v["mean"] for v in b0],
             yerr=[v["std"] for v in b0],
-            label="paper baseline B0 (classical | linear)",
+            label="paper baseline (classical | linear)",
             color="gray",
             linestyle=":",
             marker="s",
             markersize=3,
             capsize=2,
         )
-        # raw_lags = no reservoir, the readout sees the 4-lag window directly.
+        # raw_lags = no reservoir, the readout sees the 4-lag window directly: it has
+        # no neurons, so one value (shared sweep) is drawn as a line at every size.
         for system, label, style in (
             (
                 "raw_lags|quantum_kernel_ideal",
-                "no reservoir: paper's kernel",
+                "no reservoir: paper's kernel (same at every size)",
                 "--",
             ),
-            ("raw_lags|linear", "no reservoir: linear ridge (AR(4))", "-."),
+            (
+                "raw_lags|linear",
+                "no reservoir: linear ridge, AR(4) (same at every size)",
+                "-.",
+            ),
         ):
             value = a["per_configuration"][configs[0]][system]["mean"]
             ax.axhline(

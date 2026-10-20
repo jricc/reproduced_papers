@@ -1,12 +1,12 @@
-"""Generate the README result tables (phase 06) from the structured artifacts.
+"""Generate ``results/results_summary.md`` from the structured artifacts.
 
 Writes ``results/results_summary.md`` with:
 
 1. the paper-item table (paper value, reproduced value, delta, metric / trend
    agreement, claim support, seeds, comment) for Tables IV-VII (headline),
    Tables C (per-cell agreement by cell type), Table VIII (C5) and the noise side check of
-   cross-architecture comparison, plus the fair-baseline rows of phase 05;
-2. the sweep index: every evidence sweep (R2, MerLin, phase 05) with its
+   cross-architecture comparison, plus the fair-baseline rows;
+2. the sweep index: every evidence sweep (reproduction, MerLin, fair baselines) with its
    purpose, candidates, successful / expected runs, completeness, machine, code
    hash, declared selection rule and the result recomputed here from the raw
    ``metrics.json`` files, and the path of its full candidate table
@@ -39,7 +39,7 @@ TABLES = {
     "srmr": "VI / C7-C9",
     "mrmr": "VII / C10-C12",
 }
-# Evidence sweeps (superseded phase-03 sweeps without the -R2 suffix are excluded).
+# Evidence sweeps (superseded first-pass sweeps without the -R2 suffix are excluded).
 SWEEPS = {
     "P1-R6R7-R2": (
         "Choice of the neuron observable and of the reservoir update order",
@@ -132,7 +132,7 @@ SWEEPS = {
     "E4-CLASSICAL": ("Fair baselines, MRMR", "as above", None),
     "C6-SRSR": (
         "Noise side check (Sec. III-B5), SRSR, noise ×10",
-        "no selection; decision rule of the Phase 5 plan",
+        "no selection; decision rule declared before the runs",
         None,
     ),
     "C6-MRSR": (
@@ -215,7 +215,7 @@ def main() -> int:
         for stat in ("average", "peak"):
             pv, ov, o_std = p[stat], o[f"{stat}_mean"], o[f"{stat}_std"]
             lines.append(
-                f"| Table {TABLES[arch].split(' / ')[0]} ({arch.upper()}): {stat} MAE reduction, paper rule vs B0 | C1 | {pv:.1%} | {ov:.1%} ± {o_std:.1%} | {ov - pv:+.1%} | {'within 1 std' if abs(ov - pv) <= o_std else 'outside 1 std'} | yes (large reductions vs B0) | supported vs B0 only; unsupported vs fair classical (fair baselines) | 3 | B0 is seed-unstable; paper value recomputed from its tables{' (reported 25.6 %)' if arch == 'mrsr' and stat == 'average' else ''} |"
+                f"| Table {TABLES[arch].split(' / ')[0]} ({arch.upper()}): {stat} MAE reduction, paper rule vs the paper baseline | C1 | {pv:.1%} | {ov:.1%} ± {o_std:.1%} | {ov - pv:+.1%} | {'within 1 std' if abs(ov - pv) <= o_std else 'outside 1 std'} | yes (large reductions vs the paper baseline) | supported vs the paper baseline only; unsupported vs fair classical (fair baselines) | 3 | the paper baseline is seed-unstable; paper value recomputed from its tables{' (reported 25.6 %)' if arch == 'mrsr' and stat == 'average' else ''} |"
             )
     for arch in ARCHS:
         rows = list(
@@ -237,13 +237,13 @@ def main() -> int:
             rel = np.array([float(r["mae_rel"]) for r in g])
             ours = np.array([float(r["mae_ours"]) for r in g])
             paper = np.array([float(r["mae_paper"]) for r in g])
-            within = int(np.sum(np.abs(rel) <= 0.12))
+            within = int(np.sum(np.abs(rel) <= 0.05))
             lines.append(
-                f"| Tables {TABLES[arch].split(' / ')[1]} ({arch.upper()}): `{esc(cell)}` over 8 configurations | {'C1, C2, C3' if 'quantum_kernel' in cell else 'C1'}{', C4' if 'noisy' in cell else ''} | {paper.min():.4f}–{paper.max():.4f} | {ours.min():.4f}–{ours.max():.4f} | median {np.median(rel):+.0%} | {within}/8 within 12 % | {'yes' if within >= 6 else 'partial'} | see claim rows | 3 | per-cell values: `results/data/{arch}_vs_paper.csv` |"
+                f"| Tables {TABLES[arch].split(' / ')[1]} ({arch.upper()}): `{esc(cell)}` over 8 configurations | {'C1, C2, C3' if 'quantum_kernel' in cell else 'C1'}{', C4' if 'noisy' in cell else ''} | {paper.min():.4f}–{paper.max():.4f} | {ours.min():.4f}–{ours.max():.4f} | median {np.median(rel):+.1%}, max abs {np.abs(rel).max():.1%} | {within}/8 within 5 % | {'yes' if within >= 6 else 'partial'} | see claim rows | 3 | per-cell values: `results/data/{arch}_vs_paper.csv` |"
             )
-    c7 = fair["C5_best_model"]
+    c5 = fair["C5_best_model"]
     lines.append(
-        f"| Table VIII / Table V: best overall model, MRSR 3x20 classical reservoir + quantum kernel | C5 | 0.0113 | {c7['hybrid_3x20']['mean']:.4f} ± {c7['hybrid_3x20']['std']:.4f} | {c7['hybrid_3x20']['mean'] - 0.0113:+.4f} | no | no (not the best model in our runs) | unsupported | 3 | ties with the fair classical models ({c7['fair_classical_3x20']['mean']:.4f} ± {c7['fair_classical_3x20']['std']:.4f}) |"
+        f"| Table VIII / Table V: best overall model, MRSR 3x20 classical reservoir + quantum kernel | C5 | 0.0113 | {c5['hybrid_3x20']['mean']:.4f} ± {c5['hybrid_3x20']['std']:.4f} | {c5['hybrid_3x20']['mean'] - 0.0113:+.4f} | no | no (not the best model in our runs) | unsupported | 3 | ties with the fair classical models ({c5['fair_classical_3x20']['mean']:.4f} ± {c5['fair_classical_3x20']['std']:.4f}) |"
     )
     same_sign = sum(
         v["same_sign"] for k, v in noise.items() if k.startswith("mrsr-vs-srsr@")
@@ -258,23 +258,23 @@ def main() -> int:
         f"| Sec. III-B: noisy fully quantum MRSR vs SRSR at equal N (×1, paper mapping) | side check (not a tracked claim) | MRSR better at 8/8 | same sign as paper at {same_sign}/8, abs Δ ≤ 1 pooled std at {within}/8 | — | no | no | unsupported | 3 | `results/data/noise_distribution_comparison.json` |"
     )
     lines.append(
-        f"| Sec. III-B, controlled (fair baselines): MRSR vs SRSR at noise ×10 | side check (not a tracked claim) | MRSR better at 8/8 | paper mapping {c6['paper']['mrsr_vs_srsr']['better']}/8; same device {c6['ibm_brisbane']['mrsr_vs_srsr']['better']}/8 | — | N/A (noise model differs) | only under the paper's device mapping | unsupported as a distribution effect | 3 | `results/data/fair_comparison.json` → `C6_x10` |"
+        f"| Sec. III-B, controlled (fair baselines): MRSR vs SRSR at noise ×10 | side check (not a tracked claim) | MRSR better at 8/8 | paper mapping {c6['paper']['mrsr_vs_srsr']['better']}/8; same device {c6['ibm_brisbane']['mrsr_vs_srsr']['better']}/8 | — | N/A (noise model differs) | only under the paper's device mapping | unsupported as a distribution effect | 3 | `results/data/fair_comparison.json` → `noise_side_check_x10` |"
     )
     for arch in ARCHS:
         a = fair["architectures"][arch]
         cl = a["claims"]["C1_vs_fair_classical"]["counts"]
-        h = a["E7_headline_vs_fair_classical"]["mae"]
+        h = a["headline_vs_best_classical"]["mae"]
         lines.append(
-            f"| Fair baselines ({arch.upper()}): eval-selected quantum vs eval-selected best classical (B0 and the additional baselines) | C1 | N/A (no fair baseline in the paper) | {h['average']['mean']:+.1%} ± {h['average']['std']:.1%} average MAE reduction; better in {cl['better']}/8, tie {cl['tie']}/8, worse {cl['worse']}/8 | — | N/A | N/A | unsupported | 3 | `results/fair_comparison_table.md` |"
+            f"| Fair baselines ({arch.upper()}): eval-selected quantum vs eval-selected best classical (the paper baseline and the additional baselines) | C1 | N/A (no fair baseline in the paper) | {h['average']['mean']:+.1%} ± {h['average']['std']:.1%} average MAE reduction; better in {cl['better']}/8, tie {cl['tie']}/8, worse {cl['worse']}/8 | — | N/A | N/A | unsupported | 3 | `results/fair_comparison_table.md` |"
         )
 
     lines += [
         "",
         "## Headline reductions, configuration by configuration",
         "",
-        "Reduction = 1 - MAE(best quantum/hybrid cell) / MAE(B0), with B0 = `classical|linear` and the best cell taken among the 8 quantum or hybrid cells by highest test R2 (our reading of the paper's rule, which the paper does not state). Paper: computed from its Tables C. Ours: the best cell is chosen per seed (listed per seed when it differs); B0 MAE, best MAE and reduction are means over seeds 0-2. Averaging a reduction column over the 8 configurations gives the headline average of the README. The headline peak is the maximum over configurations taken per run (one run for the paper, each seed for us) and then averaged over seeds, so our peak can exceed the maximum of the column below when the seeds peak at different configurations (MRSR: 57.9 % vs 47.6 %).",
+        "Reduction = 1 - MAE(best quantum/hybrid cell) / MAE(paper baseline), with the paper baseline = `classical|linear` and the best cell taken among the 8 quantum or hybrid cells by highest test R2 (our reading of the paper's rule, which the paper does not state). Paper: computed from its Tables C. Ours: the best cell is chosen per seed (listed per seed when it differs); paper baseline MAE, best MAE and reduction are means over seeds 0-2. Averaging a reduction column over the 8 configurations gives the headline average of the README. The headline peak is the maximum over configurations taken per run (one run for the paper, each seed for us) and then averaged over seeds, so our peak can exceed the maximum of the column below when the seeds peak at different configurations (MRSR: 57.9 % vs 47.6 %).",
         "",
-        "| Architecture | Configuration | Paper: B0 MAE | Paper: best cell | Paper: best MAE | Paper: reduction | Ours: B0 MAE | Ours: best cell | Ours: best MAE | Ours: reduction |",
+        "| Architecture | Configuration | Paper: baseline MAE | Paper: best cell | Paper: best MAE | Paper: reduction | Ours: baseline MAE | Ours: best cell | Ours: best MAE | Ours: reduction |",
         "|---|---|---:|---|---:|---:|---:|---|---:|---:|",
     ]
     for arch in ARCHS:

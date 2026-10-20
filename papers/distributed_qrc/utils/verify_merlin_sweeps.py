@@ -1,4 +1,4 @@
-"""Independent verification of the phase-04 MerLin sweep evidence.
+"""Independent verification of the MerLin sweep evidence.
 
 Re-derives from the raw ``run_status.json`` / ``metrics.json`` /
 ``config_snapshot.json`` files of ``P1-MERLIN-SCALES`` and ``E{1..4}-MERLIN``:

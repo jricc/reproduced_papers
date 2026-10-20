@@ -1,4 +1,4 @@
-"""Execute ``notebook.ipynb`` top to bottom in a fresh kernel and save its outputs (phase 07).
+"""Execute ``notebook.ipynb`` top to bottom in a fresh kernel and save its outputs.
 
 Usage (from the repository root)::
 

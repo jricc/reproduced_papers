@@ -1,4 +1,4 @@
-"""Phase-04 comparisons of the MerLin adaptation with the R2 reproduction.
+"""Compare the MerLin adaptation with the gate-based reproduction.
 
 Applies the rules declared before the runs (tolerance below).
 Per configuration, the test MAE (normalized) is averaged over seeds 0-2:

@@ -28,15 +28,13 @@ md(r"""
 **Paper:** Liliopoulos *et al.*, arXiv:2605.04991 (2026). Paper, claims and verdicts: [README](README.md); choices and naming: [`docs/reproduction_details.md`](docs/reproduction_details.md).
 
 **What we found, and where the evidence is:**
-1. **The paper's numbers reproduce** (Section 2).
-2. **But the gain is not quantum:** it comes from the kernel readout, and the same kernel without any reservoir does as well (Section 3).
-3. **What holds is the distributed architecture:** it carries over to photonics (Section 4) and is easy to distribute (Section 5).
-
-The quantum advantage we hoped to confirm did not appear in our setting. The paper's architectural idea, small independent quantum circuits combined classically, is simple and works as described, and it opens several research directions (Section 5).
+1. **The paper's numbers reproduce:** against the paper baseline, the MAE reductions are of the same order as the paper's (Section 2).
+2. **The gain is not quantum:** it comes from the kernel readout; a classical kernel applied to the last 4 hours, without any reservoir, does as well as the best quantum model (Section 3).
+3. **The architecture holds and is easy to distribute:** it carries over to photonics with MerLin (Section 4), and its branches run in parallel with the same forecast (Section 5). This is the basis of our distributed proof of concept.
 """)
 
 code(r"""
-import copy, json, sys, time, warnings
+import json, sys, time, warnings
 from pathlib import Path
 
 import numpy as np
@@ -54,32 +52,27 @@ for path in (str(REPO_ROOT), str(PAPER_DIR.parent)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from runtime_lib.config import deep_update, load_config
+from runtime_lib.config import load_config
 from runtime_lib.dtypes import resolve_config_dtypes
 
 # Every scientific computation below goes through the reproduction library in lib/.
-from distributed_qrc.lib import runner
 from distributed_qrc.lib.data import build_forecast_data
 from distributed_qrc.lib.kernels import bloch_vectors, kernel_block
 from distributed_qrc.lib.noise import IDEAL
 from distributed_qrc.lib.quantum_neuron import neuron_expectations, neuron_functional
-from distributed_qrc.lib.photonic_merlin import PhotonicKernelMap, build_neuron_layer, state_gram
 
 RESULTS = PAPER_DIR / "results" / "data"
-COLORS = {"quantum": "tab:blue", "classical": "tab:green", "merlin": "tab:red", "paper": "black", "b0": "tab:gray"}
-ARCHS = {"srsr": "E1", "mrsr": "E2", "srmr": "E3", "mrmr": "E4"}
+COLORS = {"quantum": "tab:blue", "baseline": "tab:gray"}
+ARCHS = ("srsr", "mrsr", "srmr", "mrmr")
 torch.set_num_threads(4)
 START = time.perf_counter()
 print("paper folder:", PAPER_DIR.relative_to(REPO_ROOT), "| torch", torch.__version__, "| CPU only:", not torch.cuda.is_available())
 """)
 
 code(r"""
-def load_paper_config(*overlays: str) -> dict:
-    # Same resolution as implementation.py: defaults.json, then each named overlay.
-    cfg = load_config(PAPER_DIR / "configs" / "defaults.json")
-    for name in overlays:
-        deep_update(cfg, load_config(PAPER_DIR / "configs" / name))
-    cfg = resolve_config_dtypes(copy.deepcopy(cfg))
+def load_paper_config() -> dict:
+    # Same resolution as implementation.py for the default config.
+    cfg = resolve_config_dtypes(load_config(PAPER_DIR / "configs" / "defaults.json"))
     cfg["device"] = "cpu"
     return cfg
 
@@ -119,13 +112,13 @@ ax.legend(loc="upper right", ncol=3); plt.show()
 """)
 
 md(r"""
-**What to take from it:** the split is chronological, so every model is trained and tuned on the past and tested on the last seven months (spring to autumn 2024), never on data it has seen. The load follows daily and seasonal cycles and changes smoothly from one hour to the next, which is why even simple forecasts from the last 4 hours are already accurate; the few drops to zero or below are data artefacts kept as published.
+**What to take from it:** models are tested on the last seven months, after the data they were trained on. The load changes smoothly from hour to hour, so even simple forecasts from the last 4 hours are accurate.
 """)
 
 md(r"""
 ## 2. The paper's numbers reproduce
 
-Our code uses fast, exact formulas instead of simulating the circuits gate by gate. We first check that they give the same values as Qiskit simulating the paper's circuits (Figs. 2 and 3).
+The paper names Qiskit and NVIDIA CUDA-Q but does not say which simulations run on which, nor with which settings. We therefore wrote a small, fast numpy simulator for these particular circuits (timings: `docs/reproduction_details.md`, *Simulation engine*), and first check that it gives the same values as Qiskit (Figs. 2 and 3).
 """)
 
 code(r"""
@@ -151,15 +144,26 @@ def qiskit_feature_map(x, n):
             for q in range(n): qc.h(q); qc.p(2 * pad[layer * n + q], q)
     return qc
 
+# Compare our code with Qiskit on 20 random draws, without noise.
 rng = np.random.default_rng(0)
 neuron_err, kernel_err = [], []
 for _ in range(20):
+    # Quantum neuron: 4 random input values x and 4 fixed random angles w.
     x, w = rng.uniform(-1, 1, 4), rng.uniform(0, 2 * np.pi, 4)
+    # Ours: the circuit after the encoding is reduced once to a 16x16 matrix
+    # (neuron_functional), then applied to the encoded input (neuron_expectations).
+    # The [None] add the neuron and batch axes that the library expects.
     ours = neuron_expectations(neuron_functional(w, IDEAL, "z_all")[None], x[None, None, :])[0, 0]
+    # Qiskit: simulate the full circuit and measure <Z Z Z Z>, the observable used here.
     ref = Statevector(qiskit_neuron(x, w)).expectation_value(SparsePauliOp("ZZZZ")).real
     neuron_err.append(abs(ours - ref))
+
+    # Quantum kernel: two inputs of 20 features on 10 qubits, so L = 2 layers per block.
     xa, xb = rng.uniform(-1, 1, (2, 20))
+    # Ours: one Bloch vector per qubit for each input, then K = prod_q (1 + b_q(xa) . b_q(xb)) / 2.
+    # The last argument 1.0 means no noise (a noisy device shrinks the Bloch vectors).
     ours_k = float(kernel_block(torch.from_numpy(bloch_vectors(xa[None], 10)), torch.from_numpy(bloch_vectors(xb[None], 10)), 1.0)[0, 0])
+    # Qiskit: the fidelity |<Phi(xa)|Phi(xb)>|^2 between the two simulated 10-qubit states.
     ref_k = abs(Statevector(qiskit_feature_map(xa, 10)).inner(Statevector(qiskit_feature_map(xb, 10)))) ** 2
     kernel_err.append(abs(ours_k - ref_k))
 print(f"quantum neuron, our formula vs Qiskit circuit: largest difference {max(neuron_err):.0e} over 20 random neurons")
@@ -169,7 +173,7 @@ assert max(neuron_err) < 1e-10 and max(kernel_err) < 1e-10
 """)
 
 md(r"""
-The formulas compute exactly the paper's circuits. Below, every reproduced cell (full data, 3 seeds) next to the paper's value, for the fully quantum model and the paper's baseline B0:
+The formulas compute exactly the paper's circuits. Below, every reproduced cell (full data, 3 seeds) next to the paper's value, for the fully quantum model and the paper baseline:
 """)
 
 code(r"""
@@ -188,7 +192,7 @@ grid = pd.concat(
 )
 fig, axes = plt.subplots(1, 2, figsize=(15, 3.8), sharey=True)
 for ax, side in zip(axes, ("Paper (as printed)", "Reproduction (mean ± std over 3 seeds)")):
-    for cell, c, m, label in (("quantum_ideal|quantum_kernel_ideal", COLORS["quantum"], "o", "fully quantum, ideal"), ("classical|linear", COLORS["b0"], "s", "baseline B0")):
+    for cell, c, m, label in (("quantum_ideal|quantum_kernel_ideal", COLORS["quantum"], "o", "fully quantum, ideal"), ("classical|linear", COLORS["baseline"], "s", "paper baseline")):
         g = grid[(grid.reservoir + "|" + grid.readout) == cell].reset_index(drop=True)
         x = np.arange(len(g))
         if side.startswith("Paper"):
@@ -205,7 +209,7 @@ plt.tight_layout(); plt.show()
 """)
 
 md(r"""
-The fully quantum cells match the paper (test MAE median deviation 2.6 %, 26/32 sizes within 5 %). B0 varies a lot from seed to seed, which explains its larger gaps. The paper's headline compares the best quantum or hybrid cell with B0 (paper values computed from its tables with the same rule):
+Our test MAE is close to the paper's (fully quantum cells: median deviation 2.6 %). The table checks the paper's headline, the MAE reduction of its best quantum or hybrid cell relative to the paper baseline:
 """)
 
 code(r"""
@@ -217,128 +221,95 @@ for arch in ARCHS:
     rows.append({"architecture": arch.upper(), "paper, average": p["average"], "ours, average": pr["average_mean"], "± std": pr["average_std"],
                  "ours, eval selection": ev["average_mean"], "paper, peak": p["peak"], "ours, peak": pr["peak_mean"], "peak ± std": pr["peak_std"]})
 df = pd.DataFrame(rows)
-display(df.style.format({c: "{:.1%}" for c in df.columns if c != "architecture"}).hide(axis="index"))
+display(df.style.format({c: "{:.1%}" for c in df.columns if c != "architecture"}).hide(axis="index")
+        .set_caption("Test MAE reduction relative to the paper baseline (higher is better)"))
 """)
 
 md(r"""
-**Result:** against B0, our average reductions (23–52 %) are of the same order as the paper's, and choosing the best cell on the evaluation split instead of the test split changes them by less than 2 points. The paper's numbers reproduce.
+**Result:** our MAE reductions are of the same order as the paper's (peaks within the seed spread, averages up to 10 points lower for SRMR), and choosing the best cell on the evaluation split barely changes them. The paper's numbers reproduce.
 """)
 
 md(r"""
 ## 3. The gain is not quantum
 
-B0 has a linear readout, while the best quantum models have a kernel readout. The additional classical models (README, *Fair Baselines*) use the same inputs, splits, seeds and evaluation; the best model of each side is chosen on the evaluation split. The figure shows, per size, the best quantum model, the best classical one, B0 and the paper's kernel without any reservoir (dashed line).
+### 3.1 Against fair classical models, the quantum models are never better
+
+The paper compares its quantum models only with the paper baseline. We add classical models with the same inputs, splits, seeds and evaluation (README, *Fair Baselines*), and pick the best model of each side on the evaluation split. In the figure, compare blue (best quantum) with green (best classical); the grey paper baseline is far above both.
+
+Each architecture is tested at 8 sizes. The tables of Sections 3 and 4 count at how many of them a model is better, tied or worse than another: better means a mean test MAE lower by more than 2 seed standard deviations.
 """)
 
 code(r"""
 display(Image(filename=str(PAPER_DIR / "results" / "fair_comparison.png"), width=1100))
-
-fair = read_json("fair_comparison.json")
 
 def verdict(mean_a, std_a, mean_b, std_b):
     # The comparison rule declared before the runs: better if lower by more than 2 pooled seed std.
     gap, pooled = mean_a - mean_b, np.sqrt((std_a**2 + std_b**2) / 2)
     return "better" if gap < -2 * pooled else "worse" if gap > 2 * pooled else "tie"
 
+def counts(verdicts):
+    return f"{verdicts.count('better')} / {verdicts.count('tie')} / {verdicts.count('worse')}"
+
+fair = read_json("fair_comparison.json")
 rows = []
 for arch in ARCHS:
     a = fair["architectures"][arch]
-    best_classical = a["claims"]["C1_vs_fair_classical"]["counts"]
-    same_features = a["claims"]["C2_classical_features"]["counts"]
-    no_reservoir = [verdict(a["per_configuration"][c]["raw_lags|quantum_kernel_ideal"]["mean"], a["per_configuration"][c]["raw_lags|quantum_kernel_ideal"]["std"],
-                            sel["quantum"]["test_mae"]["mean"], sel["quantum"]["test_mae"]["std"]) for c, sel in a["eval_selected"].items()]
-    rows.append({"architecture": arch.upper(),
-                 "best quantum vs best classical (better / tie / worse)": f"{best_classical['better']} / {best_classical['tie']} / {best_classical['worse']}",
-                 "MAE change vs best classical": f"{-a['E7_headline_vs_fair_classical']['mae']['average']['mean']:+.1%}",
-                 "kernel without reservoir vs best quantum (better / tie / worse)": f"{no_reservoir.count('better')} / {no_reservoir.count('tie')} / {no_reservoir.count('worse')}",
-                 "quantum vs RBF kernel on the same classical features": f"{same_features['better']} / {same_features['tie']} / {same_features['worse']}"})
-display(pd.DataFrame(rows).style.hide(axis="index"))
+    c = a["claims"]["C1_vs_fair_classical"]["counts"]
+    rows.append({"architecture": arch.upper(), "better / tied / worse": f"{c['better']} / {c['tie']} / {c['worse']}",
+                 "average MAE change": f"{-a['headline_vs_best_classical']['mae']['average']['mean']:+.1%}"})
+display(pd.DataFrame(rows).style.hide(axis="index").set_caption("Best quantum model vs best classical model"))
 """)
 
 md(r"""
-**Result:** the best quantum model is never better than the best classical one (0/32 sizes); the paper's kernel applied directly to the last 4 hours, without any reservoir, is as good as or better than the best quantum model everywhere; and on the same classical features, a standard RBF kernel does as well as the quantum kernel. The gain comes from using a kernel readout, not from the quantum components.
+**Result:** the best quantum model is better at none of the 32 sizes, tied at 21 and worse at 11; on average its MAE is 3–6 % higher than the best classical model's.
 
-These conclusions do not depend on secondary choices (normalization, data artefacts), and the gaps with the paper are not explained by a missing intercept or by finite shots:
+### 3.2 The gain comes from the kernel readout, not from the quantum parts
+
+The paper baseline has a linear readout, the best quantum models a kernel readout. To separate the two, we remove the reservoir and apply a kernel directly to the last 4 hours: first the paper's kernel, then a standard classical (RBF) kernel. Neither has neurons, so each is one value at every size (dashed line in the figure above).
 """)
 
 code(r"""
-verdicts = read_json("robustness_verdicts.json")
-rows = []
-for cand, v in verdicts["S2-R2"].items():
-    rows.append({"check": "robustness to " + ", ".join(f"{k} = {v}" for k, v in json.loads(cand).items()), "result": f"headline Δ {v['headline_delta']:+.3f} (unchanged: {v['headline_unchanged']}); cells moved beyond 1 std: {sum(x['material'] for x in v['cells'].values())}/{len(v['cells'])}"})
-rows.append({"check": "missing-intercept hypothesis (linear cells)", "result": f"{verdicts['S5-R2']['cells_within_seed_std']}/{verdicts['S5-R2']['cells']} cells explained -> {verdicts['S5-R2']['intercept_hypothesis']}"})
-rows.append({"check": "noise scale closest to the paper's degradation", "result": f"×{json.loads(verdicts['S4-R2']['closest_scale'])['noise_scale']} (any scale fully consistent: {verdicts['S4-R2']['any_consistent']})"})
-rows.append({"check": "finite shots explain the noisy gap", "result": f"supported: {verdicts['S3-R2_H1_supported']} (shots over-degrade)"})
-for arch, g in verdicts["GAP-CLASSICAL-R2"].items():
-    rows.append({"check": f"B0 seed spread, {arch.upper()} (20 seeds)", "result": f"paper value inside our range in {g['inside']}/{g['configurations']} configurations"})
-display(pd.DataFrame(rows).style.hide(axis="index"))
-""")
-
-md(r"""
-## 4. The architecture carries over to photonics (MerLin)
-
-Each quantum neuron becomes a frozen 2-photon chip, and the kernel a 2-photon chip (README, *Photonic Assessment*). First, a check of MerLin's photonic outputs against an independent Perceval computation:
-""")
-
-code(r"""
-import itertools
-import perceval as pcvl
-
-def perceval_amplitude(u, s_in, s_out):
-    backend = pcvl.BackendFactory.get_backend("SLOS"); backend.set_circuit(pcvl.Unitary(pcvl.Matrix(u)))
-    backend.set_input_state(pcvl.BasicState(s_in)); return backend.prob_amplitude(pcvl.BasicState(s_out))
-
-def circuit_unitary(circuit, values):
-    params = sorted((p for p in circuit.get_parameters(all_params=True) if p.name.startswith("px")), key=lambda p: int(p.name[2:]))
-    for p, v in zip(params, values): p.set_value(float(v))
-    return np.array(circuit.compute_unitary(use_symbolic=False))
-
-layer = build_neuron_layer(1.0, np.random.SeedSequence(5))
-x = np.random.default_rng(1).uniform(-1, 1, (3, 4))
-with torch.no_grad():
-    merlin_out = layer(torch.from_numpy(x)).numpy()
-outputs = [o for o in itertools.product(range(3), repeat=4) if sum(o) == 2]
-err_post, err_raw = [], []
-for row, xi in zip(merlin_out, x):
-    u = circuit_unitary(layer.circuit, xi)
-    probs = {o: abs(perceval_amplitude(u, [1, 0, 1, 0], list(o))) ** 2 for o in outputs}
-    free = {o: p for o, p in probs.items() if max(o) <= 1}
-    post = [sum(p * o[m] for o, p in free.items()) / sum(free.values()) for m in range(4)]
-    raw = [sum(p * o[m] for o, p in probs.items()) for m in range(4)]
-    err_post.append(np.abs(row - post).max()); err_raw.append(np.abs(row - raw).max())
-print(f"MerLin UNBUNCHED <n_i> vs Perceval, post-selected on 2 clicks: max |error| = {max(err_post):.1e}")
-print(f"MerLin UNBUNCHED <n_i> vs Perceval, no post-selection     : max |error| = {max(err_raw):.1e}  (so it IS post-selected)")
-
-km = PhotonicKernelMap(n_features=10, n_modes=10, n_photons=2, scale=2.0, blocks=2, sequence=np.random.SeedSequence(3))
-G = state_gram(km.states(np.random.default_rng(0).uniform(-1, 1, (50, 10)))).numpy()
-print(f"photonic kernel: Fock dimension {km.states(np.zeros((1, 10))).shape[1]}, Gram symmetric {np.allclose(G, G.T)}, unit diagonal {np.allclose(np.diag(G), 1)}, min eigenvalue {np.linalg.eigvalsh(G).min():.1e}")
-""")
-
-md(r"""
-Then the full photonic grids (3 seeds) against the gate model; the adaptation counts as preserving the gate model if it stays within 10 % or 2 seed std in at least 6/8 sizes (declared before the runs):
-""")
-
-code(r"""
-merlin = read_json("merlin_comparison.json")
 rows = []
 for arch in ARCHS:
-    m = merlin[arch]
-    rows.append({"architecture": arch.upper(),
-                 "photonic+photonic kernel vs gate full-quantum": f"{m['a_full_quantum']['verdict']} ({m['a_full_quantum']['preserved_count']}/8, median {m['a_full_quantum']['median_relative_delta']:+.1%})",
-                 "photonic reservoir + linear vs gate + linear": f"{m['c_reservoir_linear']['verdict']} ({m['c_reservoir_linear']['median_relative_delta']:+.1%})",
-                 "headline vs B0 (MerLin / gate)": f"{m['d_headline']['merlin']['mae']['average_mean']:.1%} / {m['d_headline']['r2_ideal']['mae']['average_mean']:.1%}",
-                 "MerLin vs additional classical: better": f"{fair['architectures'][arch]['claims']['MERLIN_vs_fair_classical']['counts']['better']}/8"})
-display(pd.DataFrame(rows).style.hide(axis="index"))
+    a = fair["architectures"][arch]
+    row = {("", "architecture"): arch.upper()}
+    for cell, name in (("raw_lags|quantum_kernel_ideal", "paper's kernel"), ("raw_lags|rbf_kernel", "RBF kernel")):
+        v = [verdict(a["per_configuration"][c][cell]["mean"], a["per_configuration"][c][cell]["std"],
+                     sel["quantum"]["test_mae"]["mean"], sel["quantum"]["test_mae"]["std"]) for c, sel in a["eval_selected"].items()]
+        row[(name, "better / tied / worse")] = counts(v)
+    rows.append(row)
+df = pd.DataFrame(rows); df.columns = pd.MultiIndex.from_tuples(df.columns)  # two header rows: kernel, then counts
+display(df.style.hide(axis="index").set_caption("Kernel without reservoir vs best quantum model"))
 """)
 
 md(r"""
-**Result:** the photonic models behave like the gate models in all four architectures (kernel cells 2–3 % worse, reservoir cells slightly better), with the same limit: no gain over the classical baselines.
+**Result:** without any reservoir, the paper's kernel on the last 4 hours is never worse than the best quantum model, and a classical RBF kernel gives the same result. What beats the paper baseline is the kernel readout; neither the quantum reservoir nor the quantum kernel is needed.
 """)
 
 md(r"""
-## 5. A simple architecture to distribute, and what it opens
+## 4. Photonics (MerLin) does about the same as the gate-based model
 
-In MRMR, each branch (a reservoir and its own readout) needs only the last 4 hours, and only its forecast leaves it. Below, the same MRMR model (3 reservoirs of 10 quantum neurons) computed in one process, then with each branch in its own process, as it would run on separate nodes or QPUs:
+Each quantum neuron becomes a frozen 2-photon chip, and the kernel a 2-photon chip (README, *Photonic Assessment*; MerLin's outputs are checked against Perceval in `tests/test_photonic.py`). The full photonic grids are run like the gate-based ones, and the best model of each is chosen on the evaluation split. In the figure of Section 3, compare red (MerLin) with blue (best gate-based quantum model).
+""")
+
+code(r"""
+rows = []
+for arch in ARCHS:
+    picks = fair["architectures"][arch]["eval_selected"].values()
+    v = [verdict(p["merlin"]["test_mae"]["mean"], p["merlin"]["test_mae"]["std"], p["quantum"]["test_mae"]["mean"], p["quantum"]["test_mae"]["std"]) for p in picks]
+    change = np.median([p["merlin"]["test_mae"]["mean"] / p["quantum"]["test_mae"]["mean"] - 1 for p in picks])
+    rows.append({"architecture": arch.upper(), "better / tied / worse": counts(v), "median MAE change": f"{change:+.1%}"})
+display(pd.DataFrame(rows).style.hide(axis="index").set_caption("Best MerLin model vs best gate-based model"))
+""")
+
+md(r"""
+**Result:** the best MerLin model is tied with the best gate-based model at 26 of 32 sizes and worse at 6, mostly by a few percent at sizes where the seeds agree closely; its median MAE is 1–3 % higher. The architecture carries over to photonics, with the same limit: no gain over the classical models.
+""")
+
+md(r"""
+## 5. No quantum gain, but an architecture that is easy to distribute
+
+In MRMR, each branch (a reservoir and its own readout) needs only the last 4 hours, and only its forecast leaves it. Distributing the model therefore takes a few lines: run each branch in its own process, here on its own CPU core (later on its own node or QPU), and average the forecasts. To make the speed-up visible, we use a hybrid model larger than the paper's: 5 branches of 60 quantum neurons, each with a linear readout. That a branch-by-branch run equals the reproduction code is tested in `tests/test_distributed.py`.
 """)
 
 code(r"""
@@ -347,46 +318,47 @@ from functools import partial
 
 from distributed_qrc.lib.architectures import build_cell_spec
 from distributed_qrc.lib.distributed import branch_forecast
-from distributed_qrc.lib.noise import devices_for_components
 from distributed_qrc.lib.readouts import merge_predictions
 
 demo_cfg = load_paper_config(); demo_cfg["seed"] = 0
-spec = build_cell_spec("mrmr", "3x10")  # 3 reservoirs of 10 quantum neurons, one readout each
-mapping = demo_cfg["noise"]["mapping"]
+spec = build_cell_spec("mrmr", "5x60")  # 5 branches of 60 quantum neurons (300 in total)
+merge = demo_cfg["readout"]["merge"]    # the forecast is the mean of the branch forecasts
+# One branch is one self-contained unit of work: input windows in, forecast out.
+run_branch = partial(branch_forecast, demo_cfg, data, spec, 0, reservoir_type="quantum_ideal", readout_type="linear")
 
-# 1. As in the reproduction: one process computes the whole model.
+# 1. Sequential: one process computes the 5 branches one after the other.
 t0 = time.perf_counter()
-features = runner._reservoir_features(demo_cfg, data, spec, 0, "quantum_ideal", devices_for_components(3, mapping))
-sequential, _ = runner._fit_cell(demo_cfg, data, spec, features, "linear", devices_for_components(3, mapping), "mrmr:3x10|quantum_ideal|linear")
+sequential = merge_predictions([run_branch(b)["test"] for b in range(5)], merge)
 seconds_one = time.perf_counter() - t0
 
-# 2. Distributed: each branch (its reservoir and its readout) runs in its own process; only its forecast comes back.
+# 2. Distributed: 5 processes, one per branch, run at the same time on different CPU cores
+#    (one thread each, so that the branches do not compete for the same cores).
 t0 = time.perf_counter()
-with ProcessPoolExecutor(max_workers=3) as pool:
-    branches = list(pool.map(partial(branch_forecast, demo_cfg, data, spec, 0), range(3)))
-distributed = merge_predictions([b["test"] for b in branches], demo_cfg["readout"]["merge"])
-seconds_three = time.perf_counter() - t0
+with ProcessPoolExecutor(max_workers=5, initializer=torch.set_num_threads, initargs=(1,)) as pool:
+    branches = list(pool.map(run_branch, range(5)))
+distributed = merge_predictions([b["test"] for b in branches], merge)
+seconds_five = time.perf_counter() - t0
 
 runs = pd.DataFrame([
-    {"run": "one process", "seconds": seconds_one, "test MAE": np.abs(data.targets["test"] - sequential["test"]).mean()},
-    {"run": "three processes, one per branch", "seconds": seconds_three, "test MAE": np.abs(data.targets["test"] - distributed).mean()},
+    {"run": "one process, branches in sequence", "seconds": seconds_one, "test MAE": np.abs(data.targets["test"] - sequential).mean()},
+    {"run": "five processes, one per branch", "seconds": seconds_five, "test MAE": np.abs(data.targets["test"] - distributed).mean()},
 ])
-display(runs.style.format({"seconds": "{:.1f}", "test MAE": "{:.4f}"}).hide(axis="index"))
-print(f"largest difference between the two forecasts: {np.abs(distributed - sequential['test']).max():.0e} (floating-point rounding)")
+display(runs.style.format({"seconds": "{:.1f}", "test MAE": "{:.4f}"}).hide(axis="index").set_caption("MRMR 5x60, quantum reservoirs and linear readouts"))
+print(f"speed-up: x{seconds_one / seconds_five:.1f}; largest difference between the two forecasts: {np.abs(distributed - sequential).max():.0e}")
 """)
 
 md(r"""
-**Result:** the distributed run gives the same forecast. Here the processes only add start-up time, but each branch could run on any machine or QPU without changing the model. This is what makes the paper's idea attractive: the cell above is the first step of our distributed-stack proof of concept, and the same architecture can host kernels that are hard to simulate, reservoirs with memory, harder tasks and real hardware (README, *Next Steps*).
+**Result:** the distributed run gives exactly the same forecast, 2.5 to 3 times faster on this laptop (the exact figure varies a little between runs), because each branch simulates its quantum neurons on its own core (the gain includes about 2 s to start the processes). Kernel readouts gain less on a single machine, since their linear algebra already uses all cores in one process; there the gain would come from separate machines. So the paper brings no quantum gain, but an architecture that distributes in a few lines; this cell is the first step of our distributed proof of concept (README, *Next Steps*).
 """)
 
 md(r"""
 ## Conclusion
 
-- **Reproduced:** the code computes the paper's circuits exactly, and the paper's numbers reproduce against its own baseline (Section 2).
-- **Not confirmed:** the quantum advantage; a classical kernel without reservoir does as well (Section 3). The best model of the paper (C5) and its noisy degradation are not reproduced.
-- **What holds:** the distributed architecture, in gate-based and photonic simulation, and easy to distribute (Sections 4 and 5).
+1. **The paper's numbers reproduce** against the paper baseline (Section 2).
+2. **The gain is not quantum:** the best quantum model is never better than the best classical one, and a kernel without reservoir does as well (Section 3).
+3. **The architecture holds:** MerLin does about the same as the gate-based model (Section 4), and running the branches in parallel gives the same forecast, faster (Section 5).
 
-**Verdict: partially reproduced.** The expected quantum gain did not appear, but the paper's architecture is simple, reproducible and a good basis for the directions above. Limitations: 3 seeds per cell, a noise model rebuilt from calibration medians, simulation only.
+Not reproduced: the paper's best model (C5) and its noisy degradation (README, *Verdict per claim*). Limitations: simulation only, 3 seeds per cell, a noise model rebuilt from calibration medians.
 """)
 
 code(r"""

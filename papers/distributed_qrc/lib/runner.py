@@ -7,7 +7,7 @@ kernel ridge) on every readout instance, merges the instance predictions and
 evaluates the cell on the evaluation and test splits. This is the paper's
 3 x 3 cell grid per configuration; every cell is reported, and the paper's
 "best of the quantum/hybrid cells" statistic is computed afterwards from
-``metrics.json`` (phase 03).
+``metrics.json``.
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ from .photonic_merlin import (
     fit_photonic_kernel_ridge,
 )
 from .readouts import (
+    FittedReadout,
     fit_kernel_ridge,
     fit_linear_ridge,
     merge_predictions,
@@ -63,13 +64,13 @@ logger = logging.getLogger(__name__)
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 RESERVOIR_TYPES = (
     # From the paper:
-    "classical",  # ReservoirPy reservoir, library defaults (baseline B0)
+    "classical",  # ReservoirPy reservoir, library defaults (paper baseline)
     "quantum_ideal",  # 4-qubit quantum neurons, ideal simulator
     "quantum_noisy",  # same circuits with the hardware-informed noise model
-    # MerLin adaptation (phase 04):
+    # MerLin adaptation:
     "photonic",  # one frozen 4-mode, 2-photon chip per neuron
-    # Phase-05 classical controls (not the paper's method):
-    "esn_tuned",  # ReservoirPy ESN with B0's matrices, hyperparameters tuned on eval
+    # Additional classical controls (not the paper's method):
+    "esn_tuned",  # ReservoirPy ESN with the paper baseline's matrices, hyperparameters tuned on eval
     "raw_lags",  # no reservoir: the readout sees the 4-lag window directly
 )
 # Seed stream that separates the photonic chips from the gate-model randomness.
@@ -79,9 +80,9 @@ READOUT_TYPES = (
     "linear",  # classical ridge (Eq. 5; intercept added by default, see --linear-intercept)
     "quantum_kernel_ideal",  # "quantum ridge": fidelity-kernel ridge, ideal simulator
     "quantum_kernel_noisy",  # "quantum ridge" with the noise model
-    # MerLin adaptation (phase 04):
+    # MerLin adaptation:
     "photonic_kernel",  # 2-photon fidelity-kernel ridge
-    # Phase-05 classical controls (not the paper's method):
+    # Additional classical controls (not the paper's method):
     "rbf_kernel",  # classical RBF kernel ridge, gamma and lambda tuned on eval
     "persistence",  # forecast = newest observed hour (raw_lags only)
 )
@@ -148,7 +149,7 @@ def sub_reservoir_features(
         )
         outputs = [reservoir.transform(data.inputs[split]) for split in SPLITS]
     elif reservoir_type == "photonic":
-        # MerLin adaptation (phase 04): same wiring as the gate reservoir of
+        # MerLin adaptation: same wiring as the gate reservoir of
         # this seed, photonic neuron chips with their own fixed interferometers.
         pcfg = _section(cfg, "photonic")
         structure_rng = np.random.default_rng(sequence.spawn(2)[0])
@@ -199,6 +200,131 @@ def _reservoir_features(
     return {split: np.concatenate(parts, axis=1) for split, parts in per_split.items()}
 
 
+def fit_readout_instance(
+    cfg: dict[str, Any],
+    data: ForecastData,
+    sub_features: dict[str, np.ndarray],
+    readout_type: str,
+    kernel_qubits: int,
+    device_name: str,
+    cell_tag: str,
+    index: int,
+) -> FittedReadout:
+    """Fit one readout instance on its share of the reservoir features.
+
+    Parameters
+    ----------
+    cfg : dict
+        Resolved configuration.
+    data : ForecastData
+        Windowed, normalized splits (targets are used).
+    sub_features : dict
+        Per-split features seen by this instance.
+    readout_type : str
+        One of :data:`READOUT_TYPES`.
+    kernel_qubits : int
+        Width of the kernel feature map (5 or 10 in the paper).
+    device_name : str
+        Simulated device of this instance, for the noisy kernel.
+    cell_tag : str
+        ``"<arch>:<config>|<reservoir>|<readout>"``, part of the shot and chip seeds.
+    index : int
+        Index of the instance in the cell, part of the same seeds.
+
+    Returns
+    -------
+    FittedReadout
+        Fitted readout with its predictions for every split.
+    """
+
+    rcfg = _section(cfg, "readout")
+    if readout_type == "linear":
+        return fit_linear_ridge(
+            sub_features,
+            data.targets,
+            rcfg["lambda_grid"],
+            intercept=bool(rcfg["linear_intercept"]),
+        )
+    elif readout_type in ("quantum_kernel_ideal", "quantum_kernel_noisy"):
+        noise = (
+            IDEAL
+            if readout_type == "quantum_kernel_ideal"
+            else device_from_config(
+                device_name,
+                cfg["noise"]["devices"],
+                float(cfg["noise"]["scale"]),
+            )
+        )
+        return fit_kernel_ridge(
+            sub_features,
+            data.targets,
+            rcfg["lambda_grid"],
+            n_qubits=kernel_qubits,
+            noise=noise,
+            device=str(cfg["device"]),
+            selection_subsample=rcfg["kernel_selection_subsample"],
+            fit_subsample=rcfg["kernel_fit_subsample"],
+            shots=(
+                _section(cfg, "kernel")["shots"]
+                if readout_type == "quantum_kernel_noisy"
+                else None
+            ),
+            shot_seed=int(
+                np.random.SeedSequence(
+                    [int(cfg["seed"]), zlib.crc32(cell_tag.encode()), index]
+                ).generate_state(1)[0]
+            ),
+        )
+    elif readout_type == "rbf_kernel":
+        return fit_rbf_kernel_ridge(
+            sub_features,
+            data.targets,
+            rcfg["lambda_grid"],
+            _section(cfg, "classical_baselines")["rbf_gamma_factors"],
+            device=str(cfg["device"]),
+            selection_subsample=rcfg["kernel_selection_subsample"],
+            fit_subsample=rcfg["kernel_fit_subsample"],
+        )
+    elif readout_type == "persistence":
+        # The cell tag is "<arch>:<config>|<reservoir>|<readout>". Persistence
+        # (no-reservoir control) predicts the newest lag, so it needs the raw window (raw_lags).
+        if cell_tag.split("|")[1] != "raw_lags":
+            raise ValueError(
+                "persistence needs the raw_lags reservoir and one readout instance"
+            )
+        return fit_persistence(sub_features, data.targets)
+    elif readout_type == "photonic_kernel":
+        pcfg = _section(cfg, "photonic")
+        kernel_map = PhotonicKernelMap(
+            n_features=sub_features["train"].shape[1],
+            n_modes=kernel_qubits,
+            n_photons=int(pcfg["kernel_photons"]),
+            scale=float(pcfg["kernel_scale"]),
+            blocks=int(pcfg["kernel_blocks"]),
+            sequence=np.random.SeedSequence(
+                [
+                    int(cfg["seed"]),
+                    zlib.crc32(cell_tag.encode()),
+                    index,
+                    PHOTONIC_STREAM,
+                ]
+            ),
+        )
+        return fit_photonic_kernel_ridge(
+            sub_features,
+            data.targets,
+            rcfg["lambda_grid"],
+            kernel_map,
+            device=str(cfg["device"]),
+            selection_subsample=rcfg["kernel_selection_subsample"],
+            fit_subsample=rcfg["kernel_fit_subsample"],
+        )
+    else:
+        raise ValueError(
+            f"readout type must be one of {READOUT_TYPES}, got {readout_type!r}"
+        )
+
+
 def _fit_cell(
     cfg: dict[str, Any],
     data: ForecastData,
@@ -210,95 +336,24 @@ def _fit_cell(
 ) -> tuple[dict[str, np.ndarray], list[dict[str, Any]]]:
     rcfg = _section(cfg, "readout")
     chunks = partition_features(features["train"].shape[1], spec.n_instances)
+    if readout_type == "persistence" and len(chunks) != 1:
+        raise ValueError(
+            "persistence needs the raw_lags reservoir and one readout instance"
+        )
     parts, instances = [], []
     for index, chunk in enumerate(chunks):
         sub_features = {split: values[:, chunk] for split, values in features.items()}
         started = time.perf_counter()
-        if readout_type == "linear":
-            fitted = fit_linear_ridge(
-                sub_features,
-                data.targets,
-                rcfg["lambda_grid"],
-                intercept=bool(rcfg["linear_intercept"]),
-            )
-        elif readout_type in ("quantum_kernel_ideal", "quantum_kernel_noisy"):
-            noise = (
-                IDEAL
-                if readout_type == "quantum_kernel_ideal"
-                else device_from_config(
-                    devices[index],
-                    cfg["noise"]["devices"],
-                    float(cfg["noise"]["scale"]),
-                )
-            )
-            fitted = fit_kernel_ridge(
-                sub_features,
-                data.targets,
-                rcfg["lambda_grid"],
-                n_qubits=spec.kernel_qubits,
-                noise=noise,
-                device=str(cfg["device"]),
-                selection_subsample=rcfg["kernel_selection_subsample"],
-                fit_subsample=rcfg["kernel_fit_subsample"],
-                shots=(
-                    _section(cfg, "kernel")["shots"]
-                    if readout_type == "quantum_kernel_noisy"
-                    else None
-                ),
-                shot_seed=int(
-                    np.random.SeedSequence(
-                        [int(cfg["seed"]), zlib.crc32(cell_tag.encode()), index]
-                    ).generate_state(1)[0]
-                ),
-            )
-        elif readout_type == "rbf_kernel":
-            fitted = fit_rbf_kernel_ridge(
-                sub_features,
-                data.targets,
-                rcfg["lambda_grid"],
-                _section(cfg, "classical_baselines")["rbf_gamma_factors"],
-                device=str(cfg["device"]),
-                selection_subsample=rcfg["kernel_selection_subsample"],
-                fit_subsample=rcfg["kernel_fit_subsample"],
-            )
-        elif readout_type == "persistence":
-            # The cell tag is "<arch>:<config>|<reservoir>|<readout>". Persistence
-            # (no-reservoir control) predicts the newest lag, so it needs the raw window (raw_lags).
-            if cell_tag.split("|")[1] != "raw_lags" or len(chunks) != 1:
-                raise ValueError(
-                    "persistence needs the raw_lags reservoir and one readout instance"
-                )
-            fitted = fit_persistence(sub_features, data.targets)
-        elif readout_type == "photonic_kernel":
-            pcfg = _section(cfg, "photonic")
-            kernel_map = PhotonicKernelMap(
-                n_features=chunk.size,
-                n_modes=spec.kernel_qubits,
-                n_photons=int(pcfg["kernel_photons"]),
-                scale=float(pcfg["kernel_scale"]),
-                blocks=int(pcfg["kernel_blocks"]),
-                sequence=np.random.SeedSequence(
-                    [
-                        int(cfg["seed"]),
-                        zlib.crc32(cell_tag.encode()),
-                        index,
-                        PHOTONIC_STREAM,
-                    ]
-                ),
-            )
-            fitted = fit_photonic_kernel_ridge(
-                sub_features,
-                data.targets,
-                rcfg["lambda_grid"],
-                kernel_map,
-                device=str(cfg["device"]),
-                selection_subsample=rcfg["kernel_selection_subsample"],
-                fit_subsample=rcfg["kernel_fit_subsample"],
-            )
-        else:
-            raise ValueError(
-                f"readout type must be one of {READOUT_TYPES}, got {readout_type!r}"
-            )
+        fitted = fit_readout_instance(
+            cfg,
+            data,
+            sub_features,
+            readout_type,
+            spec.kernel_qubits,
+            devices[index],
+            cell_tag,
+            index,
+        )
         seconds = time.perf_counter() - started
         logger.info(
             "TRAIN_READOUT_COMPLETED | cell=%s | instance=%d/%d | features=%d | lambda=%.3g | eval_rmse=%.6f | seconds=%.1f",
@@ -339,7 +394,7 @@ def _tuned_esn_features(
 ) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
     """Tuned-ESN baseline: ReservoirPy reservoir tuned on the evaluation split.
 
-    Every setting of ``classical_baselines.esn_grid`` reuses B0's random matrices
+    Every setting of ``classical_baselines.esn_grid`` reuses the paper baseline's random matrices
     (same node seeds) and is scored by the evaluation RMSE of the merged linear
     readout of this configuration; ties within 1 % go to the first setting.
     """

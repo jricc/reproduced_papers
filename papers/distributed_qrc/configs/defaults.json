@@ -52,7 +52,7 @@
     "shots": null
   },
   "photonic": {
-    "_comment": "MerLin adaptation (phase 04): photonic neuron chips and photonic fidelity kernel; see lib/photonic_merlin.py.",
+    "_comment": "MerLin adaptation: photonic neuron chips and photonic fidelity kernel; see lib/photonic_merlin.py.",
     "neuron_scale": 1.0,
     "kernel_scale": 2.0,
     "kernel_photons": 2,

@@ -1,9 +1,9 @@
-"""MerLin photonic adaptation of the paper's reservoir and kernel readout (phase 04).
+"""MerLin photonic adaptation of the paper's reservoir and kernel readout.
 
 This is an **adaptation**, not the paper's method. See the README, *Photonic Assessment and
 MerLin Extension*, for the scope (`PARTIAL_MERLIN_TRANSLATION`).
 
-* Photonic neuron (mapping M1): each reservoir neuron is a small frozen
+* Photonic neuron: each reservoir neuron is a small frozen
   linear-optical chip: 4 modes, 2 photons in ``[1, 0, 1, 0]``, a fixed random
   interferometer, angle encoding of the neuron's 4 inputs (``scale * x`` phase
   on each mode), a second fixed random interferometer, threshold detection
@@ -11,7 +11,7 @@ MerLin Extension*, for the scope (`PARTIAL_MERLIN_TRANSLATION`).
   of the qubit neuron's ``<Z (x) Z (x) Z (x) Z>``. The reservoir wiring (which
   lags and which neurons feed each chip) and the 3 synchronous passes are those of
   :mod:`lib.reservoirs`.
-* Photonic fidelity kernel (mapping M2): ``n_modes`` modes (the paper's kernel
+* Photonic fidelity kernel: ``n_modes`` modes (the paper's kernel
   qubit count, 5 or 10), 2 photons at evenly spaced modes, a fixed random
   interferometer, then ``B = 2`` blocks of ``L = ceil(d / n_modes)`` layers of
   [angle encoding of ``n_modes`` features, fixed random interferometer]. The
@@ -78,7 +78,7 @@ def build_neuron_layer(scale: float, sequence: np.random.SeedSequence):
 
 
 class PhotonicReservoir:
-    """Reservoir of frozen photonic neuron chips with the paper's wiring (mapping M1).
+    """Reservoir of frozen photonic neuron chips with the paper's wiring.
 
     Parameters
     ----------
@@ -126,7 +126,7 @@ class PhotonicReservoir:
 
 
 class PhotonicKernelMap:
-    """Fock-space state preparation of the photonic fidelity kernel (mapping M2)."""
+    """Fock-space state preparation of the photonic fidelity kernel."""
 
     def __init__(
         self,

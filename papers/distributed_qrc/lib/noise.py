@@ -1,7 +1,7 @@
 """Device noise models rebuilt from the paper's calibration medians (App. B).
 
 The paper simulates ibm_brisbane, ibm_marrakesh and IonQ Aria-1 noise from QPU
-calibration data but does not state how the noise model was built (R15). This
+calibration data but does not state how the noise model was built (see the deviations in `docs/reproduction_details.md`). This
 module uses only the numbers printed in App. B:
 
 * every native single-qubit gate is followed by a single-qubit depolarizing

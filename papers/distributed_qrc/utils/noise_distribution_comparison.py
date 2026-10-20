@@ -1,4 +1,4 @@
-"""E6 / noise side check (Sec. III-B5 remark): does distributing the quantum components mitigate noise?
+"""Noise side check (Sec. III-B5 remark): does distributing the quantum components mitigate noise?
 
 Reproduces the paper's own comparison (Sec. III-B, cross-architecture
 paragraph) on our sweeps: the fully quantum noisy cell

@@ -1,5 +1,5 @@
 {
-  "description": "Additional classical baselines for the SRMR grid: B0 and ideal-quantum reservoirs (in-run anchors) and the tuned ESN, each with a linear ridge and an RBF kernel ridge; 8 configurations, full-size kernels. Independent controls, not the paper's method.",
+  "description": "Additional classical baselines for the SRMR grid: the paper baseline and ideal-quantum reservoirs (in-run anchors) and the tuned ESN, each with a linear ridge and an RBF kernel ridge; 8 configurations, full-size kernels. Independent controls, not the paper's method.",
   "experiment": {
     "id": "E3-CLASSICAL",
     "variant": "classical",
@@ -43,7 +43,7 @@
       "quantum_ideal",
       "esn_tuned"
     ],
-    "_comment_reservoir_types": "classical = ReservoirPy defaults (paper baseline B0); quantum_ideal = ideal quantum reservoir; esn_tuned = the same ReservoirPy reservoir with spectral radius, leak rate and input scaling tuned on the eval split (12 settings).",
+    "_comment_reservoir_types": "classical = ReservoirPy defaults (paper baseline); quantum_ideal = ideal quantum reservoir; esn_tuned = the same ReservoirPy reservoir with spectral radius, leak rate and input scaling tuned on the eval split (12 settings).",
     "readout_types": [
       "linear",
       "rbf_kernel"

@@ -1,5 +1,5 @@
 {
-  "description": "Phase-05 noise side check (mrsr; Sec. III-B5 remark, not a tracked claim; experiment ID kept from an earlier claim numbering): fully quantum noisy cells (and noisy reservoir + linear) for the E2 configurations; noise mapping and scale come from the sweep candidates (paper mapping vs same device, x10). Full-n kernels.",
+  "description": "Noise side check (mrsr; Sec. III-B5 remark, not a tracked claim): fully quantum noisy cells (and noisy reservoir + linear) for the MRSR configurations; noise mapping and scale come from the sweep candidates (paper mapping vs same device, x10). Full-n kernels.",
   "experiment": {
     "id": "C6-MRSR",
     "variant": "c6_control",
