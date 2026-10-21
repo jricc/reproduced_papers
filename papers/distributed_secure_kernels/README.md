@@ -1,6 +1,6 @@
 # Distributed and Secure Kernel-Based Quantum Machine Learning - Reproduction
 
-Status: all paper experiments run (5 seeds each, exact simulation of the swap-test circuits) and a partial photonic (MerLin) adaptation evaluated; results below. The fair-comparison write-up is still to come.
+Status: all paper experiments run (5 seeds each, exact simulation of the swap-test circuits), a partial photonic (MerLin) adaptation evaluated, and a fair classical comparison made; results below.
 
 ## Reference and Attribution
 
@@ -72,6 +72,7 @@ Each run writes `outdir/run_YYYYMMDD-HHMMSS/` with `run.log`, `run_status.json`,
 | `feature_map_identities_original.json` | Theorems 1–6 |
 | `protocol_equivalence_original.json`, `protocol_equivalence_four_qubits.json` | App. A, per-shot Aer checks |
 | `accuracy_<dataset>_merlin.json`, `shots_digits_merlin.json` | MerLin adaptation (photonic swap test), Table 1 and Fig. 4 settings |
+| `accuracy_<dataset>_fair_classical.json`, `accuracy_<dataset>_merlin_corrected.json` | fair comparison: tuned RBF / polynomial SVMs (planned grids) and MerLin under the corrected protocol |
 
 ## Data
 
@@ -153,9 +154,41 @@ Metric: stratified 5-fold CV accuracy. Ours: mean ± std over seeds 0-4. Matched
 - **Theorems 1–6:**
   - The polynomial map is neither normalised (‖ψ‖² from 0.43 to 1,246 in our checks) nor equal to (a xᵀy + c)ᵈ. Its inner product is exactly (x·y + √c_x √c_y)ᵈ, with c depending on each sample's norm.
   - The RBF and Laplacian maps give the stated kernels as inner products. But a swap test returns their square, i.e. the kernel at σ/√2 or α/2.
-- **Corrected protocol and tuned baselines** (fair comparison, detailed in a later phase):
-  - On Parkinson's, a tuned RBF SVM reaches 0.927 against 0.782 for the distributed quantum kernel. The majority-class rate is 0.757.
-  - On Framingham, without duplicated minority samples in the test folds, every quantum and exact kernel predicts the majority class (0.847, balanced accuracy 0.50).
+- **Corrected protocol and tuned baselines:** see "Fair Comparison" below.
+
+## Fair Comparison
+
+The paper claims that the distributed quantum kernel is *comparable* to the centralised quantum and classical kernels. It claims no advantage. Its classical column is an untuned linear SVM, evaluated with a leaky protocol, so we compare against a fair baseline under a leak-free protocol:
+
+- **Protocol:** minority oversampling and model selection stay inside the training folds.
+- **Fair baseline:** RBF and polynomial SVMs tuned by inner 5-fold CV, with the grids fixed before any run.
+- **Same conditions for every system:** samples, folds, C grid and seeds 0–4.
+- **Decision rule:** two systems are equivalent when the difference is within 2 σ of the seed spread.
+
+![Fair comparison](results/fair_comparison.png)
+
+| Kernel SVM, accuracy / balanced accuracy | Wine | Parkinson's | Framingham |
+|---|---|---|---|
+| Distributed quantum kernel (paper method, simulated) | 0.890 / 0.895 | 0.782 / 0.623 | 0.846 / 0.501 |
+| Centralised quantum kernel | 0.891 / 0.896 | 0.783 / 0.622 | 0.847 / 0.501 |
+| MerLin photonic swap test (adaptation, simulated) | 0.897 / 0.901 | 0.765 / 0.617 | not run (same kernel) |
+| Linear SVM (paper's classical column), C tuned | 0.979 / 0.983 | 0.819 / 0.751 | 0.791 / 0.629 |
+| Tuned RBF SVM | 0.979 / 0.983 | 0.927 / 0.913 | 0.840 / 0.512 |
+| Tuned polynomial SVM | 0.979 / 0.983 | 0.898 / 0.887 | 0.836 / 0.535 |
+| Majority class | 0.401 / 0.333 | 0.757 / 0.500 | 0.847 / 0.500 |
+
+Full table, with seed std, resources and timing, plus the pairwise decisions: `results/fair_comparison.md`.
+
+- **Distributed vs centralised: supported.** They are equivalent everywhere, and so is the MerLin adaptation.
+- **"Comparable to classical": not supported.**
+  - A tuned classical SVM is higher beyond 2 σ on Wine (+0.089) and on Parkinson's (+0.145 accuracy, +0.29 balanced accuracy).
+  - On Framingham the quantum kernel predicts the majority class: balanced accuracy 0.50, below every classical SVM. Its higher plain accuracy is just the majority rate (0.847).
+  - Even under the paper's own protocol and baseline, the linear SVM is higher in 4 of 5 Table 1 cells.
+- **No quantum or photonic advantage is claimed or observed.**
+- **Caveats:**
+  - The classical SVMs tune kernel hyperparameters that the quantum kernel does not have.
+  - No classical *secure* baseline (secure multiparty computation, homomorphic encryption) was run, so the cost of privacy is not measured.
+  - All quantum timings come from an exact simulation. On Framingham the protocol itself would need about 4.4 × 10⁹ circuit executions per fold, against 4.3 × 10⁶ closed-form kernel evaluations for the classical SVMs.
 
 ## Photonic (MerLin) Adaptation
 
