@@ -191,6 +191,8 @@ def main(argv: list[str] | None = None) -> int:
                 if code is None:
                     continue
                 del running[run_id]
+                # Keep the process exit status as evidence, whatever the outcome.
+                entry["exit_code"] = code
                 run_status = {}
                 if entry["run_status"]:
                     run_status = json.loads(
@@ -204,8 +206,9 @@ def main(argv: list[str] | None = None) -> int:
                     entry["status"] = "COMPLETED"
                     entry.pop("progress", None)
                     logger.info(
-                        "CANDIDATE_COMPLETED | run_id=%s | metrics=%s",
+                        "CANDIDATE_COMPLETED | run_id=%s | exit_code=%d | metrics=%s",
                         run_id,
+                        code,
                         entry["metrics_path"],
                     )
                 else:

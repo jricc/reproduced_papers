@@ -1,6 +1,6 @@
 # Distributed and Secure Kernel-Based Quantum Machine Learning - Reproduction
 
-Status: all paper experiments run (5 seeds each, exact simulation of the swap-test circuits); results below. Photonic adaptation and fair-comparison write-up are still to come.
+Status: all paper experiments run (5 seeds each, exact simulation of the swap-test circuits) and a partial photonic (MerLin) adaptation evaluated; results below. The fair-comparison write-up is still to come.
 
 ## Reference and Attribution
 
@@ -71,6 +71,7 @@ Each run writes `outdir/run_YYYYMMDD-HHMMSS/` with `run.log`, `run_status.json`,
 | `rff_error_original.json`, `rff_error_high_dimension.json` | Fig. 5 (d = 10, d = 100,000) |
 | `feature_map_identities_original.json` | Theorems 1–6 |
 | `protocol_equivalence_original.json`, `protocol_equivalence_four_qubits.json` | App. A, per-shot Aer checks |
+| `accuracy_<dataset>_merlin.json`, `shots_digits_merlin.json` | MerLin adaptation (photonic swap test), Table 1 and Fig. 4 settings |
 
 ## Data
 
@@ -155,6 +156,46 @@ Metric: stratified 5-fold CV accuracy. Ours: mean ± std over seeds 0-4. Matched
 - **Corrected protocol and tuned baselines** (fair comparison, detailed in a later phase):
   - On Parkinson's, a tuned RBF SVM reaches 0.927 against 0.782 for the distributed quantum kernel. The majority-class rate is 0.757.
   - On Framingham, without duplicated minority samples in the test folds, every quantum and exact kernel predicts the majority class (0.847, balanced accuracy 0.50).
+
+## Photonic (MerLin) Adaptation
+
+This is an adaptation, not the paper's method. Status: **partial MerLin translation**.
+
+- **What is translated:** the server's swap test. Its photonic counterpart is register-wise Hong–Ou–Mandel interference:
+  - each sample is amplitude-encoded into a register of m modes holding 2 photons, so 4 photons in total;
+  - one 50:50 beam splitter mixes each pair of corresponding modes;
+  - photon-number-resolving detection gives the parity of the photon number in one output group, with P(even) = ½ + ½|⟨ψ(x)|ψ(y)⟩|².
+
+  The code is in `lib/photonic_merlin.py`, a MerLin `QuantumLayer` in the FOCK computation space. In every run, P(even) matches the swap-test law to within 2.6 × 10⁻⁸.
+- **What is not translated:**
+  - **The teleportation-based distribution.** Linear-optics Bell measurements succeed with probability at most ½, so teleporting these multi-photon register states is not deterministic. Photons travel themselves, so distribution becomes direct transmission, which changes the security argument.
+  - **The Fig. 3 noise study.** MerLin's distinguishability noise model gives P(even) = 0.61 instead of about 0.999 for identical superposed states at indistinguishability 0.999.
+- **Result:** under the paper protocol (5 seeds, 1,024 shots), the photonic kernel gives the same accuracies as the gate-model distributed kernel within 2 σ in 8 of 9 settings (`results/merlin_comparison.md`).
+  - The exception is Digits at 1,024 shots: +0.032 against a tolerance of 0.029. The two kernels are identical, so this comes from independent shot-noise draws.
+- **Hardware assumptions:**
+  - FOCK space with ideal photon-number-resolving detectors (threshold detectors cannot read the parity);
+  - 4 photons on 12, 16 or 24 modes;
+  - ideal state preparation, which linear optics cannot do deterministically;
+  - no loss, no postselection;
+  - simulation only (MerLin, CPU), with parity drawn as Binomial(1,024, P(even)).
+
+Hardware-aware report for every MerLin run (configs `accuracy_<dataset>_merlin.json`, `shots_digits_merlin.json`):
+
+| Field | Value |
+|---|---|
+| Computation space | `ComputationSpace.FOCK` (parity needs photon counting) |
+| Detector model | ideal photon-number-resolving detectors (no loss, no dark counts) |
+| Photon number | 4 (2 per register) |
+| Number of modes | 12 (Wine, Framingham), 16 (Parkinson's), 24 (Digits) |
+| Input state | product of two amplitude-encoded registers over the C(m, 2) collision-free 2-photon Fock states, ideal preparation |
+| Encoding | amplitude (`StateVector.from_tensor`, joint FOCK basis) |
+| Measurement strategy | `MeasurementStrategy.probs(computation_space=FOCK)`, P(even photon number in the odd output ports) |
+| Circuit | mode permutation, then one 50:50 beam splitter per mode pair; no trainable parameters |
+| Postselection | none |
+| Simulator / QPU | MerLin CPU simulator (analytic probabilities, float64) |
+| Shot count | 1,024 per kernel entry (Digits: 128, 256, 512, 1,024), parity drawn as Binomial(shots, P(even)) |
+| Wall-clock per run | Wine 1–2 s, Parkinson's 4–9 s, Framingham 519–551 s, Digits 140–640 s (3 parallel workers) |
+| Seeds | 0–4 |
 
 ## Limitations
 

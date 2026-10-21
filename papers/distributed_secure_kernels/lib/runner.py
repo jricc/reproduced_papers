@@ -65,6 +65,7 @@ EXPERIMENT_KINDS = ("accuracy", "feature_maps", "protocol", "rff_error")
 KERNELS = (
     "linear",
     "swap_test",
+    "photonic_swap_test",
     "squared_overlap",
     "cosine",
     "rbf",
@@ -115,6 +116,49 @@ def swap_test_kernel_fn(method: dict[str, Any], rng: np.random.Generator):
     return kernel
 
 
+def photonic_swap_test_kernel_fn(method: dict[str, Any], rng: np.random.Generator):
+    """MerLin adaptation: P(even) from the photonic swap test, then binomial shots.
+
+    Every call checks the photonic probability against 1/2 + 1/2 |<psi|phi>|^2
+    (the adaptation must reproduce the swap-test law exactly) and logs the
+    largest deviation.
+    """
+
+    from .photonic_merlin import PhotonicSwapTest, encode_registers, register_modes
+
+    shots = int(method["shots"])
+    tolerance = float(method["exactness_tolerance"])
+    tests: dict[int, PhotonicSwapTest] = {}
+
+    def kernel(left: np.ndarray, right: np.ndarray, symmetric: bool) -> np.ndarray:
+        modes = register_modes(left.shape[1])
+        if modes not in tests:
+            tests[modes] = PhotonicSwapTest(modes, device=method["device"])
+        left_states = encode_registers(left, modes)
+        right_states = encode_registers(right, modes)
+        probability = tests[modes].zero_probability_matrix(
+            left_states, right_states, symmetric
+        )
+        deviation = float(
+            np.max(
+                np.abs(probability - (0.5 + 0.5 * (left_states @ right_states.T) ** 2))
+            )
+        )
+        logger.info(
+            "PHOTONIC_KERNEL_CHECK | modes_per_register=%d | photons=4 | pairs=%d | max_abs_deviation=%.3e",
+            modes,
+            probability.size,
+            deviation,
+        )
+        if deviation > tolerance:
+            raise RuntimeError(
+                f"Photonic swap test deviates from the swap-test law by {deviation:.3e}"
+            )
+        return estimate_from_zero_probability(probability, shots, rng, symmetric)
+
+    return kernel
+
+
 def kernel_fn_for(
     method: dict[str, Any], point: dict[str, Any], rng: np.random.Generator
 ):
@@ -129,6 +173,8 @@ def kernel_fn_for(
         return lambda left, right, symmetric: cosine_kernel(left, right)
     if kind == "swap_test":
         return swap_test_kernel_fn(method, rng)
+    if kind == "photonic_swap_test":
+        return photonic_swap_test_kernel_fn(method, rng)
     if kind == "rbf":
         # gamma = multiplier / (n_features * Var(X_train)), i.e. sklearn's "scale" times a factor.
         def rbf(left, right, symmetric, _m=point["gamma_multiplier"]):
@@ -239,6 +285,9 @@ def run_accuracy(
         else None
     )
     for index, method in enumerate(methods):
+        if method["kernel"] == "photonic_swap_test":
+            # The MerLin simulation runs on the configured torch device (--device).
+            method = {**method, "device": cfg["device"]}
         name = method["name"]
         started = time.perf_counter()
         rng = _method_rng(cfg, index)
