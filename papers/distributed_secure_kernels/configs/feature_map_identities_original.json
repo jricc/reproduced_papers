@@ -1,0 +1,41 @@
+{
+  "seed": 0,
+  "dtype": "float64",
+  "outdir": "outdir",
+  "device": "cpu",
+  "logging": {
+    "level": "info"
+  },
+  "description": "Thms 1-6: norms and inner products of the proposed polynomial, RBF and Laplacian feature maps against the closed-form kernels.",
+  "experiment": {
+    "id": "feature_map_identities_original",
+    "kind": "feature_maps",
+    "polynomial": {
+      "degrees": [
+        1,
+        2,
+        3
+      ],
+      "sample_norms": [
+        0.3,
+        1.0,
+        2.0
+      ],
+      "n_features": 3,
+      "n_pairs": 20,
+      "scale": 1.0
+    },
+    "fourier": {
+      "n_features": 5,
+      "n_pairs": 200,
+      "sigma": 2.0,
+      "alpha": 2.0,
+      "n_random_features": [
+        16,
+        256,
+        4096,
+        65536
+      ]
+    }
+  }
+}
