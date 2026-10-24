@@ -1,0 +1,8 @@
+# Dependencies for the QuaRK reproduction (versions tested on 2026-10-24, Python 3.14.2).
+numpy==2.5.4
+scipy==1.18.1
+scikit-learn==1.9.1
+# Photonic adaptation (phase 04); not imported by the current code.
+merlinquantum==0.4.2
+# Tests
+pytest==9.1.1
