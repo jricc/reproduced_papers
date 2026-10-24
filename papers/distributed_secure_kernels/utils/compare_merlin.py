@@ -1,6 +1,6 @@
 """Compare the MerLin adaptation with the Phase 3 gate-model distributed kernel (noiseless).
 
-Rule (``LOG.md``, Phase 4 Adaptation Plan): the adaptation preserves the
+Rule (frozen before the MerLin runs): the adaptation preserves the
 original behaviour when, for every setting, |delta| <= 2 sigma_pooled, with
 sigma_pooled = sqrt((s_gate^2 + s_merlin^2) / 2) and s the std over seeds of the
 5-fold mean accuracy. Writes ``results/merlin_comparison.{json,md}``.

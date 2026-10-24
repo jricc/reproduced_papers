@@ -6,7 +6,7 @@
   "logging": {
     "level": "info"
   },
-  "description": "Fig. 5 (c, d): RFF relative Frobenius error vs D at d = 100,000 (authors' kernel_approximation_error.py setting). Approved for gpu-reproduced-papers-1 if the local estimate exceeds 30 min.",
+  "description": "Fig. 5 (c, d): RFF relative Frobenius error vs D at d = 100,000 (authors' kernel_approximation_error.py setting).",
   "experiment": {
     "id": "rff_error_high_dimension",
     "kind": "rff_error",

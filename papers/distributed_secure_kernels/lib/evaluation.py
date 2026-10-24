@@ -10,7 +10,7 @@ Paper-faithful protocol (authors' ``tester.py`` and ``library.py``):
   2..7 components; the paper reports the best component count, i.e. a choice
   made on the evaluation folds (reported here as ``best_on_test_folds``).
 
-Corrected protocol (``LOG.md``, Fair Baseline Plan): for each outer fold,
+Corrected protocol (fixed before any run): for each outer fold,
 oversampling only duplicates training rows, the scaler and kernel PCA are
 fitted on the training fold, and C (and the component count) are chosen by an
 inner stratified 5-fold CV on the training fold.

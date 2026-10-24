@@ -13,7 +13,7 @@ Its photonic counterpart is register-wise Hong-Ou-Mandel interference:
   the swap-test probability (Garcia-Escartin and Chamorro-Posada, 2013).
 
 The teleportation stage has no deterministic linear-optics counterpart and is not
-modelled (see ``LOG.md``, Photonic Assessment). Threshold detectors cannot
+modelled (see the README, "Photonic Assessment and MerLin Extension"). Threshold detectors cannot
 implement the parity readout, hence the FOCK computation space.
 """
 

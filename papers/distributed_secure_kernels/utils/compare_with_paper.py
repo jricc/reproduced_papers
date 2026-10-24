@@ -4,7 +4,7 @@ Reads the ``summary.json`` of the paper-protocol sweeps (``table1_original``,
 ``noise_original``, ``shots_original``) and writes
 ``results/paper_comparison.{json,md}``.
 
-Matching rule (``LOG.md``, Fair Baseline Plan): a value is *matched* when our
+Matching rule (fixed before the sweeps): a value is *matched* when our
 mean over seeds lies within the paper's fold std, or within +-0.02 when the
 paper gives no std. Paper values come from Table 1 and Fig. 4 of the paper; the
 noise values (Fig. 3 shows bars only) come from the authors' released logs.

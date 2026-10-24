@@ -1,7 +1,7 @@
 """Datasets and preprocessing for the distributed secure kernel reproduction.
 
-The four real datasets are the files the authors' code reads (see the Data
-Acquisition Log in ``LOG.md``), copied under ``<data_root>/distributed_secure_kernels``:
+The four real datasets are the files the authors' code reads (see the README,
+"Data"), copied under ``<data_root>/distributed_secure_kernels``:
 
 - ``wine/wine_data.csv`` (scikit-learn copy of UCI Wine, 178 x 13, 3 classes);
 - ``digits/digits.csv.gz`` (scikit-learn 8 x 8 digits, 1,797 x 64, 10 classes);

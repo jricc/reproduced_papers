@@ -1,6 +1,6 @@
 """Build a sweep's result table from its runs' ``metrics.json`` (never from logs).
 
-Rule (frozen in ``LOG.md``, Fair Baseline Plan): for each candidate config,
+Rule (frozen before the sweeps): for each candidate config,
 method and model, the aggregate is the mean over seeds of the 5-fold mean
 accuracy; variability is the standard deviation over seeds (``ddof=1``); the
 mean fold standard deviation (the paper's ``±``) is reported alongside. A

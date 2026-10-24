@@ -8,7 +8,7 @@ Reads ``summary.json`` and every run's ``metrics.json`` of:
 - ``table1_original`` and ``merlin_original`` (paper protocol, for the
   paper-baseline comparison).
 
-Decision rule (``LOG.md``, Phase 5 Comparison Plan): two systems are equivalent
+Decision rule (frozen before the comparison runs): two systems are equivalent
 when |delta| <= 2 sigma_pooled (sigma_pooled = sqrt((s1^2 + s2^2) / 2), s the std
 over seeds of the 5-fold mean); otherwise different. Writes
 ``results/fair_comparison.{json,md}``.
