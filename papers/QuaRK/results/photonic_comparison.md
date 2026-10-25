@@ -83,16 +83,16 @@ Delta = MSE(photonic) − MSE(other), 2 SE rule; "lower" names the model with th
 | Photonic, exact | QuaRK, exact | Exponential fading (F2) | 0.307 ± 0.0622 | 0.328 ± 0.0438 | -0.0321 | 0.0394 | 3/5 | no clear separation |
 | Photonic, exact | QuaRK, exact | Volterra (F3) | 0.388 ± 0.065 | 0.391 ± 0.108 | -0.00387 | 0.0694 | 3/5 | no clear separation |
 | Photonic, exact | QuaRK, exact | One-step forecast (F1 as written) | 0.89 ± 0.0736 | 0.891 ± 0.0761 | -8.56e-04 | 0.00236 | 2/5 | no clear separation |
-| Photonic, 1000 shots | QuaRK, shadows, 1000 shots | Current-point readout (F1 as run) | 0.0565 ± 0.031 | 0.0881 ± 0.0424 | -0.0137 | 0.00617 | 4/5 | photonic lower |
-| Photonic, 1000 shots | QuaRK, shadows, 1000 shots | Exponential fading (F2) | 0.492 ± 0.0876 | 0.62 ± 0.026 | -0.148 | 0.0692 | 5/5 | photonic lower |
+| Photonic, 1000 shots | QuaRK, shadows, 1000 shots | Current-point readout (F1 as run) | 0.0565 ± 0.031 | 0.0881 ± 0.0424 | -0.0137 | 0.00617 | 4/5 | photonic lower (interval contains 0) |
+| Photonic, 1000 shots | QuaRK, shadows, 1000 shots | Exponential fading (F2) | 0.492 ± 0.0876 | 0.62 ± 0.026 | -0.148 | 0.0692 | 5/5 | photonic lower (interval contains 0) |
 | Photonic, 1000 shots | QuaRK, shadows, 1000 shots | Volterra (F3) | 0.589 ± 0.0796 | 0.634 ± 0.0985 | -0.0744 | 0.0535 | 4/5 | no clear separation |
 | Photonic, 1000 shots | QuaRK, shadows, 1000 shots | One-step forecast (F1 as written) | 0.901 ± 0.053 | 0.914 ± 0.0456 | -0.00567 | 0.0038 | 3/5 | no clear separation |
 | Photonic, 100 shots | QuaRK, shadows, 100 shots | Current-point readout (F1 as run) | 0.398 ± 0.154 | 0.435 ± 0.114 | -0.0152 | 0.0235 | 4/5 | no clear separation |
-| Photonic, 100 shots | QuaRK, shadows, 100 shots | Exponential fading (F2) | 0.744 ± 0.0564 | 0.832 ± 0.0479 | -0.103 | 0.0508 | 4/5 | photonic lower |
+| Photonic, 100 shots | QuaRK, shadows, 100 shots | Exponential fading (F2) | 0.744 ± 0.0564 | 0.832 ± 0.0479 | -0.103 | 0.0508 | 4/5 | photonic lower (interval contains 0) |
 | Photonic, 100 shots | QuaRK, shadows, 100 shots | Volterra (F3) | 0.809 ± 0.0462 | 0.803 ± 0.071 | 0.00966 | 0.0256 | 2/5 | no clear separation |
 | Photonic, 100 shots | QuaRK, shadows, 100 shots | One-step forecast (F1 as written) | 0.953 ± 0.0286 | 0.952 ± 0.0336 | 3.94e-04 | 0.00242 | 3/5 | no clear separation |
 | Photonic, 10000 shots | QuaRK, shadows, 10000 shots | Current-point readout (F1 as run) | 0.0083 ± 0.00635 | 0.015 ± 0.0104 | -0.00289 | 0.00103 | 5/5 | photonic lower |
-| Photonic, 10000 shots | QuaRK, shadows, 10000 shots | Exponential fading (F2) | 0.377 ± 0.094 | 0.454 ± 0.0311 | -0.0897 | 0.0397 | 4/5 | photonic lower |
+| Photonic, 10000 shots | QuaRK, shadows, 10000 shots | Exponential fading (F2) | 0.377 ± 0.094 | 0.454 ± 0.0311 | -0.0897 | 0.0397 | 4/5 | photonic lower (interval contains 0) |
 | Photonic, 10000 shots | QuaRK, shadows, 10000 shots | Volterra (F3) | 0.466 ± 0.079 | 0.492 ± 0.114 | -0.0386 | 0.0627 | 3/5 | no clear separation |
 | Photonic, 10000 shots | QuaRK, shadows, 10000 shots | One-step forecast (F1 as written) | 0.881 ± 0.0676 | 0.884 ± 0.064 | -0.00153 | 0.00142 | 4/5 | no clear separation |
 | Photonic, 100 shots | QuaRK, per-observable noise, 100 shots | Current-point readout (F1 as run) | 0.398 ± 0.154 | 0.126 ± 0.0543 | 0.119 | 0.0241 | 0/5 | other lower |
@@ -130,11 +130,11 @@ Delta = MSE(photonic) − MSE(other), 2 SE rule; "lower" names the model with th
 | Photonic, 1000 shots | Matérn kernel on the raw window | Current-point readout (F1 as run) | 0.0565 ± 0.031 | 7.40e-10 ± 2.45e-10 | 0.0249 | 0.00638 | 0/5 | other lower |
 | Photonic, 1000 shots | Matérn kernel on the raw window | Exponential fading (F2) | 0.492 ± 0.0876 | 1.30e-09 ± 5.83e-10 | 0.464 | 0.0499 | 0/5 | other lower |
 | Photonic, 1000 shots | Matérn kernel on the raw window | Volterra (F3) | 0.589 ± 0.0796 | 7.37e-05 ± 3.83e-05 | 0.87 | 0.0562 | 0/5 | other lower |
-| Photonic, 1000 shots | Matérn kernel on the raw window | One-step forecast (F1 as written) | 0.901 ± 0.053 | 0.843 ± 0.0903 | 0.0269 | 0.0131 | 0/5 | other lower |
+| Photonic, 1000 shots | Matérn kernel on the raw window | One-step forecast (F1 as written) | 0.901 ± 0.053 | 0.843 ± 0.0903 | 0.0269 | 0.0131 | 0/5 | other lower (interval contains 0) |
 | Photonic, 1000 shots | Linear ridge on the raw window | Current-point readout (F1 as run) | 0.0565 ± 0.031 | 5.03e-13 ± 1.12e-12 | 0.0249 | 0.00638 | 0/5 | other lower |
 | Photonic, 1000 shots | Linear ridge on the raw window | Exponential fading (F2) | 0.492 ± 0.0876 | 5.50e-13 ± 1.23e-12 | 0.464 | 0.0499 | 0/5 | other lower |
 | Photonic, 1000 shots | Linear ridge on the raw window | Volterra (F3) | 0.589 ± 0.0796 | 0.281 ± 0.133 | 0.45 | 0.0784 | 0/5 | other lower |
-| Photonic, 1000 shots | Linear ridge on the raw window | One-step forecast (F1 as written) | 0.901 ± 0.053 | 0.826 ± 0.0934 | 0.0342 | 0.0137 | 0/5 | other lower |
+| Photonic, 1000 shots | Linear ridge on the raw window | One-step forecast (F1 as written) | 0.901 ± 0.053 | 0.826 ± 0.0934 | 0.0342 | 0.0137 | 0/5 | other lower (interval contains 0) |
 | Photonic, 1000 shots | Echo state network, default | Current-point readout (F1 as run) | 0.0565 ± 0.031 | 1.58e-04 ± 1.60e-05 | 0.0249 | 0.00638 | 0/5 | other lower |
 | Photonic, 1000 shots | Echo state network, default | Exponential fading (F2) | 0.492 ± 0.0876 | 0.0634 ± 0.011 | 0.404 | 0.0449 | 0/5 | other lower |
 | Photonic, 1000 shots | Echo state network, default | Volterra (F3) | 0.589 ± 0.0796 | 0.0895 ± 0.0146 | 0.737 | 0.0441 | 0/5 | other lower |
@@ -143,19 +143,19 @@ Delta = MSE(photonic) − MSE(other), 2 SE rule; "lower" names the model with th
 | Photonic, 1000 shots | Echo state network, tuned | Exponential fading (F2) | 0.492 ± 0.0876 | 4.20e-06 ± 3.02e-06 | 0.464 | 0.0499 | 0/5 | other lower |
 | Photonic, 1000 shots | Echo state network, tuned | Volterra (F3) | 0.589 ± 0.0796 | 1.80e-05 ± 1.60e-05 | 0.87 | 0.0562 | 0/5 | other lower |
 | Photonic, 1000 shots | Echo state network, tuned | One-step forecast (F1 as written) | 0.901 ± 0.053 | 0.854 ± 0.0818 | 0.0216 | 0.0115 | 0/5 | no clear separation |
-| Photonic, 10000 shots | Matérn kernel on the raw window | Current-point readout (F1 as run) | 0.0083 ± 0.00635 | 7.40e-10 ± 2.45e-10 | 0.00368 | 0.00135 | 0/5 | other lower |
+| Photonic, 10000 shots | Matérn kernel on the raw window | Current-point readout (F1 as run) | 0.0083 ± 0.00635 | 7.40e-10 ± 2.45e-10 | 0.00368 | 0.00135 | 0/5 | other lower (interval contains 0) |
 | Photonic, 10000 shots | Matérn kernel on the raw window | Exponential fading (F2) | 0.377 ± 0.094 | 1.30e-09 ± 5.83e-10 | 0.349 | 0.0284 | 0/5 | other lower |
 | Photonic, 10000 shots | Matérn kernel on the raw window | Volterra (F3) | 0.466 ± 0.079 | 7.37e-05 ± 3.83e-05 | 0.684 | 0.0377 | 0/5 | other lower |
 | Photonic, 10000 shots | Matérn kernel on the raw window | One-step forecast (F1 as written) | 0.881 ± 0.0676 | 0.843 ± 0.0903 | 0.0177 | 0.0115 | 0/5 | no clear separation |
-| Photonic, 10000 shots | Linear ridge on the raw window | Current-point readout (F1 as run) | 0.0083 ± 0.00635 | 5.03e-13 ± 1.12e-12 | 0.00368 | 0.00135 | 0/5 | other lower |
+| Photonic, 10000 shots | Linear ridge on the raw window | Current-point readout (F1 as run) | 0.0083 ± 0.00635 | 5.03e-13 ± 1.12e-12 | 0.00368 | 0.00135 | 0/5 | other lower (interval contains 0) |
 | Photonic, 10000 shots | Linear ridge on the raw window | Exponential fading (F2) | 0.377 ± 0.094 | 5.50e-13 ± 1.23e-12 | 0.349 | 0.0284 | 0/5 | other lower |
 | Photonic, 10000 shots | Linear ridge on the raw window | Volterra (F3) | 0.466 ± 0.079 | 0.281 ± 0.133 | 0.265 | 0.0935 | 1/5 | other lower |
-| Photonic, 10000 shots | Linear ridge on the raw window | One-step forecast (F1 as written) | 0.881 ± 0.0676 | 0.826 ± 0.0934 | 0.025 | 0.012 | 0/5 | other lower |
-| Photonic, 10000 shots | Echo state network, default | Current-point readout (F1 as run) | 0.0083 ± 0.00635 | 1.58e-04 ± 1.60e-05 | 0.00361 | 0.00135 | 0/5 | other lower |
+| Photonic, 10000 shots | Linear ridge on the raw window | One-step forecast (F1 as written) | 0.881 ± 0.0676 | 0.826 ± 0.0934 | 0.025 | 0.012 | 0/5 | other lower (interval contains 0) |
+| Photonic, 10000 shots | Echo state network, default | Current-point readout (F1 as run) | 0.0083 ± 0.00635 | 1.58e-04 ± 1.60e-05 | 0.00361 | 0.00135 | 0/5 | other lower (interval contains 0) |
 | Photonic, 10000 shots | Echo state network, default | Exponential fading (F2) | 0.377 ± 0.094 | 0.0634 ± 0.011 | 0.289 | 0.0241 | 0/5 | other lower |
 | Photonic, 10000 shots | Echo state network, default | Volterra (F3) | 0.466 ± 0.079 | 0.0895 ± 0.0146 | 0.552 | 0.0286 | 0/5 | other lower |
 | Photonic, 10000 shots | Echo state network, default | One-step forecast (F1 as written) | 0.881 ± 0.0676 | 0.848 ± 0.0919 | 0.0156 | 0.011 | 0/5 | no clear separation |
-| Photonic, 10000 shots | Echo state network, tuned | Current-point readout (F1 as run) | 0.0083 ± 0.00635 | 2.07e-07 ± 4.25e-08 | 0.00368 | 0.00135 | 0/5 | other lower |
+| Photonic, 10000 shots | Echo state network, tuned | Current-point readout (F1 as run) | 0.0083 ± 0.00635 | 2.07e-07 ± 4.25e-08 | 0.00368 | 0.00135 | 0/5 | other lower (interval contains 0) |
 | Photonic, 10000 shots | Echo state network, tuned | Exponential fading (F2) | 0.377 ± 0.094 | 4.20e-06 ± 3.02e-06 | 0.349 | 0.0284 | 0/5 | other lower |
 | Photonic, 10000 shots | Echo state network, tuned | Volterra (F3) | 0.466 ± 0.079 | 1.80e-05 ± 1.60e-05 | 0.684 | 0.0377 | 0/5 | other lower |
 | Photonic, 10000 shots | Echo state network, tuned | One-step forecast (F1 as written) | 0.881 ± 0.0676 | 0.854 ± 0.0818 | 0.0124 | 0.0102 | 1/5 | no clear separation |
@@ -166,7 +166,7 @@ Delta = MSE(photonic) − MSE(other), 2 SE rule; "lower" names the model with th
 | Photonic, exact | Linear ridge on the raw window | Current-point readout (F1 as run) | 1.43e-04 ± 1.71e-04 | 5.03e-13 ± 1.12e-12 | 6.34e-05 | 3.58e-05 | 0/5 | no clear separation |
 | Photonic, exact | Linear ridge on the raw window | Exponential fading (F2) | 0.307 ± 0.0622 | 5.50e-13 ± 1.23e-12 | 0.287 | 0.0265 | 0/5 | other lower |
 | Photonic, exact | Linear ridge on the raw window | Volterra (F3) | 0.388 ± 0.065 | 0.281 ± 0.133 | 0.153 | 0.095 | 1/5 | no clear separation |
-| Photonic, exact | Linear ridge on the raw window | One-step forecast (F1 as written) | 0.89 ± 0.0736 | 0.826 ± 0.0934 | 0.0284 | 0.012 | 0/5 | other lower |
+| Photonic, exact | Linear ridge on the raw window | One-step forecast (F1 as written) | 0.89 ± 0.0736 | 0.826 ± 0.0934 | 0.0284 | 0.012 | 0/5 | other lower (interval contains 0) |
 | Photonic, exact | Echo state network, default | Current-point readout (F1 as run) | 1.43e-04 ± 1.71e-04 | 1.58e-04 ± 1.60e-05 | -5.56e-06 | 3.69e-05 | 4/5 | no clear separation |
 | Photonic, exact | Echo state network, default | Exponential fading (F2) | 0.307 ± 0.0622 | 0.0634 ± 0.011 | 0.227 | 0.02 | 0/5 | other lower |
 | Photonic, exact | Echo state network, default | Volterra (F3) | 0.388 ± 0.065 | 0.0895 ± 0.0146 | 0.44 | 0.0335 | 0/5 | other lower |
@@ -182,7 +182,7 @@ Delta = MSE(photonic) − MSE(other), 2 SE rule; "lower" names the model with th
 | Photonic, exact, distinguishable photons | Linear ridge on the raw window | Current-point readout (F1 as run) | 1.40e-04 ± 1.65e-04 | 5.03e-13 ± 1.12e-12 | 6.16e-05 | 3.44e-05 | 0/5 | no clear separation |
 | Photonic, exact, distinguishable photons | Linear ridge on the raw window | Exponential fading (F2) | 0.307 ± 0.0618 | 5.50e-13 ± 1.23e-12 | 0.287 | 0.0264 | 0/5 | other lower |
 | Photonic, exact, distinguishable photons | Linear ridge on the raw window | Volterra (F3) | 0.387 ± 0.0656 | 0.281 ± 0.133 | 0.153 | 0.0942 | 1/5 | no clear separation |
-| Photonic, exact, distinguishable photons | Linear ridge on the raw window | One-step forecast (F1 as written) | 0.89 ± 0.0728 | 0.826 ± 0.0934 | 0.0286 | 0.0118 | 0/5 | other lower |
+| Photonic, exact, distinguishable photons | Linear ridge on the raw window | One-step forecast (F1 as written) | 0.89 ± 0.0728 | 0.826 ± 0.0934 | 0.0286 | 0.0118 | 0/5 | other lower (interval contains 0) |
 | Photonic, exact, distinguishable photons | Echo state network, default | Current-point readout (F1 as run) | 1.40e-04 ± 1.65e-04 | 1.58e-04 ± 1.60e-05 | -7.35e-06 | 3.56e-05 | 4/5 | no clear separation |
 | Photonic, exact, distinguishable photons | Echo state network, default | Exponential fading (F2) | 0.307 ± 0.0618 | 0.0634 ± 0.011 | 0.227 | 0.02 | 0/5 | other lower |
 | Photonic, exact, distinguishable photons | Echo state network, default | Volterra (F3) | 0.387 ± 0.0656 | 0.0895 ± 0.0146 | 0.439 | 0.0369 | 0/5 | other lower |

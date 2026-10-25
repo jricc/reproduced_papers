@@ -77,7 +77,7 @@ for sweep in main_comparison shot_noise_ablation scaling photonic_adaptation; do
 done
 ```
 
-Statistics, comparisons with the authors' run and with the photonic version, and figures:
+Statistics, comparisons (with the authors' run, with the photonic version, and of all models together), and figures:
 
 ```bash
 python papers/QuaRK/utils/forecast_noise_floor.py papers/QuaRK/outdir/sweep_main_comparison --candidate quark
@@ -88,6 +88,9 @@ python papers/QuaRK/utils/compare_with_release.py papers/QuaRK/outdir/run_<times
   --release-run data/QuaRK/authors_release_v1.0.0/storage/results/reg_sweep/c-shadows/full/N=10000__w=25__d=3__s=100/2026-02-02_14-02-13
 python papers/QuaRK/utils/compare_photonic_with_quark.py --photonic papers/QuaRK/outdir/sweep_photonic_adaptation \
   --main papers/QuaRK/outdir/sweep_main_comparison --shot-noise papers/QuaRK/outdir/sweep_shot_noise_ablation
+python papers/QuaRK/utils/compare_fair_baselines.py --main papers/QuaRK/outdir/sweep_main_comparison \
+  --photonic papers/QuaRK/outdir/sweep_photonic_adaptation --shot-noise papers/QuaRK/outdir/sweep_shot_noise_ablation \
+  --scaling papers/QuaRK/outdir/sweep_scaling --release-comparison papers/QuaRK/results/release_comparison.json
 ```
 
 The `plot_*.py` scripts in `utils/` draw the figures; each one's docstring gives its command.
@@ -149,7 +152,7 @@ Five messages:
 4. [The paper's learning claims hold only in part](#4-the-papers-learning-claims-hold-only-in-part)
 5. [A photonic version of the reservoir matches QuaRK, with or without photon interference](#5-a-photonic-version-of-the-reservoir-matches-quark-with-or-without-photon-interference)
 
-Metric: the test MSE on 2,000 held-out windows. The normalized test MSE divides it by the variance of the test labels, so tasks can be compared. Unless stated otherwise, λ_reg is chosen on validation data, values are means over the 5 seeds, and two models are compared seed by seed with a rule fixed before the runs (difference beyond twice its standard error). Every table behind these messages, including the reservoir-size sweep: [`results/statistics.md`](results/statistics.md), and for the photonic version [`results/photonic_comparison.md`](results/photonic_comparison.md).
+Metric: the test MSE on 2,000 held-out windows. The normalized test MSE divides it by the variance of the test labels, so tasks can be compared. Unless stated otherwise, λ_reg is chosen on validation data, values are means over the 5 seeds, and two models are compared seed by seed with a rule fixed before the runs (difference beyond twice its standard error). Every table behind these messages, including the reservoir-size sweep: [`results/statistics.md`](results/statistics.md), and for the photonic version [`results/photonic_comparison.md`](results/photonic_comparison.md). All ten models side by side, with how they are matched and their run times: [`results/fair_comparison.md`](results/fair_comparison.md).
 
 ### 1. Our run at the authors' seed matches their published run
 
@@ -174,7 +177,7 @@ Figures: [Fig. 2](results/fig2_regularization_sweep.png), [Fig. 3](results/fig3_
 
 **Look at:** each row is a model and each dot a seed; the bar is the mean. The axis is logarithmic. QuaRK's rows (blue) lie to the right, at higher error, of every classical row (orange) in the three panels. Values below 10⁻¹⁴ are drawn at the left edge: the linear ridge represents F1 and F2 exactly, because both are linear in the window.
 
-**Result:** each classical baseline has a lower test MSE than QuaRK on each of the three tasks, in 5 of 5 seeds. The untuned echo state network, a random fixed reservoir like QuaRK's, reaches a normalized test MSE of 0.063 (F2) and 0.090 (F3), against QuaRK's 0.48 and 0.51. Even without shot noise, QuaRK stays behind every baseline on F2 and F3 (5 of 5 seeds; this comparison was added after the runs).
+**Result:** each classical baseline has a lower test MSE than QuaRK on each of the three tasks, in 5 of 5 seeds. The untuned echo state network, a random fixed reservoir like QuaRK's with the same 315 features and readout, reaches a normalized test MSE of 0.063 (F2) and 0.090 (F3), against QuaRK's 0.48 and 0.51. Even without shot noise, QuaRK stays behind every baseline on F2 and F3 (5 of 5 seeds; this comparison was added after the runs).
 
 The paper reports no baseline; these four models are ours.
 
@@ -212,7 +215,7 @@ The photonic version (see the Reproduction Scope) ran the same experiments on th
 
 **Result:** with exact features, the photonic reservoir and QuaRK are not separated on any task, and distinguishable photons, which cannot interfere, give the same test MSE (the means differ by at most 0.0011 on the three tasks; the spread between seeds is 0.06 on F2 and F3).
 
-In every photonic run, the paper's first two claims hold on the three tasks: the training MSE falls below 10⁻¹⁶ at λ_reg = 10⁻¹², and the test MSE is lower at N = 8000 than at N = 100. With 1000 shots shared by all features, the photonic version has a lower test MSE than QuaRK with random-Pauli shadows on F1 and F2 (4 and 5 of 5 seeds; not separated on F3); QuaRK with the authors' milder noise model stays lower on F1 and F3. Like QuaRK, it stays behind the kernel on the raw window and both echo state networks on F2 and F3, in 5 of 5 seeds.
+In every photonic run, the paper's first two claims hold on the three tasks: the training MSE falls below 10⁻¹⁶ at λ_reg = 10⁻¹², and the test MSE is lower at N = 8000 than at N = 100. With 1000 shots shared by all features, the photonic version has a lower test MSE than QuaRK with random-Pauli shadows on F1 and F2 under our rule (4 and 5 of 5 seeds), but the 95 % intervals of both differences still contain 0; the two are not separated on F3. QuaRK with the authors' milder noise model stays lower on F1 and F3. Like QuaRK, it stays behind the kernel on the raw window and both echo state networks on F2 and F3, in 5 of 5 seeds.
 
 Our reading: at 3 photons in 14 modes, the accuracy comes from the nonlinear encoding and the fading memory, not from quantum interference. The paper has no photonic version; this one is ours.
 
@@ -233,7 +236,7 @@ cd papers/QuaRK
 pytest -q
 ```
 
-32 tests: the circuit against the closed-form reset, contraction, the Matérn kernel against scikit-learn, interpolation, the Pauli observables and shadows, the bound formula, the match with the authors' release (data, split, features), the runner, the CLI flags and every config. For the photonic version: MerLin's probabilities against permanents computed from the same circuit (with and without interference), threshold detection without postselection, the reset reproduced as a mixture of shorter circuits, and the features and their seeding.
+37 tests: the circuit against the closed-form reset, contraction, the Matérn kernel against scikit-learn, interpolation, the Pauli observables and shadows, the bound formula, the match with the authors' release (data, split, features), the runner, the CLI flags and every config. For the classical baselines: the echo state network's update, seeding and fading memory, and its size matched to QuaRK's features. For the photonic version: MerLin's probabilities against permanents computed from the same circuit (with and without interference), threshold detection without postselection, the reset reproduced as a mixture of shorter circuits, and the features and their seeding.
 
 ## Citation and License
 

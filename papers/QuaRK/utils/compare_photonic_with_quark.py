@@ -363,6 +363,8 @@ def to_markdown(report: dict) -> str:
     for r in report["comparisons"]:
         p = r["paired"]
         label = p["label"].replace(r["a"], "photonic").replace(r["b"], "other")
+        if p["flag_interval_contains_zero"]:
+            label += " (interval contains 0)"
         lines.append(
             f"| {LABELS[r['a']]} | {LABELS[r['b']]} | {TASK_LABELS[r['task']]} "
             f"| {fmt(r['normalized_a']['mean'])} ± {fmt(r['normalized_a']['std'])} "

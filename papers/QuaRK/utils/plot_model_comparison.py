@@ -3,12 +3,16 @@
 Each dot is one seed; the bar marks the mean over seeds (as in the tables). Values are
 normalized by each seed's test-label variance, which leaves the order of the models
 within a seed unchanged. Values below ``FLOOR`` (exact fits of the linear ridge) are
-drawn at the floor with a left-pointing marker.
+drawn at the floor with a left-pointing marker. With ``--photonic``, the photonic
+adaptation's 1000-shot, exact and distinguishable-photon configurations are added
+between QuaRK and the classical baselines, and the figure is saved as
+``fair_comparison`` instead of ``model_comparison``.
 
 Usage (from the repository root)::
 
     python papers/QuaRK/utils/plot_model_comparison.py \\
-        papers/QuaRK/outdir/sweep_main_comparison --label "<scope>"
+        papers/QuaRK/outdir/sweep_main_comparison --label "<scope>" \\
+        [--photonic papers/QuaRK/outdir/sweep_photonic_adaptation]
 """
 
 from __future__ import annotations
@@ -29,17 +33,29 @@ from plot_style import (
     selected,
 )
 
-MODELS = (
+QUARK_MODELS = (
     ("quark", "QuaRK (paper settings)", "quantum"),
     ("quark_exact", "QuaRK, exact expectations", "quantum"),
     ("quark_shadows", "QuaRK, random-Pauli shadows", "quantum"),
+)
+PHOTONIC_MODELS = (
+    ("quark_merlin", "Photonic, 1000 shots", "photonic"),
+    ("quark_exact_merlin", "Photonic, exact", "photonic"),
+    ("quark_distinguishable_merlin", "Photonic, distinguishable photons", "photonic"),
+)
+CLASSICAL_MODELS = (
     ("raw_window_kernel", "Matérn kernel, raw window", "classical"),
     ("raw_window_linear", "Linear ridge, raw window", "classical"),
     ("esn_default", "Echo state network, default", "classical"),
     ("esn_tuned", "Echo state network, tuned", "classical"),
 )
-FAMILY_COLORS = {"quantum": "#2a78d6", "classical": "#eb6834"}
-FAMILY_LABELS = {"quantum": "QuaRK variants", "classical": "Classical baselines (ours)"}
+# Palette slots 1-3 in fixed order; the families sit in that order, top to bottom.
+FAMILY_COLORS = {"quantum": "#2a78d6", "photonic": "#1baf7a", "classical": "#eb6834"}
+FAMILY_LABELS = {
+    "quantum": "QuaRK variants",
+    "photonic": "Photonic adaptation (ours, simulated)",
+    "classical": "Classical baselines (ours)",
+}
 FLOOR = 1e-14
 
 
@@ -47,14 +63,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("sweep_dir", type=Path)
     parser.add_argument("--label", required=True)
+    parser.add_argument("--photonic", type=Path)
     args = parser.parse_args()
 
     apply_style()
     runs = load_sweep(args.sweep_dir)
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.4), sharey=True)
-    rows = np.arange(len(MODELS))[::-1]
+    models = QUARK_MODELS + CLASSICAL_MODELS
+    if args.photonic:
+        runs += load_sweep(args.photonic)
+        models = QUARK_MODELS + PHOTONIC_MODELS + CLASSICAL_MODELS
+    families = [f for f in FAMILY_COLORS if any(m[2] == f for m in models)]
+    fig, axes = plt.subplots(1, 3, figsize=(13, 1.18 + 0.46 * len(models)), sharey=True)
+    rows = np.arange(len(models))[::-1]
     for ax, task in zip(axes, PAPER_TASKS):
-        for row, (candidate, _name, family) in zip(rows, MODELS):
+        for row, (candidate, _name, family) in zip(rows, models):
             values = np.array(
                 [
                     selected(r["metrics"], task, "normalized_mse_test")
@@ -93,9 +115,9 @@ def main() -> int:
         ax.set_xscale("log")
         ax.set_xlim(FLOOR / 3, 3)
         ax.set_title(TASK_LABELS[task], fontsize=9, loc="left")
-        ax.set_yticks(rows, [name for _c, name, _f in MODELS], fontsize=8.5)
+        ax.set_yticks(rows, [name for _c, name, _f in models], fontsize=8.5)
         ax.grid(axis="y", visible=False)
-        ax.set_ylim(-0.7, len(MODELS) - 0.3)
+        ax.set_ylim(-0.7, len(models) - 0.3)
         ax.set_xlabel("Normalized test MSE (log scale)")
     handles = [
         Line2D(
@@ -106,7 +128,7 @@ def main() -> int:
             color=FAMILY_COLORS[f],
             label=FAMILY_LABELS[f],
         )
-        for f in FAMILY_COLORS
+        for f in families
     ]
     handles += [
         Line2D([], [], color=TEXT_SECONDARY, lw=2.5, label="Mean of 5 seeds"),
@@ -119,7 +141,13 @@ def main() -> int:
             label="Below 10⁻¹⁴ (exact fit)",
         ),
     ]
-    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=8, frameon=False)
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=len(handles),
+        fontsize=8,
+        frameon=False,
+    )
     fig.suptitle(
         "Normalized test MSE (MSE / variance of the test labels), ridge chosen on "
         f"validation data · {args.label}",
@@ -128,7 +156,8 @@ def main() -> int:
         fontsize=10,
     )
     fig.tight_layout(rect=(0, 0.07, 1, 0.95))
-    saved = save(fig, args.sweep_dir, "model_comparison")
+    name = "fair_comparison" if args.photonic else "model_comparison"
+    saved = save(fig, args.sweep_dir, name)
     print("\n".join(str(p) for p in saved))
     return 0
 
