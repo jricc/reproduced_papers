@@ -1,7 +1,7 @@
 """QuaRK reproduction runner: one model, one seed, all tasks.
 
-A run builds the windows dataset, computes the features of one model (QuaRK or a
-classical baseline), then for every task:
+A run builds the windows dataset, computes the features of one model (QuaRK, its
+photonic MerLin adaptation, or a classical baseline), then for every task:
 
 1. tunes the Matérn kernel on the training set (kernel models only);
 2. sweeps ``reg`` over the paper's grid (Fig. 2) and records train, validation and
@@ -30,14 +30,15 @@ from .data import check_against_release, generate_dataset
 from .experiment_logging import git_state, sha256, utc_now, write_json
 from .kernel_ridge import (
     decay_slope,
-    kernel_fit_predict,
     kernel_regularization_sweep,
     linear_regularization_sweep,
     linear_ridge_fit_predict,
+    solve_dual,
     standardize,
     tune_matern,
 )
 from .measurement import k_local_paulis, pauli_features
+from .quark_merlin import photonic_features
 from .reservoir import draw_reservoir_parameters, reservoir_states
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,8 @@ def build_features(cfg, dataset, task_index):
     kind = model["kind"]
     if kind == "quark":
         return _quark_features(dataset.windows, model["quark"], seed)
+    if kind == "quark_merlin":
+        return photonic_features(dataset.windows, model["merlin"], model["quark"], seed)
     if kind in ("raw_window_kernel", "raw_window_linear"):
         return raw_window_features(dataset.windows), {}
     if kind == "esn_kernel":
@@ -151,8 +154,11 @@ def _evaluate_task(cfg, dataset, features, task_index, model_info, artifacts):
     reg_grid = np.asarray(readout["reg_grid"], dtype=float)
     tuning = readout["tuning"]
     labels = dataset.labels[task_index]
-    # Chronological order of the training rows defines the nested prefixes of Fig. 4.
-    train_idx = np.sort(dataset.train_idx)
+    # Training rows stay in the authors' order (their random permutation): the tuning
+    # split and the regularization sweep index into it, as in their code. Fig. 4 uses
+    # nested prefixes in time order, taken through ``chronological``.
+    train_idx = dataset.train_idx
+    chronological = np.argsort(train_idx)
     y_train, y_test = labels[train_idx], labels[dataset.test_idx]
     train, test = standardize(features[train_idx], features[dataset.test_idx])
     is_kernel = cfg["model"]["kind"] != "raw_window_linear"
@@ -161,7 +167,7 @@ def _evaluate_task(cfg, dataset, features, task_index, model_info, artifacts):
     if is_kernel:
         kernel = tune_matern(train, y_train, tuning, task=task)
         result["kernel"] = kernel
-        sweep = kernel_regularization_sweep(
+        sweep, gram, cross_test = kernel_regularization_sweep(
             train,
             y_train,
             test,
@@ -172,14 +178,7 @@ def _evaluate_task(cfg, dataset, features, task_index, model_info, artifacts):
             tuning=tuning,
         )
         # Fig. 3: fit at the tuning ridge on the full training set, first windows shown.
-        fit_train, _, _, _ = kernel_fit_predict(
-            train,
-            y_train,
-            test[:1],
-            xi=kernel["xi"],
-            nu=kernel["nu"],
-            reg=float(tuning["reg"]),
-        )
+        fit_train = gram @ solve_dual(gram, y_train, float(tuning["reg"]))
         shown = int(cfg["outputs"]["fit_examples"])
         artifacts[f"fit_examples/{task}/prediction"] = fit_train[:shown]
         artifacts[f"fit_examples/{task}/truth"] = y_train[:shown]
@@ -202,20 +201,18 @@ def _evaluate_task(cfg, dataset, features, task_index, model_info, artifacts):
         reg = float(reg_grid[best])
         size_test, size_train = [], []
         for size in sizes:
+            rows = chronological[:size]
             if is_kernel:
-                pred_train, pred_test, _, _ = kernel_fit_predict(
-                    train[:size],
-                    y_train[:size],
-                    test,
-                    xi=kernel["xi"],
-                    nu=kernel["nu"],
-                    reg=reg,
-                )
+                block = gram[np.ix_(rows, rows)]
+                weights = solve_dual(block, y_train[rows], reg)
+                pred_train = block @ weights
+                pred_test = cross_test[:, rows] @ weights
+                del block
             else:
                 pred_train, pred_test = linear_ridge_fit_predict(
-                    train[:size], y_train[:size], test, reg
+                    train[rows], y_train[rows], test, reg
                 )
-            size_train.append(float(np.mean((pred_train - y_train[:size]) ** 2)))
+            size_train.append(float(np.mean((pred_train - y_train[rows]) ** 2)))
             size_test.append(float(np.mean((pred_test - y_test) ** 2)))
         artifacts[f"training_size_sweep/{task}/{selection}/mse_test"] = np.array(
             size_test
@@ -289,7 +286,7 @@ def train_and_evaluate(cfg, run_dir: Path) -> None:
     config_path = run_dir / "config_snapshot.json"
     status = {
         "schema_version": 1,
-        "run_id": run_dir.name,
+        "run_id": cfg.get("run_id", run_dir.name),
         "sweep_id": cfg.get("sweep_id"),
         "candidate": cfg.get("candidate", {"model": cfg["model"]["kind"]}),
         "seed": int(cfg["seed"]),

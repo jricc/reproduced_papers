@@ -65,6 +65,18 @@
         "kind": "config_path",
         "path": "model.quark.num_reservoirs"
       }
+    },
+    {
+      "flags": [
+        "--merlin-shots"
+      ],
+      "help": "Shots per window and sub-reservoir for the photonic MerLin adaptation",
+      "type": "int",
+      "default": null,
+      "apply": {
+        "kind": "config_path",
+        "path": "model.merlin.shots"
+      }
     }
   ]
 }

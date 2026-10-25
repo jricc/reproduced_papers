@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import logging
 import math
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from scipy.optimize import minimize_scalar
@@ -58,10 +60,28 @@ def matern_from_distances(distances: np.ndarray, xi: float, nu: float) -> np.nda
         return kernel
     argument = distances * (math.sqrt(2.0 * nu) / xi)
     argument[argument == 0.0] += np.finfo(float).eps  # as in scikit-learn
-    kernel = kv(nu, argument)
+    kernel = _threaded_kv(nu, argument)
     kernel *= np.power(argument, nu, out=argument)
     kernel *= (2.0 ** (1.0 - nu)) / gamma_function(nu)
     return kernel
+
+
+def _threaded_kv(nu: float, argument: np.ndarray) -> np.ndarray:
+    """``scipy.special.kv`` over row blocks in threads (the ufunc releases the GIL).
+
+    Element-wise, so the result is bit-identical to a single call.
+    """
+    if argument.ndim != 2 or argument.shape[0] < 64:
+        return kv(nu, argument)
+    out = np.empty_like(argument)
+    blocks = np.array_split(np.arange(argument.shape[0]), os.cpu_count() or 1)
+
+    def fill(rows):
+        out[rows[0] : rows[-1] + 1] = kv(nu, argument[rows[0] : rows[-1] + 1])
+
+    with ThreadPoolExecutor(len(blocks)) as pool:
+        list(pool.map(fill, [b for b in blocks if b.size]))
+    return out
 
 
 def solve_dual(gram: np.ndarray, targets: np.ndarray, reg: float) -> np.ndarray:
@@ -160,8 +180,9 @@ def kernel_regularization_sweep(
 
     Returns
     -------
-    dict
-        Arrays over the grid: ``mse_train``, ``mse_val``, ``mse_test``, ``rkhs_norm``.
+    tuple[dict, numpy.ndarray, numpy.ndarray]
+        Arrays over the grid (``mse_train``, ``mse_val``, ``mse_test``, ``rkhs_norm``),
+        then the full training Gram matrix and the test-train kernel, for reuse.
     """
     inner, val = inner_validation_split(
         train.shape[0], float(tuning["val_ratio"]), int(tuning["seed"])
@@ -183,15 +204,7 @@ def kernel_regularization_sweep(
         out["mse_train"][i] = np.mean((gram @ weights - y_train) ** 2)
         out["mse_test"][i] = np.mean((cross_test @ weights - y_test) ** 2)
         out["rkhs_norm"][i] = math.sqrt(max(float(weights @ gram @ weights), 0.0))
-    return out
-
-
-def kernel_fit_predict(train, y_train, evaluation, *, xi, nu, reg):
-    """Fit Matérn KRR and return ``(train_prediction, evaluation_prediction, weights, gram)``."""
-    gram = matern_from_distances(cdist(train, train), xi, nu)
-    weights = solve_dual(gram, y_train, reg)
-    cross = matern_from_distances(cdist(evaluation, train), xi, nu)
-    return gram @ weights, cross @ weights, weights, gram
+    return out, gram, cross_test
 
 
 def linear_ridge_fit_predict(train, y_train, evaluation, reg):
