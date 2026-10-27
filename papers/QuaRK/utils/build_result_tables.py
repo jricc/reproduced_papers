@@ -13,7 +13,9 @@ Usage (from the repository root)::
 ``<authors' release run>`` is ``data/QuaRK/authors_release_v1.0.0/storage/results/
 reg_sweep/c-shadows/full/N=10000__w=25__d=3__s=100/2026-02-02_14-02-13``. Writes
 ``results/result_tables.json`` and ``results/result_tables.md``; the JSON also keeps
-every seed's values, which the notebook plots.
+every seed's values, which the notebook plots. With ``--check`` it writes nothing: it
+recomputes both files and compares them byte for byte with those in ``results/``
+(exit status 1 if either differs).
 
 Sources
 -------
@@ -849,6 +851,7 @@ def main() -> int:
     parser.add_argument("--shot-noise", type=Path, required=True)
     parser.add_argument("--scaling", type=Path, required=True)
     parser.add_argument("--photonic", type=Path, required=True)
+    parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
 
     metrics, arrays = load_run(args.run)
@@ -894,16 +897,28 @@ def main() -> int:
         "merlin_pin": merlin_pin(),
         "sweeps": sweeps,
     }
-    (RESULTS_DIR / "result_tables.json").write_text(
-        json.dumps(_jsonable(report), indent=2)
-    )
-    (RESULTS_DIR / "result_tables.md").write_text(to_markdown(report))
-    print(RESULTS_DIR / "result_tables.json")
-    print(RESULTS_DIR / "result_tables.md")
+    outputs = {
+        "result_tables.json": json.dumps(_jsonable(report), indent=2),
+        "result_tables.md": to_markdown(report),
+    }
     for s in sweeps.values():
         print(
             f"{s['sweep_id']}: {s['coverage']} {s['completed_runs']}/{s['expected_runs']}"
         )
+    if args.check:
+        differing = [
+            name
+            for name, text in outputs.items()
+            if (RESULTS_DIR / name).read_text() != text
+        ]
+        for name in outputs:
+            print(
+                f"results/{name}: {'DIFFERENT' if name in differing else 'IDENTICAL'}"
+            )
+        return 1 if differing else 0
+    for name, text in outputs.items():
+        (RESULTS_DIR / name).write_text(text)
+        print(RESULTS_DIR / name)
     return 0
 
 
