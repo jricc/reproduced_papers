@@ -56,9 +56,7 @@ def train_and_evaluate(cfg: dict[str, Any], run_dir: Path) -> None:
         raise ValueError("experiment.max_samples must be positive")
 
     data_path = (
-        Path(cfg["data_root"])
-        / "qsvm_medimage"
-        / str(dataset_cfg["filename"])
+        Path(cfg["data_root"]) / "qsvm_medimage" / str(dataset_cfg["filename"])
     ).resolve()
     if not data_path.is_file() and dataset_cfg.get("download_if_missing") is True:
         from scripts.prepare_pneumoniamnist import main as prepare_data
@@ -89,17 +87,9 @@ def train_and_evaluate(cfg: dict[str, Any], run_dir: Path) -> None:
         pca_dim,
         max_samples,
     )
-    logging.getLogger(
-        "matplotlib"
-    ).setLevel(
-        logging.WARNING
-    )
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
 
-    logging.getLogger(
-        "matplotlib.font_manager"
-    ).setLevel(
-        logging.WARNING
-    )
+    logging.getLogger("matplotlib.font_manager").setLevel(logging.WARNING)
     arguments = [
         "--data_path",
         data_argument,

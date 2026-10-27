@@ -8,10 +8,7 @@ from urllib.request import urlopen
 import numpy as np
 import pandas as pd
 
-DATASET_URL = (
-    "https://zenodo.org/records/10519652/files/"
-    "pneumoniamnist.npz?download=1"
-)
+DATASET_URL = "https://zenodo.org/records/10519652/files/pneumoniamnist.npz?download=1"
 DATASET_MD5 = "28209eda62fecd6e6a2d98b1501bb15f"
 LABEL_NAMES = {0: "normal", 1: "pneumonia"}
 

@@ -11,6 +11,7 @@ Usage:
 
 import os
 import sys
+
 import pytest
 
 # Add parent directory to path
@@ -23,26 +24,31 @@ class TestCoreImports:
     def test_numpy_import(self):
         """Test numpy import."""
         import numpy as np
+
         assert np.__version__ is not None
 
     def test_pandas_import(self):
         """Test pandas import."""
         import pandas as pd
+
         assert pd.__version__ is not None
 
     def test_sklearn_import(self):
         """Test scikit-learn import."""
         import sklearn
+
         assert sklearn.__version__ is not None
 
     def test_qiskit_import(self):
         """Test qiskit import."""
         import qiskit
+
         assert qiskit.__version__ is not None
 
     def test_matplotlib_import(self):
         """Test matplotlib import."""
         import matplotlib
+
         matplotlib.use("Agg")
         assert matplotlib.__version__ is not None
 
@@ -53,16 +59,19 @@ class TestQVEModule:
     def test_qve_import(self):
         """Test qve module import."""
         import qve
+
         assert qve is not None
 
     def test_set_seed_function(self):
         """Test set_seed function."""
         from qve import set_seed
+
         set_seed(42)  # Should not raise
 
     def test_make_bsp_function(self):
         """Test make_bsp circuit creation."""
         from qve import make_bsp
+
         qc = make_bsp(2)
         assert qc is not None
         assert qc.num_qubits == 2
@@ -70,7 +79,7 @@ class TestQVEModule:
     def test_build_qsvm_qc_function(self):
         """Test build_qsvm_qc function."""
         import numpy as np
-        from qve import make_bsp, build_qsvm_qc
+        from qve import build_qsvm_qc, make_bsp
 
         n_qubits = 2
         bsp_qc = make_bsp(n_qubits)
@@ -86,6 +95,7 @@ class TestQuantumCircuits:
     def test_quantum_circuit_creation(self):
         """Test basic QuantumCircuit creation."""
         from qiskit import QuantumCircuit
+
         qc = QuantumCircuit(2)
         qc.h(0)
         qc.cx(0, 1)
@@ -95,6 +105,7 @@ class TestQuantumCircuits:
     def test_parameter_vector(self):
         """Test ParameterVector creation."""
         from qiskit.circuit import ParameterVector
+
         pv = ParameterVector("theta", 4)
         assert len(pv) == 4
 
@@ -154,7 +165,8 @@ class TestSKLearnIntegration:
     def test_svc_import(self):
         """Test SVC import."""
         from sklearn.svm import SVC
-        svc = SVC(kernel='precomputed')
+
+        svc = SVC(kernel="precomputed")
         assert svc is not None
 
     def test_train_test_split(self):
@@ -171,8 +183,9 @@ class TestSKLearnIntegration:
     def test_label_encoder(self):
         """Test LabelEncoder."""
         from sklearn.preprocessing import LabelEncoder
+
         le = LabelEncoder()
-        labels = ['cat', 'dog', 'cat', 'bird']
+        labels = ["cat", "dog", "cat", "bird"]
         encoded = le.fit_transform(labels)
         assert len(encoded) == 4
         assert len(le.classes_) == 3

@@ -57,7 +57,7 @@ def get_available_files(input_dir: str) -> list[int]:
         # Extract number from data_type{N}_insurance.pkl
         name = f.stem  # data_type{N}_insurance
         try:
-            num = int(name.split('type')[1].split('_')[0])
+            num = int(name.split("type")[1].split("_")[0])
             file_nums.append(num)
         except (IndexError, ValueError):
             continue
@@ -78,11 +78,13 @@ def get_file_info(filepath: Path) -> dict:
     info = {
         "n_samples": len(df),
         "columns": list(df.columns),
-        "embedding_shape": df["embedding"].iloc[0].shape if "embedding" in df.columns else None,
+        "embedding_shape": df["embedding"].iloc[0].shape
+        if "embedding" in df.columns
+        else None,
     }
 
     # Check for insurance column
-    insurance_cols = [c for c in df.columns if 'insurance' in c.lower()]
+    insurance_cols = [c for c in df.columns if "insurance" in c.lower()]
     if insurance_cols:
         info["insurance_column"] = insurance_cols[0]
         info["insurance_unique_values"] = df[insurance_cols[0]].nunique()
@@ -92,7 +94,7 @@ def get_file_info(filepath: Path) -> dict:
         info["label_unique_values"] = df["label"].nunique()
 
     # Get PCA attributes if present
-    if hasattr(df, 'attrs'):
+    if hasattr(df, "attrs"):
         info["pca_n_components"] = df.attrs.get("pca_n_components")
         info["pca_variance_explained"] = df.attrs.get("pca_variance_explained")
         info["original_embedding_shape"] = df.attrs.get("original_embedding_shape")
@@ -105,11 +107,7 @@ def get_file_info(filepath: Path) -> dict:
 
 def verify_pca_output(original_path: Path, pca_path: Path) -> dict:
     """Verify PCA output matches original format."""
-    result = {
-        "verified": False,
-        "errors": [],
-        "warnings": []
-    }
+    result = {"verified": False, "errors": [], "warnings": []}
 
     if not original_path.exists():
         result["errors"].append("Original file not found")
@@ -125,14 +123,16 @@ def verify_pca_output(original_path: Path, pca_path: Path) -> dict:
 
         # Check sample count
         if len(df_orig) != len(df_pca):
-            result["errors"].append(f"Sample count mismatch: {len(df_orig)} vs {len(df_pca)}")
+            result["errors"].append(
+                f"Sample count mismatch: {len(df_orig)} vs {len(df_pca)}"
+            )
 
         # Check columns
         if set(df_orig.columns) != set(df_pca.columns):
             result["errors"].append("Column mismatch")
 
         # Check insurance labels preserved
-        insurance_cols = [c for c in df_orig.columns if 'insurance' in c.lower()]
+        insurance_cols = [c for c in df_orig.columns if "insurance" in c.lower()]
         for col in insurance_cols:
             if col in df_pca.columns:
                 if not df_orig[col].equals(df_pca[col]):
@@ -140,7 +140,9 @@ def verify_pca_output(original_path: Path, pca_path: Path) -> dict:
                     orig_vals = df_orig[col].fillna("__NAN__")
                     pca_vals = df_pca[col].fillna("__NAN__")
                     if not orig_vals.equals(pca_vals):
-                        result["errors"].append(f"Insurance column '{col}' values differ")
+                        result["errors"].append(
+                            f"Insurance column '{col}' values differ"
+                        )
 
         # Check label column preserved
         if "label" in df_orig.columns and "label" in df_pca.columns:
@@ -155,7 +157,7 @@ def verify_pca_output(original_path: Path, pca_path: Path) -> dict:
             result["warnings"].append("Embedding not reduced")
 
         # Check PCA metadata
-        if not hasattr(df_pca, 'attrs') or "pca_n_components" not in df_pca.attrs:
+        if not hasattr(df_pca, "attrs") or "pca_n_components" not in df_pca.attrs:
             result["warnings"].append("Missing PCA metadata")
 
         if not result["errors"]:
@@ -176,7 +178,7 @@ def run_pca_reduction(
     output_base: str,
     n_components: int,
     batch_size: int = 200,
-    script_path: str = None
+    script_path: str = None,
 ) -> dict:
     """Run PCA reduction on a single file."""
 
@@ -186,7 +188,7 @@ def run_pca_reduction(
         "start_time": datetime.now().isoformat(),
         "end_time": None,
         "duration_seconds": None,
-        "error_message": None
+        "error_message": None,
     }
 
     # Determine script path
@@ -202,16 +204,21 @@ def run_pca_reduction(
     cmd = [
         sys.executable,
         str(script_path),
-        "--file_num", str(file_num),
-        "--n_components", str(n_components),
-        "--input_dir", input_dir,
-        "--output_base", output_base,
-        "--batch_size", str(batch_size)
+        "--file_num",
+        str(file_num),
+        "--n_components",
+        str(n_components),
+        "--input_dir",
+        input_dir,
+        "--output_base",
+        output_base,
+        "--batch_size",
+        str(batch_size),
     ]
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Processing file_num={file_num}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Command: {' '.join(cmd)}")
 
     start_time = datetime.now()
@@ -222,7 +229,7 @@ def run_pca_reduction(
             cmd,
             capture_output=True,
             text=True,
-            timeout=3600  # 1 hour timeout
+            timeout=3600,  # 1 hour timeout
         )
 
         end_time = datetime.now()
@@ -234,7 +241,9 @@ def run_pca_reduction(
             print(f"  SUCCESS (took {result['duration_seconds']:.1f}s)")
         else:
             result["status"] = "failed"
-            result["error_message"] = process.stderr[:500] if process.stderr else "Unknown error"
+            result["error_message"] = (
+                process.stderr[:500] if process.stderr else "Unknown error"
+            )
             print(f"  FAILED: {result['error_message']}")
 
         # Print stdout for debugging
@@ -253,10 +262,7 @@ def run_pca_reduction(
     return result
 
 
-def create_summary_csv(
-    summary_data: list[dict],
-    output_path: Path
-):
+def create_summary_csv(summary_data: list[dict], output_path: Path):
     """Create CSV summary of all processing."""
 
     if not summary_data:
@@ -273,9 +279,15 @@ def create_summary_csv(
 
     # Move important columns to front
     priority_cols = [
-        "file_num", "status", "verified", "n_samples",
-        "original_features", "pca_features", "variance_explained",
-        "duration_seconds", "error_message"
+        "file_num",
+        "status",
+        "verified",
+        "n_samples",
+        "original_features",
+        "pca_features",
+        "variance_explained",
+        "duration_seconds",
+        "error_message",
     ]
 
     ordered_fieldnames = []
@@ -285,7 +297,7 @@ def create_summary_csv(
             fieldnames.remove(col)
     ordered_fieldnames.extend(fieldnames)
 
-    with open(output_path, 'w', newline='') as f:
+    with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=ordered_fieldnames)
         writer.writeheader()
         writer.writerows(summary_data)
@@ -301,59 +313,45 @@ def main():
         "--input_dir",
         type=str,
         default="/orcd/pool/006/lceli_shared/DATASET/data-cleaned",
-        help="Input directory containing pickle files"
+        help="Input directory containing pickle files",
     )
     parser.add_argument(
         "--output_base",
         type=str,
         default="/orcd/pool/006/lceli_shared/DATASET",
-        help="Base output directory"
+        help="Base output directory",
     )
     parser.add_argument(
-        "--n_components",
-        type=int,
-        default=1999,
-        help="Number of PCA components"
+        "--n_components", type=int, default=1999, help="Number of PCA components"
     )
     parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=200,
-        help="Batch size for processing"
+        "--batch_size", type=int, default=200, help="Batch size for processing"
     )
     parser.add_argument(
-        "--start",
-        type=int,
-        default=None,
-        help="Start file number (inclusive)"
+        "--start", type=int, default=None, help="Start file number (inclusive)"
     )
     parser.add_argument(
-        "--end",
-        type=int,
-        default=None,
-        help="End file number (inclusive)"
+        "--end", type=int, default=None, help="End file number (inclusive)"
     )
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Force reprocess even if output exists"
+        "--force", action="store_true", help="Force reprocess even if output exists"
     )
     parser.add_argument(
         "--verify_only",
         action="store_true",
-        help="Only verify existing outputs, don't process"
+        help="Only verify existing outputs, don't process",
     )
     parser.add_argument(
         "--summary_file",
         type=str,
         default="pca_processing_summary.csv",
-        help="Output summary CSV filename"
+        help="Output summary CSV filename",
     )
     parser.add_argument(
         "--pca_script",
         type=str,
         default=None,
-        help="Path to apply_pca_reduction.py script"
+        help="Path to apply_pca_reduction.py script",
     )
 
     args = parser.parse_args()
@@ -395,7 +393,7 @@ def main():
         row = {
             "file_num": file_num,
             "input_file": f"data_type{file_num}_insurance.pkl",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         original_path = Path(args.input_dir) / f"data_type{file_num}_insurance.pkl"
@@ -408,7 +406,11 @@ def main():
         try:
             orig_info = get_file_info(original_path)
             row["n_samples"] = orig_info["n_samples"]
-            row["original_features"] = np.prod(orig_info["embedding_shape"]) if orig_info["embedding_shape"] else None
+            row["original_features"] = (
+                np.prod(orig_info["embedding_shape"])
+                if orig_info["embedding_shape"]
+                else None
+            )
             row["original_embedding_shape"] = str(orig_info["embedding_shape"])
             row["columns"] = str(orig_info["columns"])
             row["insurance_column"] = orig_info.get("insurance_column")
@@ -443,7 +445,7 @@ def main():
                 output_base=args.output_base,
                 n_components=args.n_components,
                 batch_size=args.batch_size,
-                script_path=args.pca_script
+                script_path=args.pca_script,
             )
 
             row["status"] = pca_result["status"]
@@ -458,8 +460,12 @@ def main():
         print("  Verifying output...")
         verify_result = verify_pca_output(original_path, pca_path)
         row["verified"] = verify_result["verified"]
-        row["verification_errors"] = str(verify_result["errors"]) if verify_result["errors"] else None
-        row["verification_warnings"] = str(verify_result["warnings"]) if verify_result["warnings"] else None
+        row["verification_errors"] = (
+            str(verify_result["errors"]) if verify_result["errors"] else None
+        )
+        row["verification_warnings"] = (
+            str(verify_result["warnings"]) if verify_result["warnings"] else None
+        )
 
         if verify_result["verified"]:
             print("  Verification PASSED")
@@ -470,13 +476,19 @@ def main():
         if pca_path.exists():
             try:
                 pca_info = get_file_info(pca_path)
-                row["pca_features"] = np.prod(pca_info["embedding_shape"]) if pca_info["embedding_shape"] else None
+                row["pca_features"] = (
+                    np.prod(pca_info["embedding_shape"])
+                    if pca_info["embedding_shape"]
+                    else None
+                )
                 row["pca_embedding_shape"] = str(pca_info["embedding_shape"])
                 row["pca_n_components"] = pca_info.get("pca_n_components")
                 row["variance_explained"] = pca_info.get("pca_variance_explained")
 
                 if row["variance_explained"]:
-                    row["variance_explained_pct"] = f"{row['variance_explained']*100:.2f}%"
+                    row["variance_explained_pct"] = (
+                        f"{row['variance_explained'] * 100:.2f}%"
+                    )
             except Exception as e:
                 row["pca_info_error"] = str(e)
 

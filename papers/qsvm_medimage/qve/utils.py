@@ -8,6 +8,7 @@ try:
 except ImportError:
     torch = None
 
+
 def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)

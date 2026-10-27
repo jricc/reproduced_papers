@@ -43,9 +43,7 @@ def load_qsvm_results(result_dirs):
 def compare(qsvm, classical_path, kernel):
     classical = pd.read_csv(classical_path)
     classical = classical[classical["kernel"] == kernel].copy()
-    classical = classical.rename(
-        columns={"test_minority_f1": "test_f1_classical"}
-    )
+    classical = classical.rename(columns={"test_minority_f1": "test_f1_classical"})
     paired = qsvm.merge(
         classical[["seed", "pca_dim", "test_f1_classical"]],
         on=["seed", "pca_dim"],
@@ -65,8 +63,7 @@ def compare(qsvm, classical_path, kernel):
         .rename(columns={"pca_dim": "q"})
     )
     per_configuration["delta_f1"] = (
-        per_configuration["qsvm_f1_mean"]
-        - per_configuration["classical_f1_mean"]
+        per_configuration["qsvm_f1_mean"] - per_configuration["classical_f1_mean"]
     )
     deltas = per_configuration["delta_f1"]
     summary = {

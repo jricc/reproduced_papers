@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = PROJECT_ROOT / "scripts" / "aggregate_protocol_matrix.py"
 SPEC = importlib.util.spec_from_file_location("aggregate_protocol_matrix", SCRIPT_PATH)

@@ -11,8 +11,9 @@ Usage:
 
 import os
 import sys
-import pytest
+
 import numpy as np
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,9 +25,11 @@ class TestCoreModuleSyntax:
     def test_core_module_compiles(self):
         """Verify core.py has no syntax errors."""
         import py_compile
+
         core_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "qve", "core.py"
+            "qve",
+            "core.py",
         )
         # This will raise SyntaxError if there's a problem
         py_compile.compile(core_path, doraise=True)
@@ -34,23 +37,18 @@ class TestCoreModuleSyntax:
     def test_core_module_imports(self):
         """Test that qve.core can be imported."""
         from qve import core
+
         assert core is not None
 
     def test_all_functions_importable(self):
         """Test all expected functions are importable from qve.core."""
         from qve.core import (
-            make_bsp,
             build_qsvm_qc,
-            sin_cos,
-            get_from_d1,
-            get_from_d2,
-            renew_operand,
-            data_partition,
-            data_to_operand,
-            operand_to_amp,
-            get_kernel_matrix,
             get_hybrid_kernel_matrix,
+            get_kernel_matrix,
+            make_bsp,
         )
+
         # All imports should succeed
         assert make_bsp is not None
         assert build_qsvm_qc is not None
@@ -64,6 +62,7 @@ class TestMakeBsp:
     def test_make_bsp_creates_circuit(self):
         """Test make_bsp creates a valid circuit."""
         from qve.core import make_bsp
+
         qc = make_bsp(2)
         assert qc is not None
         assert qc.num_qubits == 2
@@ -71,6 +70,7 @@ class TestMakeBsp:
     def test_make_bsp_various_sizes(self):
         """Test make_bsp with different qubit counts."""
         from qve.core import make_bsp
+
         for n in [2, 3, 4, 5]:
             qc = make_bsp(n)
             assert qc.num_qubits == n
@@ -78,6 +78,7 @@ class TestMakeBsp:
     def test_make_bsp_has_parameters(self):
         """Test make_bsp creates parameterized circuit."""
         from qve.core import make_bsp
+
         qc = make_bsp(3)
         # Should have 3 parameters (one per qubit)
         assert qc.num_parameters == 3
@@ -88,7 +89,8 @@ class TestBuildQsvmQc:
 
     def test_build_qsvm_qc_basic(self):
         """Test basic kernel circuit construction."""
-        from qve.core import make_bsp, build_qsvm_qc
+        from qve.core import build_qsvm_qc, make_bsp
+
         n_dim = 2
         bsp_qc = make_bsp(n_dim)
         x1 = np.array([0.5, 0.3])
@@ -99,7 +101,8 @@ class TestBuildQsvmQc:
 
     def test_build_qsvm_qc_same_vectors(self):
         """Test kernel circuit with identical vectors (should give overlap=1)."""
-        from qve.core import make_bsp, build_qsvm_qc
+        from qve.core import build_qsvm_qc, make_bsp
+
         n_dim = 2
         bsp_qc = make_bsp(n_dim)
         x = np.array([0.5, 0.3])
@@ -113,6 +116,7 @@ class TestDataPartition:
     def test_single_process(self):
         """Test partition with single process (size=1, rank=0)."""
         from qve.core import data_partition
+
         indices = list(range(10))
         result = data_partition(indices, size=1, rank=0)
         assert result == indices  # Single process gets all data
@@ -120,6 +124,7 @@ class TestDataPartition:
     def test_two_processes_even_split(self):
         """Test even split between two processes."""
         from qve.core import data_partition
+
         indices = list(range(10))
 
         rank0 = data_partition(indices, size=2, rank=0)
@@ -133,6 +138,7 @@ class TestDataPartition:
     def test_four_processes(self):
         """Test partition across four processes."""
         from qve.core import data_partition
+
         indices = list(range(100))
 
         all_parts = []
@@ -155,10 +161,10 @@ class TestGetKernelMatrix:
         data2 = np.random.randn(5, 2)
 
         # Simulate amplitude data for upper triangle
-        indices = [(i+1, j+1) for i in range(5) for j in range(i, 5)]
+        indices = [(i + 1, j + 1) for i in range(5) for j in range(i, 5)]
         amp_data = [[np.random.rand() for _ in indices]]
 
-        kernel = get_kernel_matrix(data1, data2, amp_data, indices, mode='train')
+        kernel = get_kernel_matrix(data1, data2, amp_data, indices, mode="train")
         assert kernel.shape == (5, 5)
 
     def test_kernel_matrix_train_mode_symmetric(self):
@@ -170,10 +176,10 @@ class TestGetKernelMatrix:
 
         # Use upper triangle OFF-DIAGONAL indices only (1-indexed)
         # In practice, diagonal is added via np.diag(np.ones) in get_kernel_matrix
-        indices = [(i+1, j+1) for i in range(n) for j in range(i+1, n)]
+        indices = [(i + 1, j + 1) for i in range(n) for j in range(i + 1, n)]
         amp_data = [[0.5 for _ in indices]]
 
-        kernel = get_kernel_matrix(data, data, amp_data, indices, mode='train')
+        kernel = get_kernel_matrix(data, data, amp_data, indices, mode="train")
 
         # Should be symmetric
         np.testing.assert_array_almost_equal(kernel, kernel.T)
@@ -188,7 +194,7 @@ class TestGetKernelMatrix:
         data1 = np.random.randn(3, 2)  # test samples
         data2 = np.random.randn(5, 2)  # train samples
 
-        indices = [(i+1, j+1) for i in range(3) for j in range(5)]
+        indices = [(i + 1, j + 1) for i in range(3) for j in range(5)]
         amp_data = [[np.random.rand() for _ in indices]]
 
         kernel = get_kernel_matrix(data1, data2, amp_data, indices, mode=None)
@@ -296,32 +302,22 @@ class TestBackwardsCompatibility:
     def test_original_exports_available(self):
         """Test retained qve exports are still available."""
         from qve import (
-            set_seed,
-            data_prepare_cv,
-            get_metrics_multiclass_case,
-            get_metrics_multiclass_case_cv,
-            get_metrics_multiclass_case_test,
-            make_bsp,
             build_qsvm_qc,
-            sin_cos,
-            get_from_d1,
-            get_from_d2,
-            renew_operand,
-            data_partition,
-            data_to_operand,
-            operand_to_amp,
-            get_kernel_matrix,
-        )
-        # All should be importable
-        assert all([
-            set_seed,
             data_prepare_cv,
-            make_bsp, build_qsvm_qc, get_kernel_matrix
-        ])
+            get_kernel_matrix,
+            make_bsp,
+            set_seed,
+        )
+
+        # All should be importable
+        assert all(
+            [set_seed, data_prepare_cv, make_bsp, build_qsvm_qc, get_kernel_matrix]
+        )
 
     def test_new_hybrid_export_available(self):
         """Test new hybrid function is exported."""
         from qve import get_hybrid_kernel_matrix
+
         assert get_hybrid_kernel_matrix is not None
 
     def test_get_kernel_matrix_unchanged_behavior(self):
@@ -331,7 +327,6 @@ class TestBackwardsCompatibility:
         # This tests the exact behavior expected
         # Use upper triangle OFF-DIAGONAL indices only (1-indexed)
         # Diagonal is automatically added as 1.0 by get_kernel_matrix
-        n = 3
         data = np.array([[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]])
 
         # Upper triangle off-diagonal indices (1-indexed as in original)
@@ -339,7 +334,7 @@ class TestBackwardsCompatibility:
         amp_values = [0.8, 0.6, 0.7]
         amp_data = [amp_values]
 
-        kernel = get_kernel_matrix(data, data, amp_data, indices, mode='train')
+        kernel = get_kernel_matrix(data, data, amp_data, indices, mode="train")
 
         # Check specific values
         assert kernel[0, 0] == 1.0  # Diagonal (added by np.diag(ones))

@@ -98,7 +98,7 @@ warnings.filterwarnings(
 # Add parent directory to path for qve imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from qve import (
+from qve import (  # noqa: E402
     build_qsvm_qc,
     compute_cpu_kernel_entries,
     compute_zz_kernel_entries,
@@ -117,7 +117,7 @@ from qve import (
     normalize_train_and_cross_kernel_trace,
     operand_to_amp,
 )
-from qve.core import get_hybrid_kernel_matrix
+from qve.core import get_hybrid_kernel_matrix  # noqa: E402
 
 # -----------------------------
 # Helpers: discovery / loading
@@ -652,10 +652,8 @@ def run_qsvm_splits(
                         K_classical_train_full, K_classical_test
                     )
                 )
-                K_quantum_train, K_quantum_val = (
-                    normalize_train_and_cross_kernel_trace(
-                        K_quantum_train, K_quantum_val
-                    )
+                K_quantum_train, K_quantum_val = normalize_train_and_cross_kernel_trace(
+                    K_quantum_train, K_quantum_val
                 )
                 K_quantum_train_full, K_quantum_test = (
                     normalize_train_and_cross_kernel_trace(
@@ -1181,10 +1179,8 @@ def apply_hybrid_kernel(
         # Pure QSVM: optionally normalize quantum kernel
         if normalize_method == "trace":
             if trace_protocol == "train_trace":
-                kernel_train, kernel_valid = (
-                    normalize_train_and_cross_kernel_trace(
-                        kernel_train, kernel_valid
-                    )
+                kernel_train, kernel_valid = normalize_train_and_cross_kernel_trace(
+                    kernel_train, kernel_valid
                 )
             else:
                 kernel_train = normalize_kernel_trace(kernel_train)
@@ -1212,10 +1208,8 @@ def apply_hybrid_kernel(
 
     mixing_normalize_method = normalize_method
     if normalize_method == "trace" and trace_protocol == "train_trace":
-        classical_K_train, classical_K_valid = (
-            normalize_train_and_cross_kernel_trace(
-                classical_K_train, classical_K_valid
-            )
+        classical_K_train, classical_K_valid = normalize_train_and_cross_kernel_trace(
+            classical_K_train, classical_K_valid
         )
         kernel_train, kernel_valid = normalize_train_and_cross_kernel_trace(
             kernel_train, kernel_valid
@@ -1246,9 +1240,7 @@ def apply_hybrid_kernel(
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="QSVM Insurance Classification"
-    )
+    parser = argparse.ArgumentParser(description="QSVM Insurance Classification")
     parser.add_argument(
         "--data_path",
         type=str,
@@ -1401,7 +1393,7 @@ def main():
         try:
             import cupy as cp
             from cupy.cuda.runtime import getDeviceCount
-            from cuquantum.cutensornet import CircuitToEinsum, Network, NetworkOptions
+            from cuquantum.cutensornet import CircuitToEinsum, Network, NetworkOptions  # noqa: F401
         except ImportError as exc:
             raise RuntimeError(
                 "CUDA backend unavailable. Install qml-medimage[gpu] on a supported "

@@ -23,9 +23,9 @@ from sklearn.svm import SVC
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from qve.core import normalize_train_and_cross_kernel_trace
-from qve.process import data_prepare_cv
-from scripts.classical_svm_c1_pca import evaluate, load_data, split_data
+from qve.core import normalize_train_and_cross_kernel_trace  # noqa: E402
+from qve.process import data_prepare_cv  # noqa: E402
+from scripts.classical_svm_c1_pca import evaluate, load_data, split_data  # noqa: E402
 
 
 def compute_kernel(kernel, left, right=None):
@@ -66,9 +66,7 @@ def validate_kernel(matrix, expected_shape, name, square=False):
     if square:
         symmetry_error = float(np.max(np.abs(matrix - matrix.T)))
         diagonal_error = float(np.max(np.abs(np.diag(matrix) - 1.0)))
-        minimum_eigenvalue = float(
-            np.linalg.eigvalsh((matrix + matrix.T) / 2.0).min()
-        )
+        minimum_eigenvalue = float(np.linalg.eigvalsh((matrix + matrix.T) / 2.0).min())
         if symmetry_error > tolerance:
             raise ValueError(f"{name} is not symmetric: error={symmetry_error}")
         if diagonal_error > tolerance:

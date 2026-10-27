@@ -51,9 +51,7 @@ def load_embeddings(data_path: str) -> tuple[np.ndarray, int]:
 
 
 def analyze_pca_variance(
-    X: np.ndarray,
-    target_components: list[int],
-    max_pca_components: int = 1500
+    X: np.ndarray, target_components: list[int], max_pca_components: int = 1500
 ) -> tuple[pd.DataFrame, dict]:
     """
     Fit PCA and analyze cumulative explained variance for target dimensions.
@@ -81,7 +79,7 @@ def analyze_pca_variance(
     print("  Using randomized SVD solver for memory efficiency...")
 
     # Use randomized solver - much more memory efficient
-    pca = PCA(n_components=n_components, svd_solver='randomized', random_state=42)
+    pca = PCA(n_components=n_components, svd_solver="randomized", random_state=42)
     pca.fit(X_scaled)
 
     del X_scaled  # Free memory after fitting
@@ -107,14 +105,18 @@ def analyze_pca_variance(
             else:
                 flag = ""
 
-            results.append({
-                "n_components": n_comp,
-                "cumulative_variance_explained": float(var_explained),
-                "variance_percent": float(var_explained * 100),
-                "recommendation_flag": flag
-            })
+            results.append(
+                {
+                    "n_components": n_comp,
+                    "cumulative_variance_explained": float(var_explained),
+                    "variance_percent": float(var_explained * 100),
+                    "recommendation_flag": flag,
+                }
+            )
         else:
-            print(f"  Warning: {n_comp} components exceeds computed components ({n_components}), skipping")
+            print(
+                f"  Warning: {n_comp} components exceeds computed components ({n_components}), skipping"
+            )
 
     results_df = pd.DataFrame(results)
 
@@ -128,25 +130,41 @@ def analyze_pca_variance(
             return None
 
     summary = {
-        "variance_at_16": float(cumulative_variance[15]) if n_components >= 16 else None,
-        "variance_at_32": float(cumulative_variance[31]) if n_components >= 32 else None,
-        "variance_at_64": float(cumulative_variance[63]) if n_components >= 64 else None,
-        "variance_at_100": float(cumulative_variance[99]) if n_components >= 100 else None,
-        "variance_at_256": float(cumulative_variance[255]) if n_components >= 256 else None,
-        "variance_at_512": float(cumulative_variance[511]) if n_components >= 512 else None,
-        "variance_at_1000": float(cumulative_variance[999]) if n_components >= 1000 else None,
+        "variance_at_16": float(cumulative_variance[15])
+        if n_components >= 16
+        else None,
+        "variance_at_32": float(cumulative_variance[31])
+        if n_components >= 32
+        else None,
+        "variance_at_64": float(cumulative_variance[63])
+        if n_components >= 64
+        else None,
+        "variance_at_100": float(cumulative_variance[99])
+        if n_components >= 100
+        else None,
+        "variance_at_256": float(cumulative_variance[255])
+        if n_components >= 256
+        else None,
+        "variance_at_512": float(cumulative_variance[511])
+        if n_components >= 512
+        else None,
+        "variance_at_1000": float(cumulative_variance[999])
+        if n_components >= 1000
+        else None,
         "components_for_95pct": find_components_for_variance(0.95),
         "components_for_99pct": find_components_for_variance(0.99),
         "components_for_999pct": find_components_for_variance(0.999),
         "n_components_computed": int(n_components),
         "max_possible_components": int(max_possible),
-        "total_variance_captured": float(cumulative_variance[-1])
+        "total_variance_captured": float(cumulative_variance[-1]),
     }
 
     return results_df, summary
 
 
-def determine_recommendation(summary: dict, target_variance: float = 0.999) -> tuple[str, int, float, str]:
+def determine_recommendation(
+    summary: dict, target_variance: float = 0.999
+) -> tuple[str, int, float, str]:
     """
     Determine whether one-stage or two-stage PCA is recommended.
 
@@ -169,7 +187,12 @@ def determine_recommendation(summary: dict, target_variance: float = 0.999) -> t
     total_var = summary["total_variance_captured"]
 
     if var_16 is None:
-        return "INSUFFICIENT_DATA", 0, 0.0, "Not enough samples to determine variance at 16 components"
+        return (
+            "INSUFFICIENT_DATA",
+            0,
+            0.0,
+            "Not enough samples to determine variance at 16 components",
+        )
 
     if var_16 >= 0.80:
         return (
@@ -177,7 +200,7 @@ def determine_recommendation(summary: dict, target_variance: float = 0.999) -> t
             0,
             var_16,
             f"Direct PCA to 16 dimensions is acceptable.\n"
-            f"Variance retained at 16 components: {var_16*100:.2f}% (>= 80% threshold)"
+            f"Variance retained at 16 components: {var_16 * 100:.2f}% (>= 80% threshold)",
         )
     else:
         # Two-stage PCA required
@@ -196,7 +219,9 @@ def determine_recommendation(summary: dict, target_variance: float = 0.999) -> t
         if intermediate is None:
             intermediate = n_computed
             actual_var = total_var
-            var_note = f"(max reachable with {n_computed} components: {total_var*100:.2f}%)"
+            var_note = (
+                f"(max reachable with {n_computed} components: {total_var * 100:.2f}%)"
+            )
         else:
             actual_var = target_variance
             var_note = ""
@@ -204,9 +229,9 @@ def determine_recommendation(summary: dict, target_variance: float = 0.999) -> t
         # Cap at max_possible (which equals n_samples for our case)
         intermediate = min(intermediate, max_possible)
 
-        comp_95 = summary['components_for_95pct']
-        comp_99 = summary['components_for_99pct']
-        comp_999 = summary['components_for_999pct']
+        comp_95 = summary["components_for_95pct"]
+        comp_99 = summary["components_for_99pct"]
+        comp_999 = summary["components_for_999pct"]
 
         threshold_lines = []
         if comp_95:
@@ -216,7 +241,9 @@ def determine_recommendation(summary: dict, target_variance: float = 0.999) -> t
         if comp_999:
             threshold_lines.append(f"  - 99.9% variance: {comp_999} components")
         else:
-            threshold_lines.append(f"  - 99.9% variance: >{n_computed} components (not reached)")
+            threshold_lines.append(
+                f"  - 99.9% variance: >{n_computed} components (not reached)"
+            )
 
         threshold_str = "\n".join(threshold_lines)
 
@@ -225,19 +252,21 @@ def determine_recommendation(summary: dict, target_variance: float = 0.999) -> t
             intermediate,
             actual_var,
             f"Two-stage PCA is REQUIRED.\n"
-            f"Variance at 16 components: {var_16*100:.2f}% (< 80% threshold)\n"
+            f"Variance at 16 components: {var_16 * 100:.2f}% (< 80% threshold)\n"
             f"\n"
             f"RECOMMENDED INTERMEDIATE DIMENSION: {intermediate}\n"
             f"  - Target: ~{var_label} of total variance {var_note}\n"
-            f"  - Variance captured with {n_computed} components: {total_var*100:.2f}%\n"
+            f"  - Variance captured with {n_computed} components: {total_var * 100:.2f}%\n"
             f"\n"
             f"Pipeline: 88,064 -> {intermediate} -> 16 features\n"
             f"\n"
-            f"Variance thresholds:\n{threshold_str}"
+            f"Variance thresholds:\n{threshold_str}",
         )
 
 
-def print_analysis_report(results_df: pd.DataFrame, summary: dict, recommendation: tuple):
+def print_analysis_report(
+    results_df: pd.DataFrame, summary: dict, recommendation: tuple
+):
     """Print a formatted analysis report to stdout."""
     strategy, intermediate_dim, intermediate_var, explanation = recommendation
 
@@ -245,27 +274,31 @@ def print_analysis_report(results_df: pd.DataFrame, summary: dict, recommendatio
     print("PCA VARIANCE ANALYSIS REPORT")
     print("=" * 80)
 
-    print(f"\nComputed {summary['n_components_computed']} of {summary['max_possible_components']} possible components")
-    print(f"Total variance captured: {summary['total_variance_captured']*100:.2f}%")
+    print(
+        f"\nComputed {summary['n_components_computed']} of {summary['max_possible_components']} possible components"
+    )
+    print(f"Total variance captured: {summary['total_variance_captured'] * 100:.2f}%")
 
     print("\n--- Variance Explained by Target Dimensions ---")
     print(results_df.to_string(index=False))
 
     print("\n--- Key Thresholds ---")
-    comp_95 = summary['components_for_95pct']
-    comp_99 = summary['components_for_99pct']
-    comp_999 = summary['components_for_999pct']
-    n_computed = summary['n_components_computed']
+    comp_95 = summary["components_for_95pct"]
+    comp_99 = summary["components_for_99pct"]
+    comp_999 = summary["components_for_999pct"]
+    n_computed = summary["n_components_computed"]
 
     print(f"  Components for 95% variance:  {comp_95 if comp_95 else f'>{n_computed}'}")
     print(f"  Components for 99% variance:  {comp_99 if comp_99 else f'>{n_computed}'}")
-    print(f"  Components for 99.9% variance: {comp_999 if comp_999 else f'>{n_computed}'}")
+    print(
+        f"  Components for 99.9% variance: {comp_999 if comp_999 else f'>{n_computed}'}"
+    )
 
     print("\n--- Variance at Key Dimensions ---")
     for dim in [16, 32, 64, 100, 256, 512, 1000]:
         key = f"variance_at_{dim}"
         if summary.get(key) is not None:
-            print(f"  {dim:4d} components: {summary[key]*100:6.2f}%")
+            print(f"  {dim:4d} components: {summary[key] * 100:6.2f}%")
 
     print("\n" + "=" * 80)
     print("RECOMMENDATION")
@@ -285,25 +318,25 @@ def main():
         "--data_path",
         type=str,
         default="/orcd/pool/006/lceli_shared/DATASET/data-cleaned/data_type1_insurance.pkl",
-        help="Path to pickle file with embeddings"
+        help="Path to pickle file with embeddings",
     )
     parser.add_argument(
         "--output_dir",
         type=str,
         default="/home/sebasmos/orcd/pool/code/QML-MedImage/pre-processing",
-        help="Directory to save output CSV"
+        help="Directory to save output CSV",
     )
     parser.add_argument(
         "--target_variance",
         type=float,
         default=0.999,
-        help="Target variance to retain in intermediate PCA step (default: 0.999 = 99.9%%)"
+        help="Target variance to retain in intermediate PCA step (default: 0.999 = 99.9%%)",
     )
     parser.add_argument(
         "--max_components",
         type=int,
         default=1500,
-        help="Maximum PCA components to compute (saves memory). Default: 1500"
+        help="Maximum PCA components to compute (saves memory). Default: 1500",
     )
 
     args = parser.parse_args()
@@ -322,10 +355,14 @@ def main():
     X, n_samples = load_embeddings(args.data_path)
 
     # Run PCA analysis with memory-efficient settings
-    results_df, summary = analyze_pca_variance(X, target_components, max_pca_components=args.max_components)
+    results_df, summary = analyze_pca_variance(
+        X, target_components, max_pca_components=args.max_components
+    )
 
     # Determine recommendation based on target variance
-    recommendation = determine_recommendation(summary, target_variance=args.target_variance)
+    recommendation = determine_recommendation(
+        summary, target_variance=args.target_variance
+    )
     strategy, intermediate_dim, intermediate_var, explanation = recommendation
 
     # Add recommendation to results

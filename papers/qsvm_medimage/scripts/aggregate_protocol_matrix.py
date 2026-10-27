@@ -143,11 +143,7 @@ def _load_model_rows(protocol_root, protocol_id, model):
 
 def _load_baseline_rows(result_root, classical_dir, baseline, kernel):
     metrics_path = (
-        result_root
-        / "classical"
-        / classical_dir
-        / baseline
-        / "metrics_summary.csv"
+        result_root / "classical" / classical_dir / baseline / "metrics_summary.csv"
     )
     if not metrics_path.is_file():
         raise FileNotFoundError(f"Missing {metrics_path}")

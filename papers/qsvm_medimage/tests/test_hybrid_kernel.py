@@ -10,11 +10,12 @@ Usage:
     pytest tests/test_hybrid_kernel.py -v
 """
 
+import ast
 import os
 import sys
-import pytest
+
 import numpy as np
-import ast
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,41 +74,46 @@ class TestBackwardsCompatibility:
     def main_script_path(self):
         return os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "scripts", "qsvm_cuda_embeddings_insurance.py"
+            "scripts",
+            "qsvm_cuda_embeddings_insurance.py",
         )
 
     def test_apply_hybrid_kernel_passthrough(self, main_script_path):
         """Test apply_hybrid_kernel returns unchanged kernels when use_hybrid=False."""
         # Parse the file to extract apply_hybrid_kernel function
         # (don't actually load/execute the module - just analyze the source code)
-        with open(main_script_path, 'r') as f:
+        with open(main_script_path) as f:
             content = f.read()
 
         # Find and extract apply_hybrid_kernel function
         tree = ast.parse(content)
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == 'apply_hybrid_kernel':
+            if isinstance(node, ast.FunctionDef) and node.name == "apply_hybrid_kernel":
                 # Found the function - verify it has the passthrough logic
                 func_source = ast.get_source_segment(content, node)
-                assert 'if not use_hybrid:' in func_source, \
+                assert "if not use_hybrid:" in func_source, (
                     "apply_hybrid_kernel should check use_hybrid flag"
-                assert 'return kernel_train, kernel_val' in func_source or \
-                       'return kernel_train, kernel_valid' in func_source, \
+                )
+                assert (
+                    "return kernel_train, kernel_val" in func_source
+                    or "return kernel_train, kernel_valid" in func_source
+                ), (
                     "apply_hybrid_kernel should return unchanged kernels when use_hybrid=False"
+                )
                 break
         else:
             pytest.fail("apply_hybrid_kernel function not found in main script")
 
     def test_default_hybrid_flag_is_false(self, main_script_path):
         """Test that --use_hybrid defaults to False (store_true action)."""
-        with open(main_script_path, 'r') as f:
+        with open(main_script_path) as f:
             content = f.read()
 
         # Check argparse setup
-        assert 'action="store_true"' in content or "action='store_true'" in content, \
+        assert 'action="store_true"' in content or "action='store_true'" in content, (
             "--use_hybrid should use store_true action (defaults to False)"
-        assert '--use_hybrid' in content, \
-            "Script should have --use_hybrid argument"
+        )
+        assert "--use_hybrid" in content, "Script should have --use_hybrid argument"
 
 
 class TestApplyHybridKernelFunction:
@@ -115,9 +121,17 @@ class TestApplyHybridKernelFunction:
 
     def test_passthrough_when_disabled(self):
         """Test kernels pass through unchanged when use_hybrid=False."""
+
         # Simulate apply_hybrid_kernel logic
-        def apply_hybrid_kernel(kernel_train, kernel_valid, data_train, data_valid,
-                                use_hybrid=False, alpha=0.5, classical_kernel="rbf"):
+        def apply_hybrid_kernel(
+            kernel_train,
+            kernel_valid,
+            data_train,
+            data_valid,
+            use_hybrid=False,
+            alpha=0.5,
+            classical_kernel="rbf",
+        ):
             if not use_hybrid:
                 return kernel_train, kernel_valid
             # Would compute hybrid here
@@ -129,8 +143,7 @@ class TestApplyHybridKernelFunction:
         data_valid = np.random.randn(5, 4)
 
         result_train, result_valid = apply_hybrid_kernel(
-            K_train, K_valid, data_train, data_valid,
-            use_hybrid=False
+            K_train, K_valid, data_train, data_valid, use_hybrid=False
         )
 
         np.testing.assert_array_equal(result_train, K_train)
@@ -215,13 +228,13 @@ class TestNoSideEffects:
     def test_qve_init_still_exports_original(self):
         """Test qve.__init__.py still exports all original functions."""
         from qve import (
-            set_seed,
-            make_bsp,
             build_qsvm_qc,
             data_partition,
             data_to_operand,
-            operand_to_amp,
             get_kernel_matrix,
+            make_bsp,
+            operand_to_amp,
+            set_seed,
         )
 
         # These should all be callable
@@ -238,13 +251,12 @@ class TestNoSideEffects:
         from qve.core import get_kernel_matrix
 
         # Should work without any hybrid-related parameters
-        n = 3
         data = np.array([[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]])
         indices = [(1, 1), (1, 2), (1, 3), (2, 2), (2, 3), (3, 3)]
         amp_data = [[1.0, 0.8, 0.6, 1.0, 0.7, 1.0]]
 
         # This should work exactly as before
-        kernel = get_kernel_matrix(data, data, amp_data, indices, mode='train')
+        kernel = get_kernel_matrix(data, data, amp_data, indices, mode="train")
 
         assert kernel.shape == (3, 3)
         assert np.allclose(kernel, kernel.T)  # Symmetric

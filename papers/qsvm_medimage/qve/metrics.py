@@ -12,7 +12,17 @@ from sklearn.metrics import (
 )
 
 
-def get_metrics_multiclass_case_test(trained_svc, kernel_valid, Y_val_sub, peak_memory_usage, n_dim, data_train, data_test, total_time, output_dir):
+def get_metrics_multiclass_case_test(
+    trained_svc,
+    kernel_valid,
+    Y_val_sub,
+    peak_memory_usage,
+    n_dim,
+    data_train,
+    data_test,
+    total_time,
+    output_dir,
+):
     acc_test = trained_svc.score(kernel_valid, Y_val_sub)
     y_pred = trained_svc.predict(kernel_valid)
     y_probs = trained_svc.predict_proba(kernel_valid)
@@ -25,20 +35,30 @@ def get_metrics_multiclass_case_test(trained_svc, kernel_valid, Y_val_sub, peak_
     full_labels = list(range(10))
     cm = confusion_matrix(Y_val_sub, y_pred, labels=full_labels)
 
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[str(label) for label in full_labels])
+    disp = ConfusionMatrixDisplay(
+        confusion_matrix=cm, display_labels=[str(label) for label in full_labels]
+    )
     disp.plot(cmap=plt.cm.Blues)
     # plt.title("MNIST Test Confusion Matrix")
 
     # More informative PNG filename
     cm_filename = os.path.join(
         output_dir,
-        f"conf_matrix_test_qubits{n_dim}_train{len(data_train)}_test{len(data_test)}_f1{f1:.3f}.png"
+        f"conf_matrix_test_qubits{n_dim}_train{len(data_train)}_test{len(data_test)}_f1{f1:.3f}.png",
     )
     plt.savefig(cm_filename)
     plt.show(block=True)
     print(f"✅ Confusion matrix saved to: {cm_filename}")
 
-    auc = float(roc_auc_score(Y_val_sub, y_probs, multi_class='ovr', average='weighted', labels=full_labels))
+    auc = float(
+        roc_auc_score(
+            Y_val_sub,
+            y_probs,
+            multi_class="ovr",
+            average="weighted",
+            labels=full_labels,
+        )
+    )
 
     results = {
         "n_dim": n_dim,
@@ -54,7 +74,7 @@ def get_metrics_multiclass_case_test(trained_svc, kernel_valid, Y_val_sub, peak_
     # More informative model filename
     model_filename = os.path.join(
         output_dir,
-        f"quantum_svm_test_model_qubits{n_dim}_train{len(data_train)}_test{len(data_test)}_f1{f1:.3f}.pkl"
+        f"quantum_svm_test_model_qubits{n_dim}_train{len(data_train)}_test{len(data_test)}_f1{f1:.3f}.pkl",
     )
     joblib.dump(trained_svc, model_filename)
     print(f"✅ Model saved to: {model_filename}")
@@ -63,10 +83,26 @@ def get_metrics_multiclass_case_test(trained_svc, kernel_valid, Y_val_sub, peak_
     return results
 
 
-def get_metrics_multiclass_case(trained_svc, kernel_train, Y_train_sub, kernel_valid, Y_val_sub,
-                                training_time, peak_memory_usage, n_dim, data_train, data_test, exp_t,
-                                oper_t, path_t, tnsm_kernel_t, partition_ratio, train_amp_count,
-                                valid_amp_count, output_dir):
+def get_metrics_multiclass_case(
+    trained_svc,
+    kernel_train,
+    Y_train_sub,
+    kernel_valid,
+    Y_val_sub,
+    training_time,
+    peak_memory_usage,
+    n_dim,
+    data_train,
+    data_test,
+    exp_t,
+    oper_t,
+    path_t,
+    tnsm_kernel_t,
+    partition_ratio,
+    train_amp_count,
+    valid_amp_count,
+    output_dir,
+):
     acc_train = trained_svc.score(kernel_train, Y_train_sub)
     acc_test = trained_svc.score(kernel_valid, Y_val_sub)
     y_pred = trained_svc.predict(kernel_valid)
@@ -78,18 +114,22 @@ def get_metrics_multiclass_case(trained_svc, kernel_train, Y_train_sub, kernel_v
     full_labels = list(np.unique(Y_train_sub))
     cm = confusion_matrix(Y_val_sub, y_pred, labels=full_labels)
 
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[str(label) for label in full_labels])
+    disp = ConfusionMatrixDisplay(
+        confusion_matrix=cm, display_labels=[str(label) for label in full_labels]
+    )
     disp.plot(cmap=plt.cm.Blues)
     # plt.title("MNIST CV Fold Confusion Matrix")
 
     cm_filename = os.path.join(
         output_dir,
-        f"conf_matrix_cv_qubits{n_dim}_train{len(data_train)}_test{len(data_test)}_f1{f1:.3f}.png"
+        f"conf_matrix_cv_qubits{n_dim}_train{len(data_train)}_test{len(data_test)}_f1{f1:.3f}.png",
     )
     plt.savefig(cm_filename)
     plt.show(block=True)
 
-    auc = roc_auc_score(Y_val_sub, y_probs, multi_class='ovr', average='weighted', labels=full_labels)
+    auc = roc_auc_score(
+        Y_val_sub, y_probs, multi_class="ovr", average="weighted", labels=full_labels
+    )
 
     results = {
         "n_dim": n_dim,
@@ -106,13 +146,26 @@ def get_metrics_multiclass_case(trained_svc, kernel_train, Y_train_sub, kernel_v
 
     model_filename = os.path.join(
         output_dir,
-        f"quantum_svm_cv_model_qubits{n_dim}_train{len(data_train)}_test{len(data_test)}_f1{f1:.3f}.pkl"
+        f"quantum_svm_cv_model_qubits{n_dim}_train{len(data_train)}_test{len(data_test)}_f1{f1:.3f}.pkl",
     )
     joblib.dump(trained_svc, model_filename)
 
     return results
-def get_metrics_multiclass_case_cv(trained_svc, kernel_train, Y_train_sub, kernel_valid, Y_val_sub,
-                                   peak_memory_usage, n_dim, data_train, total_time, fold=None, config=None):
+
+
+def get_metrics_multiclass_case_cv(
+    trained_svc,
+    kernel_train,
+    Y_train_sub,
+    kernel_valid,
+    Y_val_sub,
+    peak_memory_usage,
+    n_dim,
+    data_train,
+    total_time,
+    fold=None,
+    config=None,
+):
     acc_train = trained_svc.score(kernel_train, Y_train_sub)
     acc_test = trained_svc.score(kernel_valid, Y_val_sub)
 
@@ -125,18 +178,22 @@ def get_metrics_multiclass_case_cv(trained_svc, kernel_train, Y_train_sub, kerne
     full_labels = list(np.unique(Y_train_sub))
     cm = confusion_matrix(Y_val_sub, y_pred, labels=full_labels)
 
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[str(label) for label in full_labels])
+    disp = ConfusionMatrixDisplay(
+        confusion_matrix=cm, display_labels=[str(label) for label in full_labels]
+    )
     disp.plot(cmap=plt.cm.Blues)
     # plt.title(f"MNIST Confusion Matrix - Fold {fold}")
 
     cm_filename = os.path.join(
         config["results"],
-        f"conf_matrix_cv_fold{fold}_qubits{n_dim}_train{len(data_train)}_f1{f1:.3f}.png"
+        f"conf_matrix_cv_fold{fold}_qubits{n_dim}_train{len(data_train)}_f1{f1:.3f}.png",
     )
     plt.savefig(cm_filename)
     plt.show(block=True)
 
-    auc = roc_auc_score(Y_val_sub, y_probs, multi_class='ovr', average='weighted', labels=full_labels)
+    auc = roc_auc_score(
+        Y_val_sub, y_probs, multi_class="ovr", average="weighted", labels=full_labels
+    )
 
     results = {
         "Fold": fold,
@@ -149,7 +206,7 @@ def get_metrics_multiclass_case_cv(trained_svc, kernel_train, Y_train_sub, kerne
         "F1": round(f1, 3),
         "AUC": round(auc, 3),
         "Total Time (s)": round(total_time, 3),
-        "Avg Memory Usage (MB)": round(peak_memory_usage, 3)
+        "Avg Memory Usage (MB)": round(peak_memory_usage, 3),
     }
 
     return results

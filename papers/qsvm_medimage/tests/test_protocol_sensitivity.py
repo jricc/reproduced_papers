@@ -6,7 +6,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -106,8 +105,8 @@ def test_train_and_cross_normalization_uses_training_trace_for_both():
     cross = np.array([[4.0, 8.0], [12.0, 16.0], [20.0, 24.0]])
     train_trace = np.trace(train)
 
-    normalized_train, normalized_cross = (
-        core.normalize_train_and_cross_kernel_trace(train, cross)
+    normalized_train, normalized_cross = core.normalize_train_and_cross_kernel_trace(
+        train, cross
     )
 
     np.testing.assert_allclose(normalized_train, train / train_trace)
@@ -230,10 +229,9 @@ def test_hybrid_legacy_trace_only_scales_square_kernels(qsvm_script):
 
     classical_train = np.array([[0.0, 0.0], [0.0, 1.0]])
     classical_cross = np.array([[0.0, 2.0]])
-    expected_train = (
-        alpha * quantum_train / np.trace(quantum_train)
-        + (1 - alpha) * classical_train / np.trace(classical_train)
-    )
+    expected_train = alpha * quantum_train / np.trace(quantum_train) + (
+        1 - alpha
+    ) * classical_train / np.trace(classical_train)
     expected_cross = alpha * quantum_cross + (1 - alpha) * classical_cross
     np.testing.assert_allclose(hybrid_train, expected_train)
     np.testing.assert_allclose(hybrid_cross, expected_cross)
@@ -260,14 +258,12 @@ def test_hybrid_train_trace_scales_each_kernel_pair_before_mixing(qsvm_script):
 
     classical_train = np.array([[0.0, 0.0], [0.0, 1.0]])
     classical_cross = np.array([[0.0, 2.0]])
-    expected_train = (
-        alpha * quantum_train / np.trace(quantum_train)
-        + (1 - alpha) * classical_train / np.trace(classical_train)
-    )
-    expected_cross = (
-        alpha * quantum_cross / np.trace(quantum_train)
-        + (1 - alpha) * classical_cross / np.trace(classical_train)
-    )
+    expected_train = alpha * quantum_train / np.trace(quantum_train) + (
+        1 - alpha
+    ) * classical_train / np.trace(classical_train)
+    expected_cross = alpha * quantum_cross / np.trace(quantum_train) + (
+        1 - alpha
+    ) * classical_cross / np.trace(classical_train)
     np.testing.assert_allclose(hybrid_train, expected_train)
     np.testing.assert_allclose(hybrid_cross, expected_cross)
 

@@ -53,8 +53,7 @@ def get_data_file(input_dir: str, file_num: int) -> Path:
 
 
 def process_embeddings_in_batches(
-    df: pd.DataFrame,
-    batch_size: int
+    df: pd.DataFrame, batch_size: int
 ) -> Generator[np.ndarray, None, None]:
     """Yield batches of flattened embeddings from dataframe."""
     n_samples = len(df)
@@ -63,13 +62,14 @@ def process_embeddings_in_batches(
     for start_idx in range(0, n_samples, batch_size):
         end_idx = min(start_idx + batch_size, n_samples)
         batch_embeddings = embeddings[start_idx:end_idx]
-        X_batch = np.stack([np.array(emb, dtype=np.float32).flatten() for emb in batch_embeddings])
+        X_batch = np.stack(
+            [np.array(emb, dtype=np.float32).flatten() for emb in batch_embeddings]
+        )
         yield X_batch
 
 
 def compute_global_statistics_streaming(
-    df: pd.DataFrame,
-    batch_size: int = 200
+    df: pd.DataFrame, batch_size: int = 200
 ) -> tuple[np.ndarray, np.ndarray, int]:
     """Compute global mean and std in a streaming fashion."""
     print("\n--- Computing global statistics (streaming) ---")
@@ -87,7 +87,7 @@ def compute_global_statistics_streaming(
             running_sum_sq = np.zeros(n_features, dtype=np.float64)
 
         running_sum += batch.sum(axis=0).astype(np.float64)
-        running_sum_sq += (batch ** 2).sum(axis=0).astype(np.float64)
+        running_sum_sq += (batch**2).sum(axis=0).astype(np.float64)
         samples_processed += len(batch)
 
         print(f"  Stats: {samples_processed}/{n_samples} samples", end="\r")
@@ -116,7 +116,7 @@ def fit_svd_memory_efficient(
     global_mean: np.ndarray,
     global_std: np.ndarray,
     n_components: int,
-    batch_size: int = 100
+    batch_size: int = 100,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Fit SVD using scipy.sparse.linalg.svds which is very memory efficient.
@@ -135,7 +135,9 @@ def fit_svd_memory_efficient(
     actual_components = min(n_components, max_components)
 
     if actual_components < n_components:
-        print(f"  WARNING: Reducing n_components from {n_components} to {actual_components}")
+        print(
+            f"  WARNING: Reducing n_components from {n_components} to {actual_components}"
+        )
 
     # Build standardized matrix chunk by chunk
     # Use float32 to save memory
@@ -150,7 +152,9 @@ def fit_svd_memory_efficient(
         end_idx = samples_processed + batch_size_actual
 
         # Standardize in place
-        X_std[start_idx:end_idx] = ((batch - global_mean) / global_std).astype(np.float32)
+        X_std[start_idx:end_idx] = ((batch - global_mean) / global_std).astype(
+            np.float32
+        )
 
         samples_processed += batch_size_actual
         print(f"  Standardized: {samples_processed}/{n_samples}", end="\r")
@@ -178,11 +182,11 @@ def fit_svd_memory_efficient(
 
     # Compute explained variance ratio
     # Total variance is sum of squared singular values / (n_samples - 1)
-    total_var = np.sum(X_std ** 2) / (n_samples - 1)
-    explained_var = (s ** 2) / (n_samples - 1)
+    total_var = np.sum(X_std**2) / (n_samples - 1)
+    explained_var = (s**2) / (n_samples - 1)
     explained_var_ratio = explained_var / total_var
 
-    print(f"  Variance captured: {np.sum(explained_var_ratio)*100:.2f}%")
+    print(f"  Variance captured: {np.sum(explained_var_ratio) * 100:.2f}%")
     print(f"  Components: {actual_components}")
 
     del X_std
@@ -198,16 +202,16 @@ def transform_and_save(
     global_mean: np.ndarray,
     global_std: np.ndarray,
     explained_var_ratio: np.ndarray,
-    batch_size: int = 200
+    batch_size: int = 200,
 ) -> None:
     """
     Transform the data using Vt and save to output file.
 
     Transform is: X_reduced = X_std @ Vt.T
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("PHASE 2: Transforming and saving dataset")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     original_shape = df["embedding"].values[0].shape
     n_samples = len(df)
@@ -259,7 +263,7 @@ def transform_and_save(
     models_dir = output_file.parent / "models"
     models_dir.mkdir(exist_ok=True)
 
-    file_num = output_file.stem.split('type')[1].split('_')[0]
+    file_num = output_file.stem.split("type")[1].split("_")[0]
 
     model_path = models_dir / f"svd_components_{n_components}_type{file_num}.npz"
     stats_path = models_dir / f"global_stats_{n_components}_type{file_num}.npz"
@@ -279,37 +283,37 @@ def main():
         "--input_dir",
         type=str,
         default="/orcd/pool/006/lceli_shared/DATASET/data-cleaned",
-        help="Input directory containing pickle files"
+        help="Input directory containing pickle files",
     )
     parser.add_argument(
         "--output_base",
         type=str,
         default="/orcd/pool/006/lceli_shared/DATASET",
-        help="Base output directory (will create data-cleaned-pca-{n} subdirectory)"
+        help="Base output directory (will create data-cleaned-pca-{n} subdirectory)",
     )
     parser.add_argument(
         "--n_components",
         type=int,
         default=1999,
-        help="Number of PCA components (max is n_samples-1, so 1999 for 2000 samples)"
+        help="Number of PCA components (max is n_samples-1, so 1999 for 2000 samples)",
     )
     parser.add_argument(
         "--file_num",
         type=int,
         default=1,
-        help="File number to process (e.g., 1 for data_type1_insurance.pkl)"
+        help="File number to process (e.g., 1 for data_type1_insurance.pkl)",
     )
     parser.add_argument(
         "--batch_size",
         type=int,
         default=200,
-        help="Batch size for processing (smaller = less memory)"
+        help="Batch size for processing (smaller = less memory)",
     )
     parser.add_argument(
         "--output_suffix",
         type=str,
         default=None,
-        help="Custom output directory suffix. Default: pca-{n_components}"
+        help="Custom output directory suffix. Default: pca-{n_components}",
     )
 
     args = parser.parse_args()
@@ -343,9 +347,9 @@ def main():
     n_samples = len(df)
     print(f"  Loaded DataFrame with {n_samples} samples")
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("PHASE 1: Fitting SVD")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Compute statistics (streaming)
     global_mean, global_std, n_features = compute_global_statistics_streaming(
@@ -369,7 +373,7 @@ def main():
         global_mean,
         global_std,
         explained_var_ratio,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
     )
 
     actual_components = Vt.shape[0]
@@ -382,7 +386,7 @@ def main():
     print("COMPLETE")
     print("=" * 60)
     print(f"\nReduced dataset saved to: {output_file}")
-    print(f"Variance retained: {total_variance*100:.2f}%")
+    print(f"Variance retained: {total_variance * 100:.2f}%")
     print(f"Original features: {n_features}")
     print(f"Reduced features:  {actual_components}")
 

@@ -35,7 +35,9 @@ def get_file_paths(input_dir: str, output_dir: str, file_num: int):
     return original, pca_reduced
 
 
-def compare_dataframes(original_path: Path, pca_path: Path, verbose: bool = True) -> dict:
+def compare_dataframes(
+    original_path: Path, pca_path: Path, verbose: bool = True
+) -> dict:
     """
     Compare original and PCA reduced dataframes.
 
@@ -48,7 +50,7 @@ def compare_dataframes(original_path: Path, pca_path: Path, verbose: bool = True
         "pca_exists": pca_path.exists(),
         "errors": [],
         "warnings": [],
-        "passed": True
+        "passed": True,
     }
 
     if not original_path.exists():
@@ -97,7 +99,7 @@ def compare_dataframes(original_path: Path, pca_path: Path, verbose: bool = True
         results["warnings"].append(f"Extra columns in PCA file: {extra_in_pca}")
 
     # Check 3: Insurance labels preserved (if column exists)
-    insurance_cols = [c for c in df_orig.columns if 'insurance' in c.lower()]
+    insurance_cols = [c for c in df_orig.columns if "insurance" in c.lower()]
 
     for col in insurance_cols:
         if col in df_pca.columns:
@@ -115,10 +117,14 @@ def compare_dataframes(original_path: Path, pca_path: Path, verbose: bool = True
                     pca_valid = pca_values[~pca_nan]
 
                     if not np.array_equal(orig_valid, pca_valid):
-                        results["errors"].append(f"Insurance column '{col}' values differ")
+                        results["errors"].append(
+                            f"Insurance column '{col}' values differ"
+                        )
                         results["passed"] = False
                 else:
-                    results["errors"].append(f"Insurance column '{col}' NaN positions differ")
+                    results["errors"].append(
+                        f"Insurance column '{col}' NaN positions differ"
+                    )
                     results["passed"] = False
 
             results[f"{col}_preserved"] = True
@@ -128,7 +134,7 @@ def compare_dataframes(original_path: Path, pca_path: Path, verbose: bool = True
 
     # Check 4: Other columns preserved (except embedding)
     common_cols = orig_cols & pca_cols
-    non_embedding_cols = [c for c in common_cols if c != 'embedding']
+    non_embedding_cols = [c for c in common_cols if c != "embedding"]
 
     for col in non_embedding_cols:
         orig_values = df_orig[col].values
@@ -145,11 +151,13 @@ def compare_dataframes(original_path: Path, pca_path: Path, verbose: bool = True
                 orig_nan = pd.isna(orig_values)
                 pca_nan = pd.isna(pca_values)
                 if np.array_equal(orig_nan, pca_nan):
-                    match = np.allclose(
-                        orig_values[~orig_nan],
-                        pca_values[~pca_nan],
-                        equal_nan=True
-                    ) if len(orig_values[~orig_nan]) > 0 else True
+                    match = (
+                        np.allclose(
+                            orig_values[~orig_nan], pca_values[~pca_nan], equal_nan=True
+                        )
+                        if len(orig_values[~orig_nan]) > 0
+                        else True
+                    )
                 else:
                     match = False
 
@@ -160,9 +168,9 @@ def compare_dataframes(original_path: Path, pca_path: Path, verbose: bool = True
             results["warnings"].append(f"Could not compare column '{col}': {e}")
 
     # Check 5: Embedding shape changed correctly
-    if 'embedding' in df_orig.columns and 'embedding' in df_pca.columns:
-        orig_emb_shape = df_orig['embedding'].iloc[0].shape
-        pca_emb_shape = df_pca['embedding'].iloc[0].shape
+    if "embedding" in df_orig.columns and "embedding" in df_pca.columns:
+        orig_emb_shape = df_orig["embedding"].iloc[0].shape
+        pca_emb_shape = df_pca["embedding"].iloc[0].shape
 
         results["original_embedding_shape"] = orig_emb_shape
         results["pca_embedding_shape"] = pca_emb_shape
@@ -177,13 +185,17 @@ def compare_dataframes(original_path: Path, pca_path: Path, verbose: bool = True
             )
 
         # Check all embeddings have same shape
-        pca_shapes = df_pca['embedding'].apply(lambda x: x.shape).unique()
+        pca_shapes = df_pca["embedding"].apply(lambda x: x.shape).unique()
         if len(pca_shapes) > 1:
             results["errors"].append(f"Inconsistent PCA embedding shapes: {pca_shapes}")
             results["passed"] = False
 
     # Check 6: PCA metadata attributes
-    expected_attrs = ['pca_n_components', 'pca_variance_explained', 'original_embedding_shape']
+    expected_attrs = [
+        "pca_n_components",
+        "pca_variance_explained",
+        "original_embedding_shape",
+    ]
 
     for attr in expected_attrs:
         if attr in df_pca.attrs:
@@ -215,13 +227,17 @@ def print_results(results: dict, file_num: int):
         print(f"\nSamples: {results['original_samples']} -> {results['pca_samples']}")
 
     if results.get("original_embedding_shape"):
-        print(f"Embedding shape: {results['original_embedding_shape']} -> {results['pca_embedding_shape']}")
+        print(
+            f"Embedding shape: {results['original_embedding_shape']} -> {results['pca_embedding_shape']}"
+        )
 
     if results.get("attr_pca_n_components"):
         print(f"PCA components: {results['attr_pca_n_components']}")
 
     if results.get("attr_pca_variance_explained"):
-        print(f"Variance explained: {results['attr_pca_variance_explained']*100:.2f}%")
+        print(
+            f"Variance explained: {results['attr_pca_variance_explained'] * 100:.2f}%"
+        )
 
     if results.get("original_columns"):
         print(f"\nColumns preserved: {len(results['original_columns'])}")
@@ -248,36 +264,32 @@ def main():
         "--input_dir",
         type=str,
         default="/orcd/pool/006/lceli_shared/DATASET/data-cleaned",
-        help="Input directory containing original pickle files"
+        help="Input directory containing original pickle files",
     )
     parser.add_argument(
         "--output_base",
         type=str,
         default="/orcd/pool/006/lceli_shared/DATASET",
-        help="Base output directory"
+        help="Base output directory",
     )
     parser.add_argument(
         "--n_components",
         type=int,
         default=1999,
-        help="Number of PCA components (used to find output directory)"
+        help="Number of PCA components (used to find output directory)",
     )
     parser.add_argument(
         "--file_num",
         type=int,
         default=None,
-        help="File number to verify (e.g., 1 for data_type1_insurance.pkl)"
+        help="File number to verify (e.g., 1 for data_type1_insurance.pkl)",
     )
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Verify all files (1 to 11)"
-    )
+    parser.add_argument("--all", action="store_true", help="Verify all files (1 to 11)")
     parser.add_argument(
         "--output_suffix",
         type=str,
         default=None,
-        help="Custom output directory suffix. Default: pca-{n_components}"
+        help="Custom output directory suffix. Default: pca-{n_components}",
     )
 
     args = parser.parse_args()
@@ -315,12 +327,14 @@ def main():
         results = compare_dataframes(original_path, pca_path)
         passed = print_results(results, file_num)
 
-        summary.append({
-            "file_num": file_num,
-            "passed": passed,
-            "errors": len(results["errors"]),
-            "warnings": len(results["warnings"])
-        })
+        summary.append(
+            {
+                "file_num": file_num,
+                "passed": passed,
+                "errors": len(results["errors"]),
+                "warnings": len(results["warnings"]),
+            }
+        )
 
         if not passed:
             all_passed = False
@@ -332,8 +346,10 @@ def main():
 
     for s in summary:
         status = "✓ PASS" if s["passed"] else "✗ FAIL"
-        print(f"  data_type{s['file_num']}_insurance.pkl: {status} "
-              f"(errors: {s['errors']}, warnings: {s['warnings']})")
+        print(
+            f"  data_type{s['file_num']}_insurance.pkl: {status} "
+            f"(errors: {s['errors']}, warnings: {s['warnings']})"
+        )
 
     print("\n" + "=" * 60)
     if all_passed:

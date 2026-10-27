@@ -13,11 +13,13 @@ from qiskit.quantum_info import Statevector
 # cuQuantum and CuPy are optional GPU dependencies.
 def _get_cuquantum():
     from cuquantum.cutensornet import CircuitToEinsum, Network, NetworkOptions
+
     return CircuitToEinsum, Network, NetworkOptions
 
 
 def _get_cupy():
     import cupy as cp
+
     return cp
 
 
@@ -65,13 +67,14 @@ def make_bsp_3dof(n_dim):
     bsp_qc = QuantumCircuit(n_dim)
     bsp_qc.h(list(range(n_dim)))
     for q in range(n_dim):
-        bsp_qc.rz(param.params[q], [q])           # first Rz: param[q]
-        bsp_qc.ry(param.params[q + n_dim], [q])   # Ry: param[q + n_dim]
+        bsp_qc.rz(param.params[q], [q])  # first Rz: param[q]
+        bsp_qc.ry(param.params[q + n_dim], [q])  # Ry: param[q + n_dim]
     for i in range(n_dim - 1):
         bsp_qc.cx(i, i + 1)
     for q in range(n_dim):
         bsp_qc.rz(param.params[q + 2 * n_dim], [q])  # second Rz: param[q + 2*n_dim]
     return bsp_qc
+
 
 def make_zz_featuremap(n_dim: int, reps: int = 1):
     """ZZFeatureMap (Havlíček et al. 2019).
@@ -131,7 +134,7 @@ def compute_zz_kernel_entries(zz_qc, n_dim, pairs, data1, data2, device_id=0):
         y_val = tuple(float(v) for v in data1[i1 - 1])
         x_val = tuple(float(v) for v in data2[i2 - 1])
         kernel_qc = build_qsvm_qc(zz_qc, n_dim, y_val, x_val)
-        converter = CircuitToEinsum(kernel_qc, dtype='complex128', backend='cupy')
+        converter = CircuitToEinsum(kernel_qc, dtype="complex128", backend="cupy")
         exp, oper = converter.amplitude(a)
         with Network(exp, *oper, options=options) as tn:
             tn.contract_path()
@@ -161,27 +164,33 @@ def build_qsvm_qc(bsp_qc, n_dim, y_t, x_t):
     kernel_qc.append(qc_2, list(range(n_dim)))
     return kernel_qc
 
+
 # EDIT V2
 @cache
 def sin_cos(d):
     return np.sin(d), np.cos(d)
 
+
 # EDIT V2
 @cache
 def get_from_d1(d1):
     half_d1 = d1 / 2
-    z_g  = [[np.exp(-1j*half_d1), 0],[0, np.exp(1j*half_d1)]]
+    z_g = [[np.exp(-1j * half_d1), 0], [0, np.exp(1j * half_d1)]]
     s, c = sin_cos(half_d1)
     return s, c, z_g
+
+
 # EDIT V2
 @cache
 def get_from_d2(d2):
     half_d2 = d2 / 2
-    z_gd  = [[np.exp(1j*half_d2),0],[0,np.exp(-1j*half_d2)]]
+    z_gd = [[np.exp(1j * half_d2), 0], [0, np.exp(-1j * half_d2)]]
     s, c = sin_cos(half_d2)
     return s, c, z_gd
 
+
 # EDIT V2: pre-computing parts..
+
 
 def renew_operand(n_dim, oper_tmp, y_t, x_t):
     cp = _get_cupy()
@@ -190,20 +199,19 @@ def renew_operand(n_dim, oper_tmp, y_t, x_t):
     for d1 in y_t:
         s, c, z_g = get_from_d1(d1)
         n_zg.append(z_g)
-        n_zy_g.extend([z_g, [[c, -s],[s, c]]])
+        n_zy_g.extend([z_g, [[c, -s], [s, c]]])
 
-    oper[n_dim*2:n_dim*4] = cp.array(n_zy_g)
-    oper[n_dim*5-1:n_dim*6-1] = cp.array(n_zg)
+    oper[n_dim * 2 : n_dim * 4] = cp.array(n_zy_g)
+    oper[n_dim * 5 - 1 : n_dim * 6 - 1] = cp.array(n_zg)
 
     n_zgd, n_zy_gd = [], []
     for d2 in x_t[::-1]:
         s, c, z_gd = get_from_d2(d2)
         n_zgd.append(z_gd)
-        n_zy_gd.extend([[[c, s],[-s, c]], z_gd])
+        n_zy_gd.extend([[[c, s], [-s, c]], z_gd])
 
-
-    oper[n_dim*6-1:n_dim*7-1] = cp.array(n_zgd)
-    oper[n_dim*8-2:n_dim*10-2] = cp.array(n_zy_gd)
+    oper[n_dim * 6 - 1 : n_dim * 7 - 1] = cp.array(n_zgd)
+    oper[n_dim * 8 - 2 : n_dim * 10 - 2] = cp.array(n_zy_gd)
 
     return oper
 
@@ -224,26 +232,27 @@ def renew_operand_3dof(n_dim, oper_tmp, y_t, x_t):
         d1_rz = y_t[q]
         d1_ry = y_t[q + n_dim]
         s_rz, c_rz, z_g = get_from_d1(d1_rz)
-        s_ry, c_ry, _   = get_from_d1(d1_ry)
+        s_ry, c_ry, _ = get_from_d1(d1_ry)
         n_zg.append(z_g)
         n_zy_g.extend([z_g, [[c_ry, -s_ry], [s_ry, c_ry]]])
 
-    oper[n_dim*2:n_dim*4] = cp.array(n_zy_g)
-    oper[n_dim*5-1:n_dim*6-1] = cp.array(n_zg)
+    oper[n_dim * 2 : n_dim * 4] = cp.array(n_zy_g)
+    oper[n_dim * 5 - 1 : n_dim * 6 - 1] = cp.array(n_zg)
 
     n_zgd, n_zy_gd = [], []
     for q in range(n_dim - 1, -1, -1):
         d2_rz2 = x_t[q + 2 * n_dim]
-        d2_ry  = x_t[q + n_dim]
+        d2_ry = x_t[q + n_dim]
         s_rz2, c_rz2, z_gd = get_from_d2(d2_rz2)
-        s_ry2, c_ry2, _    = get_from_d2(d2_ry)
+        s_ry2, c_ry2, _ = get_from_d2(d2_ry)
         n_zgd.append(z_gd)
         n_zy_gd.extend([[[c_ry2, s_ry2], [-s_ry2, c_ry2]], z_gd])
 
-    oper[n_dim*6-1:n_dim*7-1] = cp.array(n_zgd)
-    oper[n_dim*8-2:n_dim*10-2] = cp.array(n_zy_gd)
+    oper[n_dim * 6 - 1 : n_dim * 7 - 1] = cp.array(n_zgd)
+    oper[n_dim * 8 - 2 : n_dim * 10 - 2] = cp.array(n_zy_gd)
 
     return oper
+
 
 def renew_operand_reps(n_dim, reps, oper_tmp, y_t, x_t):
     """Fast operand renewal for BSP reps>1 (data re-uploading) circuits.
@@ -281,8 +290,8 @@ def renew_operand_reps(n_dim, reps, oper_tmp, y_t, x_t):
     cp = _get_cupy()
     n = n_dim
     oper = oper_tmp.copy()
-    period = 5 * n - 1          # gate slots per rep block (H+Rz+Ry+CNOT+Rz = 5n-1)
-    base_fwd = n                # forward reps start after initial state tensors
+    period = 5 * n - 1  # gate slots per rep block (H+Rz+Ry+CNOT+Rz = 5n-1)
+    base_fwd = n  # forward reps start after initial state tensors
     base_bwd = n + reps * period
 
     # Pre-compute forward gate matrices (same values for every rep)
@@ -292,14 +301,14 @@ def renew_operand_reps(n_dim, reps, oper_tmp, y_t, x_t):
         n_zg.append(z_g)
         n_zy_g.extend([z_g, [[c, -s], [s, c]]])
     arr_zy_g = cp.array(n_zy_g)
-    arr_zg   = cp.array(n_zg)
+    arr_zg = cp.array(n_zg)
 
     for i in range(reps):
         s0 = base_fwd + i * period
         # H at s0 : s0+n (fixed, skip)
-        oper[s0 + n     : s0 + 3*n]   = arr_zy_g   # Rz(y)+Ry(y)
+        oper[s0 + n : s0 + 3 * n] = arr_zy_g  # Rz(y)+Ry(y)
         # CNOT at s0+3n : s0+4n-1 (fixed, skip)
-        oper[s0 + 4*n-1 : s0 + 5*n-1] = arr_zg     # Rz(y) second layer
+        oper[s0 + 4 * n - 1 : s0 + 5 * n - 1] = arr_zg  # Rz(y) second layer
 
     # Pre-compute backward gate matrices (same values for every backward rep)
     n_zgd, n_zy_gd = [], []
@@ -307,22 +316,24 @@ def renew_operand_reps(n_dim, reps, oper_tmp, y_t, x_t):
         s, c, z_gd = get_from_d2(d2)
         n_zgd.append(z_gd)
         n_zy_gd.extend([[[c, s], [-s, c]], z_gd])
-    arr_zgd   = cp.array(n_zgd)
+    arr_zgd = cp.array(n_zgd)
     arr_zy_gd = cp.array(n_zy_gd)
 
     for j in range(reps):
         s0 = base_bwd + j * period
-        oper[s0        : s0 + n]       = arr_zgd    # Rz†(x)
+        oper[s0 : s0 + n] = arr_zgd  # Rz†(x)
         # CNOT† at s0+n : s0+2n-1 (fixed, skip)
-        oper[s0 + 2*n-1 : s0 + 4*n-1] = arr_zy_gd  # Ry†(x)+Rz†(x)
+        oper[s0 + 2 * n - 1 : s0 + 4 * n - 1] = arr_zy_gd  # Ry†(x)+Rz†(x)
         # H† at s0+4n-1 : s0+5n-1 (fixed, skip)
 
     return oper
 
 
 def data_to_operand_reps(n_dim, reps, operand_tmp, data1, data2, indices_list):
-    return [renew_operand_reps(n_dim, reps, operand_tmp, data1[i1-1], data2[i2-1])
-            for i1, i2 in indices_list]
+    return [
+        renew_operand_reps(n_dim, reps, operand_tmp, data1[i1 - 1], data2[i2 - 1])
+        for i1, i2 in indices_list
+    ]
 
 
 def data_partition(indices_list, size, rank):
@@ -332,26 +343,36 @@ def data_partition(indices_list, size, rank):
     num_data = len(indices_list)
     chunk, extra = num_data // size, num_data % size
     data_begin = rank * chunk + min(rank, extra)
-    data_end = num_data if rank == size - 1 else (rank + 1) * chunk + min(rank + 1, extra)
+    data_end = (
+        num_data if rank == size - 1 else (rank + 1) * chunk + min(rank + 1, extra)
+    )
     return indices_list[data_begin:data_end]
 
+
 # EDITED: reduced for-loop so its a comprenhension list
-def data_to_operand(n_dim,operand_tmp,data1,data2,indices_list):
-    return [renew_operand(n_dim, operand_tmp, data1[i1-1], data2[i2-1]) for i1, i2 in indices_list]
+def data_to_operand(n_dim, operand_tmp, data1, data2, indices_list):
+    return [
+        renew_operand(n_dim, operand_tmp, data1[i1 - 1], data2[i2 - 1])
+        for i1, i2 in indices_list
+    ]
 
 
 def data_to_operand_3dof(n_dim, operand_tmp, data1, data2, indices_list):
-    return [renew_operand_3dof(n_dim, operand_tmp, data1[i1-1], data2[i2-1]) for i1, i2 in indices_list]
+    return [
+        renew_operand_3dof(n_dim, operand_tmp, data1[i1 - 1], data2[i2 - 1])
+        for i1, i2 in indices_list
+    ]
 
 
 # EDITED: removing the append so instead does direct mapping
 def operand_to_amp(opers, network):
-    amp_tmp = [None]*len(opers)
+    amp_tmp = [None] * len(opers)
     with network as tn:
         for i, op in enumerate(opers):
             tn.reset_operands(*op)
             amp_tmp[i] = abs(tn.contract()) ** 2
     return amp_tmp
+
 
 def get_kernel_matrix(data1, data2, amp_data, indices_list, mode=None):
     """Builds the precomputed kernel matrix from amplitudes."""
@@ -405,9 +426,7 @@ def normalize_train_and_cross_kernel_trace(kernel_train, kernel_cross):
     if kernel_train.ndim != 2 or kernel_train.shape[0] != kernel_train.shape[1]:
         raise ValueError("kernel_train must be a square matrix")
     if kernel_cross.ndim != 2 or kernel_cross.shape[1] != kernel_train.shape[0]:
-        raise ValueError(
-            "kernel_cross must have one column per training sample"
-        )
+        raise ValueError("kernel_cross must have one column per training sample")
 
     train_trace = np.trace(kernel_train)
     if (
@@ -427,7 +446,7 @@ def normalize_kernel_frobenius(K):
     Ensures Frobenius norm = 1
     Good for: Standard matrix normalization
     """
-    frob_norm = np.linalg.norm(K, ord='fro')
+    frob_norm = np.linalg.norm(K, ord="fro")
     if frob_norm > 0:
         return K / frob_norm
     return K
@@ -501,7 +520,9 @@ def normalize_kernel_cosine(K):
     return K
 
 
-def get_hybrid_kernel_matrix(classical_kernel, quantum_kernel, alpha=0.5, normalize_method="none"):
+def get_hybrid_kernel_matrix(
+    classical_kernel, quantum_kernel, alpha=0.5, normalize_method="none"
+):
     """
     Compute hybrid kernel matrix combining classical and quantum kernels.
 
@@ -554,8 +575,9 @@ def compute_projected_features(circuit, data, n_dim):
         features: np.ndarray of shape (N, n_dim), Pauli-Z expectations in [-1, 1].
     """
     from qiskit.quantum_info import Statevector
+
     features = np.zeros((len(data), n_dim))
-    indices = np.arange(2 ** n_dim, dtype=np.int32)
+    indices = np.arange(2**n_dim, dtype=np.int32)
     for i, x in enumerate(data):
         bound_qc = circuit.assign_parameters(tuple(float(v) for v in x))
         probs = np.abs(Statevector(bound_qc).data) ** 2
@@ -579,4 +601,5 @@ def projected_kernel_matrix(features1, features2, gamma=1.0):
         K: (N, M) kernel matrix.
     """
     from sklearn.metrics.pairwise import rbf_kernel
+
     return rbf_kernel(features1, features2, gamma=gamma)

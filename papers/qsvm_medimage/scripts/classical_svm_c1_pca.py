@@ -31,7 +31,7 @@ warnings.filterwarnings(
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from qve.process import data_prepare_cv
+from qve.process import data_prepare_cv  # noqa: E402
 
 TARGET_COLUMNS = [
     "target",
@@ -306,9 +306,7 @@ def main():
                 "c_values": c_values,
                 "fix_leakage": args.fix_leakage,
                 "preprocessing_protocol": (
-                    "train_only"
-                    if args.fix_leakage
-                    else "legacy_train_plus_heldout"
+                    "train_only" if args.fix_leakage else "legacy_train_plus_heldout"
                 ),
             },
             file,
