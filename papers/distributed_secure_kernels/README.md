@@ -34,7 +34,12 @@ Reproduced, on the original data files, with seeds 0–4 and the paper's stratif
 
 Updates and deviations:
 
-- **Simulation method.** Per-shot Aer simulation costs 8–13 s per kernel entry. Without noise, teleportation is exact, so each kernel entry is drawn as `max(0, 2·Binomial(shots, ½ + ½|⟨a|b⟩|²)/shots − 1)`; with noise, the exact swap-test probability is computed from the per-qubit teleportation channel and the swap-test observable of the transpiled noisy circuit. Both are checked against per-shot Aer runs of the authors' circuit (`tests/test_noise.py`, `tests/test_protocol.py`, `configs/protocol_equivalence_*.json`).
+- **Simulation setup.** The authors simulate every kernel entry shot by shot with Qiskit Aer on an HPC cluster. Done locally this costs 8–13 s per entry (Wine alone: 23–38 h per seed). We compute instead the exact probability that the swap test reads 0, p₀ = ½ + ½|⟨a|b⟩|², and draw the 1,024 shots from Binomial(1,024, p₀). Without noise, teleportation is exact, so this gives the same distribution as the shot-by-shot simulation, not an approximation. With noise, p₀ comes from the noise channel of the transpiled circuit. Checks:
+  - shot-by-shot Aer runs of the authors' circuit follow the same law (χ² test, 30 random state pairs);
+  - with noise, |Δp₀| ≤ 0.004;
+  - our noiseless kernel values match the distribution of the authors' logged values.
+
+  All runs used a 10-core laptop CPU (Python 3.14, Qiskit 2.5.2, Aer 0.17.2), with seeds 0–4; each gate-model sweep takes at most 11 minutes.
 - **Circuits.** The authors' 4n + 1-qubit circuit is ported to Qiskit 2.x (`if_test` replaces `c_if`), including their extra Hadamard before each teleportation. Their released code does not run as published.
 - **What the kernel is.** The swap test returns the *squared* overlap, i.e. the squared cosine similarity of the standardised features. The paper calls it the linear kernel. The exact cosine kernel is reported as an additional reference.
 - **Protocols.** `paper` follows the authors' pipeline: oversampling before the split and before CV, the scaler fitted on the evaluated subset, kernel PCA fitted on all samples, and the component count chosen as the best of 2–7 on the CV folds. `corrected` oversamples inside training folds only and chooses C and the component count by inner CV. For Framingham the C grid stops at 10, for runtime.
@@ -208,7 +213,7 @@ Cell by cell. Metric: stratified 5-fold CV accuracy. Ours: mean ± std over seed
 
 - **Fig. 5:** the error decreases as 1/√D, and at d = 100,000 it no longer depends on the bandwidth, as in the paper.
 - **Theorems 1–6:**
-  - The polynomial map is neither normalised (‖ψ‖² from 0.43 to 1,246 in our checks) nor equal to (a xᵀy + c)ᵈ. Its inner product is exactly (x·y + √c_x √c_y)ᵈ, with c depending on each sample's norm.
+  - **Theorems 1–2 (polynomial map) do not hold as stated.** Simplest counterexample to Theorem 1: N = 1, d = 1, a = 1, x = 1/2 gives c = 1 − a‖x‖ = 1/2 and the amplitudes (x, √c), so ‖ψ‖² = 1/4 + 1/2 = 3/4 ≠ 1. In general ‖ψ(x)‖² = a(‖x‖² + |c|)ᵈ, and the inner product is a(x·y + √c_x √c_y)ᵈ, not (a xᵀy + c)ᵈ, because c depends on each sample's norm. The authors' code renormalises the state, which gives yet another kernel; no result of the paper uses this map. Over our random checks ‖ψ‖² ranges from 0.43 to 1,246.
   - The RBF and Laplacian maps give the stated kernels as inner products. But a swap test returns their square, i.e. the kernel at σ/√2 or α/2.
 - **Corrected protocol and tuned baselines:** see "Fair Baselines" below.
 
@@ -295,7 +300,7 @@ Every MerLin run (configs `accuracy_<dataset>_merlin.json`, `shots_digits_merlin
 - The authors' Framingham noisy values are not explained (see Fig. 3).
 - The authors' Digits evaluation script and fold assignment are not released.
 - A small residual remains between the exact noisy probability and per-shot Aer at 1 % noise: |Δp₀| ≤ 0.004, i.e. ≤ 0.008 on a kernel entry, 4× below the 1,024-shot noise.
-- The security claim is an argument, not an experiment. We only check that the clients' classical messages are uniform.
+- **Security is argued, not tested.** The paper's security claim is an argument in the semi-honest model; we only check that the clients' classical messages are uniform. The experiments, like the authors', are not distributed: all parties are registers of one simulated circuit on one machine, fed from one dataset file standardised with a single scaler. In a real deployment each data holder would standardise its own data, or share its means and standard deviations, which already reveals information about its data; the paper does not address this. Our inference, not tested: the server receives about 1,024 × m copies of each encoded state (m samples), which could let it estimate the state, i.e. the standardised features up to the fixed amplitude permutation.
 
 ## Tests
 
