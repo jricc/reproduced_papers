@@ -1,6 +1,6 @@
 # QuaRK: A Quantum Reservoir Kernel for Time Series Learning - Reproduction
 
-Status: the paper's experiments are reproduced, exactly at the authors' seed and then over 5 seeds, with four classical baselines and three extensions. Photonic adaptation: implemented in MerLin and run on the same 5 seeds (simulation); it matches QuaRK (message 5).
+Status: the paper's experiments are reproduced, exactly at the authors' seed and then over 5 seeds, with four classical baselines and the additions listed under Reproduction Scope. Photonic adaptation: implemented in MerLin and run on the same 5 seeds (simulation); it matches QuaRK (message 5).
 
 ## Reference and Attribution
 
@@ -77,7 +77,7 @@ for sweep in main_comparison shot_noise_ablation scaling photonic_adaptation; do
 done
 ```
 
-Statistics, comparisons (with the authors' run, with the photonic version, and of all models together), and figures:
+Statistics, comparisons (with the authors' run, with the photonic version, and of all models together), result tables and figures:
 
 ```bash
 python papers/QuaRK/utils/forecast_noise_floor.py papers/QuaRK/outdir/sweep_main_comparison --candidate quark
@@ -91,6 +91,10 @@ python papers/QuaRK/utils/compare_photonic_with_quark.py --photonic papers/QuaRK
 python papers/QuaRK/utils/compare_fair_baselines.py --main papers/QuaRK/outdir/sweep_main_comparison \
   --photonic papers/QuaRK/outdir/sweep_photonic_adaptation --shot-noise papers/QuaRK/outdir/sweep_shot_noise_ablation \
   --scaling papers/QuaRK/outdir/sweep_scaling --release-comparison papers/QuaRK/results/release_comparison.json
+python papers/QuaRK/utils/build_result_tables.py --run papers/QuaRK/outdir/run_<timestamp> \
+  --release-run data/QuaRK/authors_release_v1.0.0/storage/results/reg_sweep/c-shadows/full/N=10000__w=25__d=3__s=100/2026-02-02_14-02-13 \
+  --main papers/QuaRK/outdir/sweep_main_comparison --shot-noise papers/QuaRK/outdir/sweep_shot_noise_ablation \
+  --scaling papers/QuaRK/outdir/sweep_scaling --photonic papers/QuaRK/outdir/sweep_photonic_adaptation
 ```
 
 The `plot_*.py` scripts in `utils/` draw the figures; each one's docstring gives its command.
@@ -120,7 +124,7 @@ The sweeps are defined in `utils/sweep_specs/`. Paper-specific flags (`cli.json`
 
 ## Data
 
-The paper uses synthetic data only: windows of a VARMA(3,3) process passed through tanh, labelled by three functionals (paper Sec. 4.1 and App. B). The authors publish the exact dataset and the arrays behind Figs. 2–4 as `storage.zip` in release v1.0.0 of their repository. This reproduction uses that file (about 24 MB):
+The paper uses synthetic data only: windows of a VARMA(3,3) process passed through tanh, labelled by three functionals (paper Sec. 4.1 and App. B). The authors publish the exact dataset and the arrays behind Figs. 2–4 as `storage.zip` in release v1.0.0 of their repository. Every run generates its windows with `lib/data.py`, which replays the authors' generator (commit `8f02ff1`). At seed 12345 the result equals the released dataset, and the paper-setting configs check this whenever they run at that seed, so they need the release file (about 24 MB):
 
 ```bash
 # From the repository root
@@ -139,7 +143,7 @@ The data root is `data/` at the repository root, or `$DATA_DIR` when that variab
 | `results/reg_sweep/c-shadows/full/N=10000__w=25__d=3__s=100/2026-02-02_14-02-13/` | The authors' run behind Figs. 2–4: features, train/test split, selected kernels, regularization sweep, training-size sweep |
 
 Limitations:
-- The release holds one draw of the data (seed 12345). Extra seeds must be generated with the authors' procedure; they are not the authors' files.
+- The release holds one draw of the data (seed 12345). Seeds 1–4 are new draws of the same generator, not the authors' files.
 - `artifacts/train_size_sweep.pkl` is a Python pickle. Load it only with an unpickler restricted to numpy arrays.
 - The release has no licence of its own; the repository is MIT-licensed.
 
@@ -152,7 +156,7 @@ Five messages:
 4. [The paper's learning claims hold only in part](#4-the-papers-learning-claims-hold-only-in-part)
 5. [A photonic version of the reservoir matches QuaRK, with or without photon interference](#5-a-photonic-version-of-the-reservoir-matches-quark-with-or-without-photon-interference)
 
-Metric: the test MSE on 2,000 held-out windows. The normalized test MSE divides it by the variance of the test labels, so tasks can be compared. Unless stated otherwise, λ_reg is chosen on validation data, values are means over the 5 seeds, and two models are compared seed by seed with a rule fixed before the runs (difference beyond twice its standard error). Every table behind these messages, including the reservoir-size sweep: [`results/statistics.md`](results/statistics.md), and for the photonic version [`results/photonic_comparison.md`](results/photonic_comparison.md). All ten models side by side, with how they are matched and their run times: [`results/fair_comparison.md`](results/fair_comparison.md).
+Metric: the test MSE on 2,000 held-out windows. The normalized test MSE divides it by the variance of the test labels, so tasks can be compared. Unless stated otherwise, λ_reg is chosen on validation data, values are means over the 5 seeds, and two models are compared seed by seed with a rule fixed before the runs (difference beyond twice its standard error). Every table behind these messages, including the reservoir-size sweep: [`results/statistics.md`](results/statistics.md), and for the photonic version [`results/photonic_comparison.md`](results/photonic_comparison.md). All ten models side by side, with how they are matched and their run times: [`results/fair_comparison.md`](results/fair_comparison.md). Each paper item against the reproduction, the hardware-aware settings of the photonic runs and the complete table of every sweep: [`results/result_tables.md`](results/result_tables.md).
 
 ### 1. Our run at the authors' seed matches their published run
 
@@ -175,7 +179,7 @@ Figures: [Fig. 2](results/fig2_regularization_sweep.png), [Fig. 3](results/fig3_
 
 ![Normalized test MSE of each model on the three tasks, one dot per seed](results/model_comparison.png)
 
-**Look at:** each row is a model and each dot a seed; the bar is the mean. The axis is logarithmic. QuaRK's rows (blue) lie to the right, at higher error, of every classical row (orange) in the three panels. Values below 10⁻¹⁴ are drawn at the left edge: the linear ridge represents F1 and F2 exactly, because both are linear in the window.
+**Look at:** each row is a model and each dot a seed; the bar is the mean. The axis is logarithmic. QuaRK's rows (blue) lie to the right, at higher error, of every classical row (orange) on F2 and F3; on F1, QuaRK with exact expectations sits next to the default echo state network. Values below 10⁻¹⁴ are drawn at the left edge: the linear ridge represents F1 and F2 exactly, because both are linear in the window.
 
 **Result:** each classical baseline has a lower test MSE than QuaRK on each of the three tasks, in 5 of 5 seeds. The untuned echo state network, a random fixed reservoir like QuaRK's with the same 315 features and readout, reaches a normalized test MSE of 0.063 (F2) and 0.090 (F3), against QuaRK's 0.48 and 0.51. Even without shot noise, QuaRK stays behind every baseline on F2 and F3 (5 of 5 seeds; this comparison was added after the runs).
 
