@@ -12,7 +12,9 @@ Status: all paper experiments run (5 seeds each, exact simulation of the swap-te
 
 ## Original Paper
 
-Two data holders want a kernel between their private samples without revealing them. Each amplitude-encodes its data; a helper distributes Bell pairs; the states are teleported to a server, which estimates the kernel with a swap test. The paper evaluates kernel SVM and kernel PCA on public tabular datasets and studies shot noise and depolarizing noise.
+Two data holders want a kernel between their private samples without revealing them. Each amplitude-encodes its data; a helper distributes Bell pairs; the states are teleported to a server, which estimates the kernel with a swap test. The paper evaluates kernel SVM and kernel PCA on public tabular datasets and studies shot noise and depolarizing noise. The architecture gives an explicit n-qubit construction of the distributed swap-test protocol of Sheng & Zhou (2017)[^sheng-zhou], and our checks confirm it on entangled multi-qubit states.
+
+[^sheng-zhou]: Sheng & Zhou (2017, Science Bulletin 62, 1025) is paywalled; we could not read its full text and rely on its abstract and on the paper's Sec. 3.2.
 
 ## Reproduction Scope, Claims, and Deviations
 
@@ -151,7 +153,7 @@ Summary per paper item. Accuracy values are stratified 5-fold CV accuracy; "metr
 | Fig. 4 | more shots raise accuracy | 128 / 256 / 512 / 1,024 shots: 0.71 / 0.71 / 0.74 / 0.83 | 0.760 / 0.778 / 0.788 / 0.788 | +0.050 / +0.068 / +0.048 / −0.042 | 0 of 4 cells | weak: steps below the 128-shot seed std (0.051) | not clearly reproduced | 5 | values inside the spread from the unknown fold assignment |
 | Fig. 5 | RFF error decreases as 1/√D | curves only | relative Frobenius error 0.593 / 0.113 / 0.019 at D = 32 / 1,024 / 32,768 (RBF, σ = 2, d = 10) | N/A | N/A (no printed values) | yes, and bandwidth-independent at d = 100,000 | supported | 5 repetitions | synthetic Gaussian data, as in the paper |
 | Theorems 1–6 | feature maps give the stated kernels | identities (proofs) | polynomial: ‖ψ‖² from 0.43 to 1,246; RBF / Laplacian inner-product error 0.0018 / 0.0020 at D = 65,536 | N/A | N/A | N/A | polynomial unsupported; RBF / Laplacian supported as inner products | N/A (random draws) | a swap test returns the square: the kernel at σ/√2 or α/2 |
-| App. A | distributed circuit = centralised swap test | proof | per-shot Aer vs the binomial law: pooled χ² p ≈ 0.14 (distributed), 0.26 (centralised) | N/A | N/A | N/A | supported | 30 random pairs | the kernel is the squared overlap |
+| App. A | distributed circuit = centralised swap test | proof | per-shot Aer vs the binomial law: pooled χ² p ≈ 0.14 (distributed), 0.26 (centralised); the paper's Fig. 2 built as drawn (6n + 1 qubits) follows the same law (`tests/test_protocol.py`) | N/A | N/A | N/A | supported | 30 random pairs | the kernel is the squared overlap |
 | Sec. 6.3 | secure against semi-honest parties | argument | client bits uniform: largest deviation from ½ 0.037 (standard error 0.016) | N/A | N/A | N/A | not testable beyond this check | N/A | the server receives 1,024 copies of each encoded state |
 | MerLin adaptation | photonic swap test preserves the results | our gate-model distributed kernel, 9 settings | same within 2 σ in 8 of 9 settings | largest +0.032 (Digits, 1,024 shots; tolerance 0.029) | 8 of 9 settings | yes | preserved (simulation) | 5 | 4 photons, 12–24 modes, ideal photon-number-resolving detectors; see "Hardware-Aware Settings" |
 
@@ -304,7 +306,7 @@ Every MerLin run (configs `accuracy_<dataset>_merlin.json`, `shots_digits_merlin
 
 ## Tests
 
-45 tests: data loading and oversampling, kernels and shot statistics, exact noisy probabilities and per-shot Aer agreement, protocol circuits, feature maps, both evaluation protocols, CLI wiring, the photonic swap test and the fair-baseline grids.
+46 tests: data loading and oversampling, kernels and shot statistics, exact noisy probabilities and per-shot Aer agreement, protocol circuits, feature maps, both evaluation protocols, CLI wiring, the photonic swap test and the fair-baseline grids.
 
 ```bash
 cd papers/distributed_secure_kernels

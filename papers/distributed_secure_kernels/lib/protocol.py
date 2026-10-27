@@ -25,7 +25,7 @@ Centralised circuit (``only_inner_product``): both samples encoded directly on
 from __future__ import annotations
 
 import numpy as np
-from qiskit import QuantumCircuit, transpile
+from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister, transpile
 from qiskit_aer import AerSimulator
 
 from .noise import depolarizing_noise_model
@@ -108,6 +108,65 @@ def centralised_circuit(
         circuit.cswap(ancilla, n + k, k)
     circuit.h(ancilla)
     circuit.measure(ancilla, 0)
+    return circuit
+
+
+def figure2_circuit(alice_state: np.ndarray, bob_state: np.ndarray) -> QuantumCircuit:
+    """The paper's Fig. 2 as drawn: separate registers, 6n + 1 qubits, textbook teleportation.
+
+    Unlike :func:`distributed_circuit` (the authors' code), there is no register
+    reuse and no extra Hadamard. Registers: Alice ``A``, helper halves ``HA`` /
+    ``HB``, server halves ``SA`` / ``SB``, Bob ``B``, ancilla ``a``; the ancilla
+    is measured into the last clbit, as :func:`run_ancilla_zeros` expects.
+
+    Parameters
+    ----------
+    alice_state, bob_state : numpy.ndarray
+        Encoded amplitude vectors of length ``2**n``.
+
+    Returns
+    -------
+    qiskit.QuantumCircuit
+        6n + 1 qubits, 4n + 1 clbits.
+    """
+
+    n = int(np.log2(len(alice_state)))
+    a, ha, sa, sb, hb, b = (
+        QuantumRegister(n, name) for name in ("A", "HA", "SA", "SB", "HB", "B")
+    )
+    ancilla = QuantumRegister(1, "a")
+    m_a, m_ha, m_hb, m_b = (
+        ClassicalRegister(n, name) for name in ("mA", "mHA", "mHB", "mB")
+    )
+    out = ClassicalRegister(1, "out")
+    circuit = QuantumCircuit(a, ha, sa, sb, hb, b, ancilla, m_a, m_ha, m_hb, m_b, out)
+    circuit.initialize(alice_state, a)
+    circuit.initialize(bob_state, b)
+    for k in range(n):
+        # Helper: Bell pairs (HA, SA) and (HB, SB).
+        circuit.h(ha[k])
+        circuit.cx(ha[k], sa[k])
+        circuit.h(hb[k])
+        circuit.cx(hb[k], sb[k])
+    for data, half, target, m_data, m_half in (
+        (a, ha, sa, m_a, m_ha),
+        (b, hb, sb, m_b, m_hb),
+    ):
+        for k in range(n):
+            # Client: CNOT onto its Bell half, H, measure both; server: X then Z corrections.
+            circuit.cx(data[k], half[k])
+            circuit.h(data[k])
+            circuit.measure(data[k], m_data[k])
+            circuit.measure(half[k], m_half[k])
+            with circuit.if_test((m_half[k], 1)):
+                circuit.x(target[k])
+            with circuit.if_test((m_data[k], 1)):
+                circuit.z(target[k])
+    circuit.h(ancilla[0])
+    for k in range(n):
+        circuit.cswap(ancilla[0], sa[k], sb[k])
+    circuit.h(ancilla[0])
+    circuit.measure(ancilla[0], out[0])
     return circuit
 
 
