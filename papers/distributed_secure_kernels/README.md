@@ -45,7 +45,7 @@ Updates and deviations:
   All runs used a 10-core laptop CPU (Python 3.14, Qiskit 2.5.2, Aer 0.17.2), with seeds 0–4; each gate-model sweep takes at most 11 minutes.
 - **Circuits.** The authors' 4n + 1-qubit circuit is ported to Qiskit 2.x (`if_test` replaces `c_if`), including their extra Hadamard before each teleportation. Their released code does not run as published.
 - **What the kernel is.** The swap test returns the *squared* overlap, i.e. the squared cosine similarity of the standardised features. The paper calls it the linear kernel. The exact cosine kernel is reported as an additional reference.
-- **Protocols.** `paper` follows the authors' pipeline: oversampling before the split and before CV, the scaler fitted on the evaluated subset, kernel PCA fitted on all samples, and the component count chosen as the best of 2–7 on the CV folds. `corrected` oversamples inside training folds only and chooses C and the component count by inner CV. For Framingham the C grid stops at 10, for runtime.
+- **Protocols.** `paper` follows the authors' pipeline: oversampling before the split and before CV, the scaler fitted on the evaluated subset, kernel PCA fitted on all samples, and the component count chosen as the best of 2–7 on the CV folds. `corrected` oversamples inside training folds only and chooses C and the component count by inner CV. For Framingham the C grid stops at 10, for runtime. Code of `paper`: `lib/data.py::build_dataset` (oversampling of the whole dataset, scaler on the subset), `lib/evaluation.py::paper_kernel_svm` and `paper_kernel_pca`; folds from `lib/evaluation.py::stratified_folds`. Code of `corrected`: `lib/evaluation.py::corrected_cv` (scaler and `oversample_indices` per training fold, inner CV for C) and `_corrected_kernel_pca_fold`.
 - **Additional baselines.** These are not in the paper: the exact infinite-shot kernel, the exact cosine kernel, a majority-class predictor, and tuned RBF and polynomial SVMs (corrected protocol).
 - **Oversampling.** `RandomOverSampler(0.6)` is re-implemented. The authors' run was unseeded; we use seeds 0–4.
 - **Photonic adaptation.** The server's swap test is also run as a MerLin photonic circuit (see "Photonic Assessment and MerLin Extension"). This is an addition, not part of the paper.
@@ -200,6 +200,7 @@ Cell by cell. Metric: stratified 5-fold CV accuracy. Ours: mean ± std over seed
 
 ![Noise comparison](results/noise_comparison.png)
 
+- **Noise (Fig. 3) is not a message.** Its size depends on a simulator detail the paper does not state: with the same 1 % depolarizing rate, Parkinson's kernel SVM accuracy is 0.707 when state preparation is noiseless (Qiskit 2.5) and 0.644 when it is noisy, close to the authors' 0.633. And the paper runs only the distributed circuit with noise, so the drop cannot be attributed to teleportation, the only cost of distributing.
 - **Fig. 3:** with state preparation kept noiseless (Qiskit 2.5 keeps `initialize` native), noise degrades much less than in the authors' logs.
   - Making state preparation noisy, a likely behaviour of the authors' older Qiskit, reproduces their Parkinson's values: 0.748 and 0.644 against 0.787 and 0.633, with kernel variance 0.0352 / 0.0019 against 0.0322 / 0.0012.
   - Their Framingham noisy kernels behave like kernels without data information: variance 0.000445 at both noise levels. A fully depolarized kernel gives 0.00033 and 0.59 accuracy.
@@ -224,7 +225,7 @@ Cell by cell. Metric: stratified 5-fold CV accuracy. Ours: mean ± std over seed
 
 The paper claims that the distributed quantum kernel is *comparable* to the centralised quantum and classical kernels. It claims no advantage. Its classical column is an untuned linear SVM, evaluated with a leaky protocol, so we compare against a fair baseline under a leak-free protocol:
 
-- **Protocol:** minority oversampling and model selection stay inside the training folds.
+- **Protocol:** minority oversampling and model selection stay inside the training folds (`lib/evaluation.py::corrected_cv`).
 - **Fair baseline:** RBF and polynomial SVMs tuned by inner 5-fold CV, with the grids fixed before any run.
 - **Same conditions for every system:** samples, folds, C grid and seeds 0–4.
 - **Decision rule:** two systems are equivalent when the difference is within 2 σ of the seed spread.
@@ -304,6 +305,8 @@ Every MerLin run (configs `accuracy_<dataset>_merlin.json`, `shots_digits_merlin
 - The authors' Digits evaluation script and fold assignment are not released.
 - A small residual remains between the exact noisy probability and per-shot Aer at 1 % noise: |Δp₀| ≤ 0.004, i.e. ≤ 0.008 on a kernel entry, 4× below the 1,024-shot noise.
 - **Security is argued, not tested.** The paper's security claim is an argument in the semi-honest model; we only check that the clients' classical messages are uniform. The experiments, like the authors', are not distributed: all parties are registers of one simulated circuit on one machine, fed from one dataset file standardised with a single scaler. In a real deployment each data holder would standardise its own data, or share its means and standard deviations, which already reveals information about its data; the paper does not address this. Our inference, not tested: the server receives about 1,024 × m copies of each encoded state (m samples), which could let it estimate the state, i.e. the standardised features up to the fixed amplitude permutation.
+- **The cost of teleportation under noise is not measured.** The paper attributes the small Table 1 gap between distributed and centralised quantum accuracy to the extra gates of teleportation (Sec. 7.1), but Table 1 is noiseless: teleportation is then exact and the gap is shot noise. With noise the extra gates do matter, yet Fig. 3 runs only the distributed circuit, and so does our noise sweep. A noisy centralised column would measure what teleportation costs.
+- **The proposed feature maps are never used for learning.** Like the paper, we train only with amplitude encoding. Without noise the protocol is exact, so the RBF and Laplacian maps (Eqs. 4 and 8) could be tested on the Table 1 datasets with the exact simulation used here, without more qubits; the swap test would then return approximately the squared kernels, i.e. RBF with bandwidth σ/√2 and Laplacian with α/2. Not run.
 
 ## Tests
 
