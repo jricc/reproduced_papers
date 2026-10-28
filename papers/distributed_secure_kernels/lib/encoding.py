@@ -1,4 +1,4 @@
-"""Amplitude encoding as in the authors' ``library.py`` (paper Definition 4, Sec. 6.2.2).
+"""Amplitude encoding as in the authors' ``library.py`` (paper Definition 4 in Sec. 2.3; clients encode in Sec. 6.2.2).
 
 A sample ``x`` becomes the n-qubit state with amplitudes ``x / ||x||``, zero-padded
 to ``2**n`` with ``n = ceil(log2(len(x)))``, then reordered by one fixed

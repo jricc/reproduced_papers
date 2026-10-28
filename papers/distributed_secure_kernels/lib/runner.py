@@ -398,7 +398,12 @@ def run_protocol(cfg, status, run_dir):
 def run_rff(cfg, status, run_dir):
     from .rff_error import run_rff_error
 
-    _no_dataset(status, run_dir, "gaussian", "standard-normal samples (paper App. B.4)")
+    _no_dataset(
+        status,
+        run_dir,
+        "gaussian",
+        "none: entries drawn from a standard normal distribution, as in the authors' kernel_approximation_error.py",
+    )
     return {"errors": run_rff_error(cfg, cfg["dtype"].torch)}
 
 

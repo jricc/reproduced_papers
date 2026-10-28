@@ -8,8 +8,10 @@ The four real datasets are the files the authors' code reads (see the README,
 - ``parkinsons/parkinsons.data`` (UCI 174, 195 rows, target ``status``);
 - ``framingham/framingham.csv`` (Kaggle copy, 4,238 rows, target ``TenYearCHD``).
 
-``gaussian`` is the synthetic standard-normal data of the paper's Fig. 5
-(App. B.4); it is generated, not read.
+``gaussian`` is the synthetic data of the paper's Fig. 5 (random-Fourier-feature
+error, described in App. B.4): samples with entries drawn from a standard normal
+distribution, as in the authors' ``other_kernels/kernel_approximation_error.py``
+(the paper only says "simulated datasets"); it is generated, not read.
 
 Paper-faithful preprocessing (authors' ``*_Dataset_Experiments/*.py``):
 
@@ -188,7 +190,9 @@ def _synthetic_gaussian(cfg: dict[str, Any], rng: np.random.Generator) -> Datase
             "name": "gaussian",
             "kind": "synthetic",
             "shape": [n_samples, n_features],
-            "preprocessing": ["standard normal draws (paper App. B.4)"],
+            "preprocessing": [
+                "none: entries drawn from a standard normal distribution, as in the authors' kernel_approximation_error.py"
+            ],
         },
     )
 
