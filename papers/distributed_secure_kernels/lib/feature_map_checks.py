@@ -4,13 +4,15 @@ Polynomial map (Eq. 3): the paper states ``||psi(x)|| = 1`` (Thm 1) and
 ``<psi(x)|psi(y)> = (a x.y + c)^d`` (Thm 2) for one constant ``c``, but defines
 ``c`` from ``||x||``. The check reports the actual norm and compares the
 inner product with ``(a x.y + c_x)^d``, ``(a x.y + c_y)^d`` and
-``(a x.y + sqrt(c_x) sqrt(c_y))^d``, which is what the multinomial expansion of
-Eq. 3 gives when ``c`` differs between ``x`` and ``y``.
+``(a x.y + conj(sqrt(c_x)) sqrt(c_y))^d``. For a = 1, as in the stored check,
+the last one is what the multinomial expansion of Eq. 3 gives when ``c``
+differs between ``x`` and ``y`` (in general ``a (x.y + conj(sqrt(c_x)) sqrt(c_y))^d``).
 
 RFF maps (Eqs. 4 and 8): the inner product approximates the RBF / Laplacian
-kernel in expectation (Thms 4 and 6); the swap test returns its square, which
-approximates the same kernel with bandwidth ``sigma / sqrt(2)`` (RBF) or
-``alpha / 2`` (Laplacian).
+kernel in expectation (Thms 4 and 6). With the authors' estimator
+``2 Pr(0) - 1``, a swap test gives its square, which approximates the same
+kernel with bandwidth ``sigma / sqrt(2)`` (RBF) or ``alpha / 2`` (Laplacian);
+the square root of Eq. 11 gives the kernel itself.
 """
 
 from __future__ import annotations

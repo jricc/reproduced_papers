@@ -5,8 +5,8 @@ Swap test (paper App. A): the ancilla reads 0 with probability
 ``K = 1 - 2 * n_ones / shots = 2 * n_zeros / shots - 1``, clipped at 0, so the
 quantity estimated is the *squared* overlap. For amplitude-encoded data this
 is the squared cosine similarity ``(x.y)^2 / (||x||^2 ||y||^2)``, not the
-linear kernel named in the paper's Sec. 3.1; the paper's Eq. 11 (App. A) writes
-``|<psi|phi>| = 2 Pr(0) - 1``, dropping the square.
+linear kernel named in the paper's Sec. 3.1. The paper's Eq. 11 (App. A) takes
+the square root, ``|<psi|phi>| = sqrt(2 Pr(0) - 1)``; the authors' code does not.
 
 Without noise, teleportation is exact, so the distributed and centralised
 circuits give the same ``p0`` and each kernel entry is

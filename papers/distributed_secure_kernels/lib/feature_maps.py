@@ -14,7 +14,8 @@
   a phase ``alpha_j ~ U(0, 2 pi)`` added to every argument.
 
 The paper's Theorems state the kernel as the inner product ``<psi(x)|psi(y)>``;
-a swap test returns its squared modulus (App. A), which the experiment also reports.
+the authors' swap-test estimator ``2 Pr(0) - 1`` gives its squared modulus
+(App. A), which the experiment also reports.
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ def multi_indices(length: int, degree: int) -> Iterator[tuple[int, ...]]:
 
 
 def polynomial_offset(x: np.ndarray, degree: int, scale: float) -> float:
-    """``c`` of Eq. 3: ``1 - a||x||`` (odd degree) or ``-1 - a||x||`` (even degree)."""
+    """``c`` of Eq. 3, read as in the authors' code: odd or even degree."""
 
     norm = float(np.linalg.norm(x))
     return (1.0 - scale * norm) if degree % 2 else (-1.0 - scale * norm)
