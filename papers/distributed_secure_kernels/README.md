@@ -4,10 +4,11 @@ Status: all paper experiments run (5 seeds each, exact simulation of the swap-te
 
 ## Reference and Attribution
 
-- Paper: "Distributed and Secure Kernel-Based Quantum Machine Learning" (arXiv preprint, v1 2024, v3 2025)
+- Paper: "Distributed and Secure Kernel-Based Quantum Machine Learning", Transactions on Machine Learning Research (2025)
 - Authors: Arjhun Swaminathan, Mete Akgün
-- arXiv: https://arxiv.org/abs/2408.10265
-- Original repository: https://github.com/mdppml/distributed-secure-kernel-based-QML
+- OpenReview: https://openreview.net/forum?id=3jdI0aEW3k
+- arXiv: https://arxiv.org/abs/2408.10265 (v3, the version read for this reproduction)
+- Original repository: https://github.com/mdppml/distributed-secure-kernel-based-QML (commit `aed2cf9` used here), archived on Zenodo as v1.0: https://doi.org/10.5281/zenodo.18743937
 - License and attribution notes: the authors' repository is MIT-licensed. This reproduction re-implements their pipeline; it does not copy their code.
 
 ## Original Paper
@@ -315,13 +316,35 @@ pytest -q
 
 ## Citation and License
 
+The authors ask to cite the paper and the code as follows.
+
+Paper:
+
 ```bibtex
-@article{swaminathan2024distributed,
-  title   = {Distributed and Secure Kernel-Based Quantum Machine Learning},
-  author  = {Swaminathan, Arjhun and Akg{\"u}n, Mete},
-  journal = {arXiv preprint arXiv:2408.10265},
-  year    = {2024}
+@article{
+swaminathan2025distributed,
+title={Distributed and Secure Kernel-Based Quantum Machine Learning},
+author={Arjhun Swaminathan and Mete Akg{\"u}n},
+journal={Transactions on Machine Learning Research},
+issn={2835-8856},
+year={2025},
+url={https://openreview.net/forum?id=3jdI0aEW3k},
+note={}
 }
 ```
 
-The authors' repository README states that the paper is published in Transactions on Machine Learning Research (2025); we did not check the TMLR record. Their code is MIT-licensed and was used only as a reference: this folder re-implements the pipeline under the license of this repository. Dataset licences are listed under "Data".
+Code:
+
+```bibtex
+@software{Swaminathan2025QML,
+  author    = {Swaminathan, A. and Akg{\"u}n, M.},
+  title     = {Distributed and Secure Kernel-Based Quantum Machine Learning - code},
+  version = {v1.0},
+  year      = {2025},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.18743937},
+  url       = {https://doi.org/10.5281/zenodo.18743937}
+}
+```
+
+Their GitHub code is MIT-licensed and was used only as a reference: this folder re-implements the pipeline under the license of this repository. Dataset licences are listed under "Data".
