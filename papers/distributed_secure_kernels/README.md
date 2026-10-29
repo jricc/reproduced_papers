@@ -1,7 +1,5 @@
 # Distributed and Secure Kernel-Based Quantum Machine Learning - Reproduction
 
-Status: all paper experiments run (5 seeds each, exact simulation of the swap-test circuits), a partial photonic (MerLin) adaptation evaluated, and a fair classical comparison made; results below.
-
 ## Reference and Attribution
 
 - Paper: "Distributed and Secure Kernel-Based Quantum Machine Learning", Transactions on Machine Learning Research (2025)
@@ -13,41 +11,59 @@ Status: all paper experiments run (5 seeds each, exact simulation of the swap-te
 
 ## Original Paper
 
-Two data holders want a kernel between their private samples without revealing them. Each amplitude-encodes its data; a helper distributes Bell pairs; the states are teleported to a server, which estimates the kernel with a swap test. The paper evaluates kernel SVM and kernel PCA on public tabular datasets and studies shot noise and depolarizing noise. The architecture gives an explicit n-qubit construction of the distributed swap-test protocol of Sheng & Zhou (2017)[^sheng-zhou], and our checks confirm it on entangled multi-qubit states.
+Two data holders want to train a kernel method on their joint data without revealing their samples. A kernel SVM never needs the samples themselves, only their pairwise similarities (the kernel matrix). The paper computes each similarity with a quantum protocol:
 
-[^sheng-zhou]: Sheng & Zhou (2017, Science Bulletin 62, 1025) is paywalled; we could not read its full text and rely on its abstract and on the paper's Sec. 3.2.
+```mermaid
+flowchart LR
+    subgraph ALICE["Alice (local)"]
+        A["sample x"] --> EA["1. Encoding<br/>|ψ(x)⟩"]
+    end
+    subgraph BOB["Bob (local)"]
+        B["sample y"] --> EB["1. Encoding<br/>|ψ(y)⟩"]
+    end
+    subgraph SERVER["Server (remote)"]
+        S["3. Swap test<br/>measured over 1,024 shots"] -- "K(x, y) = |⟨ψ(x)|ψ(y)⟩|²" --> L["4. Kernel SVM or kernel PCA"]
+    end
+    EA --> TA(["2. Teleportation"])
+    EB --> TB(["2. Teleportation"])
+    TA -- "|ψ(x)⟩" --> S
+    TB -- "|ψ(y)⟩" --> S
+    classDef quantum fill:#dbe8fb,stroke:#2a78d6
+    classDef classical fill:#ffffff,stroke:#6b6b66
+    class EA,EB,TA,TB,S quantum
+    class A,B,L classical
+    style ALICE fill:#e9f5ec,stroke:#4f9a61
+    style BOB fill:#fdf1e3,stroke:#c98a3e
+    style SERVER fill:#f2edf9,stroke:#8566b8
+```
+
+Blue boxes: quantum states; white boxes: classical data; frames: where each step runs.
+
+The server cannot read the states it receives, since a measurement destroys a state and gives a single bit; the swap test only reveals how similar the two states are. Teleportation uses Bell pairs from a third party, the helper, which never sees the data.
+
+The paper also proposes quantum feature maps for the polynomial, RBF and Laplacian kernels (Sec. 4); its experiments use amplitude encoding only. It evaluates the protocol on three public tabular datasets (accuracy with stratified 5-fold CV, Table 1), with depolarizing noise (Fig. 3), and with the number of shots on Digits images (Fig. 4). It claims accuracy comparable to centralised quantum and classical computation, and security against semi-honest parties. The paper argues security from the no-cloning theorem and destructive measurement: an eavesdropper cannot copy the quantum states without disturbing them, and the server cannot read the states it receives (Sec. 1 and 6.3).
 
 ## Reproduction Scope, Claims, and Deviations
 
-Claims tested (the paper's own wording is "comparable", not "better"):
+Claims tested (the paper claims "comparable", not "better" accuracy):
 
-- the distributed protocol computes the same kernel as a centralised swap test (App. A);
-- distributed quantum accuracy is comparable to centralised quantum and classical accuracy, and centralised classical methods are generally highest (Table 1);
-- depolarizing noise lowers accuracy (Fig. 3), and more shots raise it (Fig. 4);
-- the proposed feature maps give the polynomial, RBF and Laplacian kernels (Theorems 1–6), with random-Fourier-feature error decreasing as 1/√D (Fig. 5);
-- the protocol is secure against semi-honest parties (Sec. 6.3). This is an argument, so only the clients' messages are checked.
+- the distributed protocol (Fig. 2) computes the same kernel as a centralised swap test (proof in App. A);
+- distributed quantum accuracy is comparable to centralised quantum and classical accuracy (Table 1).
 
-Reproduced, on the original data files, with seeds 0–4 and the paper's stratified 5-fold CV:
-
-- Table 1 (kernel SVM and kernel PCA; centralised classical, centralised quantum and distributed quantum columns; 1,024 shots);
-- Fig. 3 (0.1 % and 1 % depolarizing noise, the authors' noise model);
-- Fig. 4 (128–1,024 shots on the 100-sample Digits subset);
-- Fig. 5 (random-Fourier-feature error vs D, d = 10 and d = 100,000);
-- numerical checks of Theorems 1–6 (proposed feature maps) and of the protocol (App. A), against per-shot Qiskit Aer runs.
+Table 1 is reproduced on the authors' data files, with the paper's stratified 5-fold CV and 1,024 shots; Fig. 3 and 4 are reproduced as side results.
 
 Updates and deviations:
 
-- **Simulation setup.** The authors simulate every kernel entry shot by shot with Qiskit Aer on an HPC cluster. Done locally this costs 8–13 s per entry (Wine alone: 23–38 h per seed). We compute instead the exact probability that the swap test reads 0, p₀ = ½ + ½|⟨a|b⟩|², and draw the 1,024 shots from Binomial(1,024, p₀). Without noise, teleportation is exact, so this gives the same distribution as the shot-by-shot simulation, not an approximation. With noise, p₀ comes from the noise channel of the transpiled circuit. Checks:
-  - shot-by-shot Aer runs of the authors' circuit follow the same law (χ² test, 30 random state pairs);
-  - with noise, |Δp₀| ≤ 0.004;
-  - our noiseless kernel values match the distribution of the authors' logged values.
+- **Simulation setup.** The authors simulate every kernel entry shot by shot with Qiskit Aer on an HPC cluster (Sec. 7): one 1,024-shot Aer run per entry, out of reach on our machine. Each shot reads 0 with probability p₀ = ½ + ½|⟨a|b⟩|² (App. A), independently of the others, so we draw the number of zeros over 1,024 shots directly from Binomial(1,024, p₀) instead of simulating the circuit. Without noise this is the same distribution, not an approximation: shot-by-shot Aer runs of the authors' circuits, distributed and centralised, follow this law (figure below; 30 random state pairs, 2 and 4 qubits per party). This is also our check of App. A. Details: `docs/swap_test_kernel.md`. All runs used a 10-core macOS CPU (Python 3.14, Qiskit 2.5.2, Aer 0.17.2).
 
-  All runs used a 10-core laptop CPU (Python 3.14, Qiskit 2.5.2, Aer 0.17.2), with seeds 0–4; each gate-model sweep takes at most about 11 minutes.
+  ![Per-shot Aer runs of the authors' circuits vs the swap-test law](results/protocol_check.png)
+
+  Each point is one random state pair: the fraction of 0s measured on Aer against the probability the binomial shortcut uses. All points lie on the diagonal, nearly all inside the grey band (±2 standard deviations): Aer follows the law, for both circuits.
 - **Circuits.** The authors' 4n + 1-qubit circuit is ported to Qiskit 2.x (`if_test` replaces `c_if`), including their extra Hadamard before each teleportation. Their released code does not run as published.
 - **What the kernel is.** The authors' code uses 2 Pr(0) − 1, the *squared* overlap, i.e. the squared cosine similarity of the standardised features. The paper calls it the linear kernel; its Eq. 11 takes the square root, which gives the cosine without its sign. The exact cosine kernel is reported as an additional reference.
 - **Protocols.** `paper` follows the authors' pipeline: oversampling before the split and before CV, the scaler fitted on the evaluated subset, kernel PCA fitted on all samples, and the component count chosen as the best of 2–7 on the CV folds. `corrected` oversamples inside training folds only and chooses C and the component count by inner CV. For Framingham the C grid stops at 10, for runtime. Code of `paper`: `lib/data.py::build_dataset` (oversampling of the whole dataset, scaler on the subset), `lib/evaluation.py::paper_kernel_svm` and `paper_kernel_pca`; folds from `lib/evaluation.py::stratified_folds`. Code of `corrected`: `lib/evaluation.py::corrected_cv` (scaler and `oversample_indices` per training fold, inner CV for C) and `_corrected_kernel_pca_fold`.
 - **Additional baselines.** These are not in the paper: the exact infinite-shot kernel, the exact cosine kernel, a majority-class predictor, and tuned RBF and polynomial SVMs (corrected protocol).
-- **Oversampling.** `RandomOverSampler(0.6)` is re-implemented. The authors' run was unseeded; we use seeds 0–4.
+- **Seeds.** The authors' code seeds neither the shots nor the oversampling (`RandomOverSampler(0.6)`, re-implemented here). We repeat each run with seeds 0–4, which change only these two draws; the CV folds and the evaluated subset stay the authors' fixed ones.
 - **Photonic adaptation.** The server's swap test is also run as a MerLin photonic circuit (see "Photonic Assessment and MerLin Extension"). This is an addition, not part of the paper.
 
 ## Project Layout
@@ -89,6 +105,12 @@ python implementation.py --paper distributed_secure_kernels --config configs/acc
 # A full 5-seed sweep (writes outdir/sweep_<id>_<stamp>/ with summary.json)
 python papers/distributed_secure_kernels/utils/run_sweep.py --sweep-id table1_original --seeds 0 1 2 3 4 --workers 5 \
     --configs configs/accuracy_wine_original.json configs/accuracy_parkinsons_original.json configs/accuracy_framingham_original.json
+
+# Protocol check (App. A): per-shot Aer runs of the authors' circuits, then the figure (about 3 minutes)
+python implementation.py --paper distributed_secure_kernels --config configs/protocol_equivalence_original.json --seed 0
+python implementation.py --paper distributed_secure_kernels --config configs/protocol_equivalence_four_qubits.json --seed 0
+python papers/distributed_secure_kernels/utils/plot_protocol_check.py
+# writes results/protocol_check.png: every point should lie on the diagonal, nearly all inside the grey band
 ```
 
 Walkthrough: `notebook.ipynb` (run it from this folder) reruns the Wine, Parkinson's and Digits experiments live with five seeds, checks them against the stored sweeps, and loads the longer runs from `results/`. It takes about 2–3 minutes on a laptop CPU.
@@ -103,6 +125,7 @@ Each run writes `outdir/run_YYYYMMDD-HHMMSS/` with `run.log`, `run_status.json`,
 | `utils/compare_merlin.py` | `results/merlin_comparison.{json,md}` |
 | `utils/fair_comparison.py`, `utils/plot_fair_comparison.py` | `results/fair_comparison.{json,md,png}` |
 | `utils/export_sweep_tables.py` | `results/sweep_results.{md,json}` (full table of every sweep; the JSON keeps the per-seed values the notebook reads) |
+| `utils/plot_protocol_check.py` | `results/protocol_check.png` (per-shot Aer runs vs the swap-test law) |
 | `utils/merlin_noise_check.py` | MerLin distinguishability-noise check (printed; see "Photonic Assessment and MerLin Extension") |
 
 ## Configuration
@@ -210,7 +233,6 @@ Cell by cell. Metric: stratified 5-fold CV accuracy. Ours: mean ± std over seed
 ![Shots comparison](results/shots_comparison.png)
 
 - **Fig. 4:** with the authors' preprocessing, accuracy goes from 0.760 (128 shots) to 0.788 (512 and 1,024 shots). The exact kernel gives 0.820. These steps are smaller than the seed std at 128 shots (0.051), so the paper's rise with shots (0.71 → 0.83) is not clearly reproduced.
-  - The authors standardise the Digits pixels. With the same preprocessing, our kernel values match the distribution of the authors' logged values: same quartiles at 128 and 1,024 shots.
   - The remaining differences (−0.04 to +0.07) lie within the spread caused by the fold assignment. The authors' evaluation script is not released.
   - Their classical line (0.88) equals our linear SVM on unscaled pixels; on standardised pixels it is 0.92.
 
@@ -265,7 +287,7 @@ This is an adaptation, not the paper's method. Status: **partial MerLin translat
   - one 50:50 beam splitter mixes each pair of corresponding modes;
   - photon-number-resolving detection gives the parity of the photon number in one output group, with P(even) = ½ + ½|⟨ψ(x)|ψ(y)⟩|².
 
-  The code is in `lib/photonic_merlin.py`, a MerLin `QuantumLayer` in the FOCK computation space. In every run, P(even) matches the swap-test law to within 2.6 × 10⁻⁸.
+  The code is in `lib/photonic_merlin.py`, a MerLin `QuantumLayer` in the FOCK computation space (details, and why not `merlin.FidelityKernel`: `docs/swap_test_kernel.md`). In every run, P(even) matches the swap-test law to within 2.6 × 10⁻⁸.
 - **What is not translated:**
   - **The teleportation-based distribution.** Linear-optics Bell measurements succeed with probability at most ½, so teleporting these multi-photon register states is not deterministic. Photons travel themselves, so distribution becomes direct transmission, which changes the security argument.
   - **The Fig. 3 noise study.** For two identical superposed registers, MerLin's distinguishability noise model gives P(even) = 0.77 at indistinguishability 0.9999 instead of about 0.9999 (1.0 without noise). This is the value an incoherent mixture of the basis states would give; identical basis states behave as expected (`utils/merlin_noise_check.py`).
@@ -304,7 +326,6 @@ Every MerLin run (configs `accuracy_<dataset>_merlin.json`, `shots_digits_merlin
 - The authors' Qiskit / Aer version is unknown. It decides which gates the depolarizing noise reaches, so the Fig. 3 comparison depends on it.
 - The authors' Framingham noisy values are not explained (see Fig. 3).
 - The authors' Digits evaluation script and fold assignment are not released.
-- A small residual remains between the exact noisy probability and per-shot Aer at 1 % noise: |Δp₀| ≤ 0.004, i.e. ≤ 0.008 on a kernel entry, 4× below the 1,024-shot noise.
 - **Security is argued, not tested.** The paper's security claim is an argument in the semi-honest model; we only check that the clients' classical messages are uniform. The experiments, like the authors', are not distributed: all parties are registers of one simulated circuit on one machine, fed from one dataset file standardised with a single scaler. In a real deployment each data holder would standardise its own data, or share its means and standard deviations, which already reveals information about its data; the paper does not address this. Our inference, not tested: the server receives about 1,024 × m copies of each encoded state (m samples), which could let it estimate the state, i.e. the standardised features up to the fixed amplitude permutation.
 - **The cost of teleportation under noise is not measured.** The paper attributes the small Table 1 gap between distributed and centralised quantum accuracy to the extra gates of teleportation (Sec. 7.1), but Table 1 is noiseless: teleportation is then exact and the gap is shot noise. With noise the extra gates do matter, yet Fig. 3 reports only the distributed circuit, and our noise sweep runs only that circuit. A noisy centralised column would measure what teleportation costs.
 - **The proposed feature maps are never used for learning.** Like the paper, we train only with amplitude encoding. Without noise the protocol is exact, so the RBF and Laplacian maps (Eqs. 4 and 8) could be tested on the Table 1 datasets with the exact simulation used here, without more qubits; with the authors' estimator (2 Pr(0) − 1), a swap test would give approximately their square, i.e. the kernel at σ/√2 or α/2, while the square root of Eq. 11 gives the kernels themselves. Not run.

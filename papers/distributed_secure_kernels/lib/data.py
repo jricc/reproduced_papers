@@ -1,12 +1,9 @@
 """Datasets and preprocessing for the distributed secure kernel reproduction.
 
-The four real datasets are the files the authors' code reads (see the README,
-"Data"), copied under ``<data_root>/distributed_secure_kernels``:
-
-- ``wine/wine_data.csv`` (scikit-learn copy of UCI Wine, 178 x 13, 3 classes);
-- ``digits/digits.csv.gz`` (scikit-learn 8 x 8 digits, 1,797 x 64, 10 classes);
-- ``parkinsons/parkinsons.data`` (UCI 174, 195 rows, target ``status``);
-- ``framingham/framingham.csv`` (Kaggle copy, 4,238 rows, target ``TenYearCHD``).
+The four real datasets are the files the authors' code reads (README, "Data"),
+copied under ``<data_root>/distributed_secure_kernels``: scikit-learn's bundled
+``wine_data.csv`` and ``digits.csv.gz`` (behind ``load_wine`` / ``load_digits``),
+and the authors' copies of ``parkinsons.data`` and ``framingham.csv``.
 
 ``gaussian`` is the synthetic data of the paper's Fig. 5 (random-Fourier-feature
 error, described in App. B.4): samples with entries drawn from a standard normal

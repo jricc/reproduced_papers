@@ -8,8 +8,8 @@ this noise model is attached, transpiling against the simulator decomposes
 ``h``, ``x``, ``z`` and ``cswap`` into ``u1/u2/u3/cx`` (so they become noisy),
 while ``initialize`` stays a native, noiseless instruction.
 
-Exact noisy probability (replaces the per-shot simulation, which costs 8-13 s
-per kernel entry):
+Exact noisy probability (replaces the per-shot simulation of every kernel
+entry):
 
 1. Each per-qubit teleportation touches only its own (data, helper, server)
    triple, so the teleportation of an n-qubit state is a product channel
