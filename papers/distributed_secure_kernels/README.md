@@ -7,7 +7,7 @@
 - OpenReview: https://openreview.net/forum?id=3jdI0aEW3k
 - arXiv: https://arxiv.org/abs/2408.10265 (v3, the version read for this reproduction)
 - Original repository: https://github.com/mdppml/distributed-secure-kernel-based-QML (commit `aed2cf9` used here), archived on Zenodo as v1.0: https://doi.org/10.5281/zenodo.18743937
-- License and attribution notes: the authors' repository is MIT-licensed. This reproduction re-implements their pipeline; it does not copy their code.
+- License and attribution notes: the authors' repository is MIT-licensed, like this one. This folder re-implements their pipeline; `lib/protocol.py` ports their circuits gate for gate to Qiskit 2.x.
 
 ## Original Paper
 
@@ -81,7 +81,7 @@ Updates and deviations:
     - is it held back by the square the swap test imposes? → the exact cosine kernel (the linear kernel the paper names);
     - is it comparable to a fair classical model, as the paper claims? → tuned RBF and polynomial SVMs;
     - does it learn at all? → a majority-class predictor.
-  - **How:** `configs/accuracy_<dataset>_reference.json` (paper protocol), `_corrected.json` and `_fair_classical.json` (corrected protocol); results in "Fair Baselines".
+  - **How:** `configs/accuracy_<dataset>_reference.json` (paper protocol), `_corrected.json` and `_fair_classical.json` (corrected protocol); results in Table 1 bis and `results/fair_comparison.md`.
 - **Seeds.**
   - **Why:** the authors' code sets no seed for the shots or the oversampling.
   - **What:** we repeat each run with seeds 0–4, which change only these two draws; the CV folds and the evaluated subset stay the authors' fixed ones.
@@ -111,18 +111,18 @@ distributed_secure_kernels/
 |   `-- photonic_merlin.py    MerLin photonic swap test (adaptation)
 |-- utils/                    sweep coordinator, summaries, comparisons, figures
 |-- tests/                    pytest suite
-|-- docs/sweep_plans/         dated plans of the two re-run sweeps
+|-- docs/                     kernel computation and protocols in detail; dated sweep plans
 `-- results/                  curated tables and figures used below
 ```
 
 ## Install and How to Run
 
 ```bash
+# From the repository root
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r papers/distributed_secure_kernels/requirements.txt
 
-# From the repository root
 python implementation.py --paper distributed_secure_kernels --help
 
 # Smoke run (Wine, paper protocol, seconds)
@@ -144,7 +144,7 @@ python papers/distributed_secure_kernels/utils/plot_protocol_check.py
 
 Walkthrough: `notebook.ipynb` (run it from this folder) reruns the Wine, Parkinson's and Digits experiments live with five seeds, checks them against the stored sweeps, and loads the longer runs from `results/`. It takes about 2–3 minutes on a laptop CPU.
 
-Each run writes `outdir/run_YYYYMMDD-HHMMSS/` with `run.log`, `run_status.json`, `config_snapshot.json` and `metrics.json`; each sweep writes `outdir/sweep_<id>_<stamp>/` with `sweep.log`, `sweep_status.json` and `summary.{json,md}`. Curated tables and figures are in `results/`. These scripts regenerate them from the sweep and run folders:
+Each run writes `outdir/run_YYYYMMDD-HHMMSS/` with `run.log`, `run_status.json`, `config_snapshot.json` and `metrics.json`; each sweep writes `outdir/sweep_<id>_<stamp>/` with `sweep.log`, `sweep_status.json` and `summary.{json,md}`. Curated tables and figures are in `results/`. These scripts regenerate them from the sweep and run folders, which are not committed (run the sweeps first):
 
 | Script | Output |
 |---|---|
@@ -154,6 +154,7 @@ Each run writes `outdir/run_YYYYMMDD-HHMMSS/` with `run.log`, `run_status.json`,
 | `utils/compare_merlin.py` | `results/merlin_comparison.{json,md}` |
 | `utils/fair_comparison.py`, `utils/plot_fair_comparison.py` | `results/fair_comparison.{json,md,png}` |
 | `utils/export_sweep_tables.py` | `results/sweep_results.{md,json}` (full table of every sweep; the JSON keeps the per-seed values the notebook reads) |
+| `utils/paper_layout_results.py` | `results/table1.md`, `results/table1_bis.md`, `results/table1_merlin.md`, `results/fig3.png`, `results/fig4.png`, `results/fig4_merlin.png` (paper layout; reads only `results/sweep_results.json`) |
 | `utils/plot_protocol_check.py` | `results/protocol_check.png` (per-shot Aer runs vs the swap-test law) |
 | `utils/merlin_noise_check.py` | MerLin distinguishability-noise check (printed; see "Photonic Assessment and MerLin Extension") |
 
@@ -173,11 +174,11 @@ Each run writes `outdir/run_YYYYMMDD-HHMMSS/` with `run.log`, `run_status.json`,
 | `feature_map_identities_original.json` | Theorems 1–6 |
 | `protocol_equivalence_original.json`, `protocol_equivalence_four_qubits.json` | App. A, per-shot Aer checks |
 | `accuracy_<dataset>_merlin.json`, `shots_digits_merlin.json` | MerLin adaptation (photonic swap test), Table 1 and Fig. 4 settings |
-| `accuracy_<dataset>_fair_classical.json`, `accuracy_<dataset>_merlin_corrected.json` | fair comparison: tuned RBF / polynomial SVMs (planned grids) and MerLin under the corrected protocol |
+| `accuracy_<dataset>_fair_classical.json`, `accuracy_<dataset>_merlin_corrected.json` | fair comparison: tuned RBF / polynomial SVMs (planned grids) and MerLin under the corrected protocol (MerLin: Wine and Parkinson's only) |
 
 ## Data
 
-Datasets live under `data/distributed_secure_kernels/` (resolved by `runtime_lib.data_paths.paper_data_dir`), one folder per dataset with a `SHA256SUMS` file. They are not tracked in git.
+Datasets live under `data/distributed_secure_kernels/` (resolved by `lib/data.py::dataset_dir` from `--data-root`, else the `DATA_DIR` environment variable, else the repository's `data/`), one folder per dataset with a `SHA256SUMS` file. They are not tracked in git.
 
 | Dataset | Folder | Source | Licence |
 |---|---|---|---|
@@ -186,7 +187,7 @@ Datasets live under `data/distributed_secure_kernels/` (resolved by `runtime_lib
 | Parkinson's (195 recordings, 22 features) | `parkinsons/` | authors' repository, commit `aed2cf9`; UCI dataset 174 (Little 2007) | CC BY 4.0 |
 | Framingham (4,238 patients, 15 features; 14 used) | `framingham/` | authors' repository, commit `aed2cf9`; Kaggle dataset by A. Bhardwaj (2022) | "Unknown" on Kaggle |
 
-To recreate them, clone the authors' repository into `data/distributed_secure_kernels/sources/authors_repo` and copy the two data files and the two scikit-learn files into the folders above; check with `shasum -a 256 -c SHA256SUMS` in each folder.
+To recreate them, clone the authors' repository into `data/distributed_secure_kernels/sources/authors_repo` and copy its two data files and the two scikit-learn files (`wine_data.csv`, `digits.csv.gz` from `sklearn/datasets/data/` of the installed scikit-learn) into the folders above; check with `shasum -a 256 -c SHA256SUMS` in each folder.
 
 Limitations:
 - Parkinson's is the UCI file the authors' code reads; the paper cites a different Parkinson's dataset (Sakar et al. 2019).
@@ -195,169 +196,86 @@ Limitations:
 
 ## Results Obtained and Comparison with the Paper
 
-Scope: paper-accurate protocol and settings, exact simulation of the 1,024-shot swap tests, 5 seeds. Sources of the paper values: Table 1 and Fig. 4 of the paper; Fig. 3 shows bars only, so its values come from the authors' released logs. Two Table 1 values (Wine, quantum columns) do not appear in any released log.
+Stratified 5-fold CV; kSVM: kernel SVM, kPCA: kernel PCA followed by a linear SVM. Paper: one run, ± fold std. Ours: mean ± std over seeds 0–4. The cell-by-cell differences and the matching rule are in `results/paper_comparison.md`.
 
-Summary per paper item. Accuracy values are stratified 5-fold CV accuracy; "metric agreement" counts the cells matched by the rule below; the MerLin row compares with our gate-model run, not with the paper.
+### Table 1 (paper protocol, accuracy)
 
-| Paper item | Claim tested | Paper value | Reproduced value | Difference | Metric agreement | Trend agreement | Claim support | Seeds | Comment |
-|---|---|---:|---:|---:|---|---|---|---:|---|
-| Table 1 | distributed ≈ centralised; classical highest | distributed kernel SVM, Wine / Parkinson's / Framingham: 0.887 / 0.798 / 0.634 | 0.896 / 0.756 / 0.639 | +0.008 / −0.043 / +0.005 | 12 of 15 cells | yes: classical highest in 5 of 5 rows (by mean); distributed ≈ centralised | supported (both) | 5 | Framingham distributed kernel PCA equals the majority-class rate |
-| Fig. 3 | noise lowers accuracy | kernel SVM at 0.1 % / 1 % (authors' logs): Framingham 0.581 / 0.581, Parkinson's 0.787 / 0.633 | 0.638 / 0.623, 0.764 / 0.707 | +0.058 / +0.041, −0.023 / +0.074 | 1 of 6 cells | partly: lower at 1 % on both; at 0.1 % within seed std of no noise | trend supported, magnitude not | 5 | Parkinson's matches with noisy state preparation (diagnostic); Framingham logs unexplained |
-| Fig. 4 | more shots raise accuracy | 128 / 256 / 512 / 1,024 shots: 0.71 / 0.71 / 0.74 / 0.83 | 0.760 / 0.778 / 0.788 / 0.788 | +0.050 / +0.068 / +0.048 / −0.042 | 0 of 4 cells | weak: steps below the 128-shot seed std (0.051) | not clearly reproduced | 5 | values inside the spread from the unknown fold assignment |
-| Fig. 5 | RFF error decreases as 1/√D | curves only | relative Frobenius error 0.593 / 0.113 / 0.019 at D = 32 / 1,024 / 32,768 (RBF, σ = 2, d = 10) | N/A | N/A (no printed values) | yes, and bandwidth-independent at d = 100,000 | supported | 5 repetitions | synthetic standard-normal data, as in the authors' script |
-| Theorems 1–6 | feature maps give the stated kernels | identities (proofs) | polynomial: ‖ψ‖² from 0.43 to 1,246; RBF / Laplacian inner-product error 0.0018 / 0.0020 at D = 65,536 | N/A | N/A | N/A | polynomial unsupported; RBF / Laplacian supported as inner products | N/A (random draws) | with the authors' estimator (2 Pr(0) − 1), a swap test gives the square, i.e. the kernel at σ/√2 or α/2; the square root of Eq. 11 gives the kernel itself |
-| App. A | distributed circuit = centralised swap test | proof | per-shot Aer vs the binomial law: pooled χ² p ≈ 0.14 (distributed), 0.26 (centralised); the paper's Fig. 2 built as drawn (6n + 1 qubits) follows the same law (`tests/test_protocol.py`) | N/A | N/A | N/A | supported | 30 random pairs | the authors' estimator 2 Pr(0) − 1 gives the squared overlap |
-| Sec. 6.3 | secure against semi-honest parties | argument | client bits uniform: largest deviation from ½ 0.037 (standard error 0.016) | N/A | N/A | N/A | not testable beyond this check | N/A | the server receives 1,024 copies of each encoded state per kernel entry |
-| MerLin adaptation | photonic swap test preserves the results | our gate-model distributed kernel, 9 settings | same within 2 σ in 8 of 9 settings | largest +0.032 (Digits, 1,024 shots; tolerance 0.029) | 8 of 9 settings | yes | preserved (simulation) | 5 | 4 photons, 12–24 modes, ideal photon-number-resolving detectors; see "Hardware-Aware Settings" |
+| Dataset | Method | | Centralised classical | Centralised quantum | Distributed quantum |
+|---|---|---|---:|---:|---:|
+| Wine | kSVM | paper | 0.986 ± 0.017 | 0.880 | 0.887 ± 0.026 |
+| | | ours | 0.986 ± 0.000 | 0.907 ± 0.019 | 0.896 ± 0.009 |
+| Parkinson's | kSVM | paper | 0.820 ± 0.064 | 0.787 | 0.798 ± 0.080 |
+| | | ours | 0.805 ± 0.013 | 0.772 ± 0.021 | 0.756 ± 0.035 |
+|  | kPCA | paper | 0.787 ± 0.072 | 0.745 | 0.766 ± 0.074 |
+| | | ours | 0.812 ± 0.005 | 0.703 ± 0.045 | 0.700 ± 0.047 |
+| Framingham | kSVM | paper | 0.679 ± 0.011 | 0.631 | 0.634 ± 0.014 |
+| | | ours | 0.689 ± 0.003 | 0.634 ± 0.009 | 0.639 ± 0.010 |
+|  | kPCA | paper | 0.679 ± 0.009 | 0.625 | 0.642 ± 0.009 |
+| | | ours | 0.682 ± 0.004 | 0.625 ± 0.000 | 0.625 ± 0.000 |
 
-Every sweep behind these numbers is complete (7 sweeps, 130 of 130 planned runs) and repeats fixed configurations over seeds, so no candidate is selected; their full tables are in `results/sweep_results.md`.
+12 of 15 cells fall within the paper's fold std; distributed and centralised quantum differ only by shot noise.
 
-Cell by cell. Metric: stratified 5-fold CV accuracy. Ours: mean ± std over seeds 0-4. Matched: |difference| ≤ the paper's fold std, or ≤ 0.02 when the paper gives none.
+### Fig. 3 (paper protocol, noise)
 
-| Experiment | Setting | Paper | Ours (5 seeds) | Difference | Matched |
-|---|---|---:|---:|---:|---|
-| Table 1 | Wine, kernel SVM, centralised classical | 0.9860 ± 0.0172 | 0.9860 ± 0.0000 | -0.0000 | yes |
-| Table 1 | Wine, kernel SVM, centralised quantum | 0.8805 | 0.9067 ± 0.0190 | +0.0262 | no |
-| Table 1 | Wine, kernel SVM, distributed quantum | 0.8874 ± 0.0259 | 0.8957 ± 0.0090 | +0.0083 | yes |
-| Table 1 | Parkinson's, kernel SVM, centralised classical | 0.8196 ± 0.0644 | 0.8054 ± 0.0126 | -0.0142 | yes |
-| Table 1 | Parkinson's, kernel SVM, centralised quantum | 0.7875 | 0.7725 ± 0.0213 | -0.0150 | yes |
-| Table 1 | Parkinson's, kernel SVM, distributed quantum | 0.7983 ± 0.0798 | 0.7557 ± 0.0347 | -0.0426 | yes |
-| Table 1 | Parkinson's, kernel PCA, centralised classical | 0.7872 ± 0.0716 | 0.8118 ± 0.0046 | +0.0246 | yes |
-| Table 1 | Parkinson's, kernel PCA, centralised quantum | 0.7451 | 0.7033 ± 0.0447 | -0.0418 | no |
-| Table 1 | Parkinson's, kernel PCA, distributed quantum | 0.7660 ± 0.0744 | 0.7002 ± 0.0467 | -0.0658 | yes |
-| Table 1 | Framingham, kernel SVM, centralised classical | 0.6788 ± 0.0108 | 0.6894 ± 0.0028 | +0.0106 | yes |
-| Table 1 | Framingham, kernel SVM, centralised quantum | 0.6308 | 0.6335 ± 0.0093 | +0.0027 | yes |
-| Table 1 | Framingham, kernel SVM, distributed quantum | 0.6340 ± 0.0143 | 0.6393 ± 0.0101 | +0.0053 | yes |
-| Table 1 | Framingham, kernel PCA, centralised classical | 0.6788 ± 0.0095 | 0.6824 ± 0.0037 | +0.0036 | yes |
-| Table 1 | Framingham, kernel PCA, centralised quantum | 0.6249 | 0.6249 ± 0.0000 | +0.0000 | yes |
-| Table 1 | Framingham, kernel PCA, distributed quantum | 0.6422 ± 0.0092 | 0.6249 ± 0.0000 | -0.0173 | no |
-| Fig. 3 | Framingham, kernel SVM, 0.1 % noise | 0.5807 ± 0.0098 | 0.6382 ± 0.0054 | +0.0575 | no |
-| Fig. 3 | Framingham, kernel SVM, 1 % noise | 0.5814 ± 0.0072 | 0.6228 ± 0.0114 | +0.0414 | no |
-| Fig. 3 | Parkinson's, kernel SVM, 0.1 % noise | 0.7873 ± 0.0655 | 0.7641 ± 0.0252 | -0.0232 | yes |
-| Fig. 3 | Parkinson's, kernel SVM, 1 % noise | 0.6330 ± 0.0087 | 0.7066 ± 0.0171 | +0.0736 | no |
-| Fig. 3 | Parkinson's, 6-component kernel PCA, 0.1 % noise | 0.7445 ± 0.0410 | 0.6736 ± 0.0440 | -0.0709 | no |
-| Fig. 3 | Parkinson's, 6-component kernel PCA, 1 % noise | 0.6276 ± 0.0049 | 0.6140 ± 0.0110 | -0.0136 | no |
-| Fig. 4 | Digits, 128 shots | 0.7100 | 0.7600 ± 0.0510 | +0.0500 | no |
-| Fig. 4 | Digits, 256 shots | 0.7100 | 0.7780 ± 0.0130 | +0.0680 | no |
-| Fig. 4 | Digits, 512 shots | 0.7400 | 0.7880 ± 0.0259 | +0.0480 | no |
-| Fig. 4 | Digits, 1,024 shots | 0.8300 | 0.7880 ± 0.0084 | -0.0420 | no |
-| Fig. 4 | Digits, classical linear SVM | 0.8800 | 0.9200 ± 0.0000 | +0.0400 | no |
+<img src="results/fig3.png" alt="Fig. 3: accuracy with depolarizing noise, ours vs the authors' logs" width="640">
 
-![Table 1 comparison](results/table1_comparison.png)
+Noise lowers accuracy in both, but less in ours: at 1 % the Parkinson's kernel SVM falls to 0.707, against 0.633 in the authors' logs. The size of the drop depends on whether state preparation is noisy, which the paper does not state; noise is not one of our messages.
 
-- **Table 1:** 12 of 15 cells fall within the paper's fold std. The three others:
-  - Two are single-run paper values without a std, within our seed spread (Wine centralised +0.026, seed std 0.019; Parkinson's kernel PCA centralised −0.042, seed std 0.045).
-  - Under our simulation, the Framingham distributed kernel PCA equals the majority-class rate (0.6249).
-- **Distributed vs centralised:** without noise, the two columns differ only by shot noise. Per-shot Aer runs confirm that they follow the same binomial law.
+### Fig. 4 (paper protocol, shots)
 
-![Noise comparison](results/noise_comparison.png)
+<img src="results/fig4.png" alt="Fig. 4: accuracy vs number of shots, ours vs the paper" width="480">
 
-- **Noise (Fig. 3) is not a message.** Its size depends on a simulator detail the paper does not state: with the same 1 % depolarizing rate, Parkinson's kernel SVM accuracy is 0.707 when state preparation is noiseless (Qiskit 2.5) and 0.644 when it is noisy, close to the authors' 0.633. And the paper reports noise only for the distributed circuit, so the drop cannot be attributed to teleportation, the only cost of distributing.
-- **Fig. 3:** with state preparation kept noiseless (Qiskit 2.5 keeps `initialize` native), noise degrades much less than in the authors' logs.
-  - The no-noise points reuse the random draw of Table 1's centralised column (same noiseless law), so they equal it (Parkinson's 0.772) rather than the distributed one (0.756).
-  - Making state preparation noisy, a likely behaviour of the authors' older Qiskit, brings Parkinson's close to their values: 0.748 and 0.644 against 0.787 and 0.633 (within their fold std at 0.1 %, just outside it at 1 %), with kernel variance 0.0352 / 0.0019 against 0.0322 / 0.0012.
-  - Their Framingham noisy kernels behave like kernels without data information: variance 0.000445 at both noise levels. A fully depolarized kernel gives 0.00033 and 0.59 accuracy.
-  - Their noise model cannot produce this at 0.1 %, so this gap stays unexplained.
+Our accuracy rises little with shots (0.760 at 128 shots, 0.788 at 1,024), less than the paper's (0.71 to 0.83); our steps are smaller than the seed spread at 128 shots.
 
-![Shots comparison](results/shots_comparison.png)
+### Table 1 bis (corrected protocol, balanced accuracy)
 
-- **Fig. 4:** with the authors' preprocessing, accuracy goes from 0.760 (128 shots) to 0.788 (512 and 1,024 shots). The exact kernel gives 0.820. These steps are smaller than the seed std at 128 shots (0.051), so the paper's rise with shots (0.71 → 0.83) is not clearly reproduced.
-  - The remaining differences (−0.04 to +0.07) lie within the spread caused by the fold assignment. The authors' evaluation script is not released.
-  - Their classical line (0.88) equals our linear SVM on unscaled pixels; on standardised pixels it is 0.92.
+Classical columns: linear and RBF SVMs, tuned by inner cross-validation.
 
-![RFF error](results/rff_error.png)
+| Dataset | Method | Centralised classical | Centralised quantum | Distributed quantum | RBF SVM |
+|---|---|---:|---:|---:|---:|
+| Wine | kSVM | 0.983 ± 0.000 | 0.896 ± 0.014 | 0.895 ± 0.010 | 0.983 ± 0.000 |
+| Parkinson's | kSVM | 0.751 ± 0.016 | 0.622 ± 0.038 | 0.623 ± 0.034 | 0.913 ± 0.008 |
+|  | kPCA | 0.745 ± 0.012 | 0.582 ± 0.021 | 0.591 ± 0.039 | 0.698 ± 0.026 |
+| Framingham | kSVM | 0.629 ± 0.001 | 0.501 ± 0.001 | 0.501 ± 0.001 | 0.512 ± 0.004 |
+|  | kPCA | 0.547 ± 0.006 | 0.500 ± 0.000 | 0.500 ± 0.000 | 0.511 ± 0.004 |
 
-- **Fig. 5:** the error decreases as 1/√D, and at d = 100,000 it no longer depends on the bandwidth, as in the paper.
-- **Theorems 1–6:**
-  - **Theorems 1–2 (polynomial map) do not hold as stated.** Simplest counterexample to Theorem 1: N = 1, d = 1, a = 1, x = 1/2 gives c = 1 − a‖x‖ = 1/2 and the amplitudes (x, √c), so ‖ψ‖² = 1/4 + 1/2 = 3/4 ≠ 1. In general ‖ψ(x)‖² = a(‖x‖² + |c|)ᵈ, and the inner product is a(x·y + (√c_x)* √c_y)ᵈ (* is the complex conjugate; c can be negative), not (a xᵀy + c)ᵈ, because c depends on each sample's norm. The authors' code renormalises the state, which gives yet another kernel; no result of the paper uses this map. Over our random checks ‖ψ‖² ranges from 0.43 to 1,246.
-  - The RBF and Laplacian maps give the stated kernels as inner products. With the authors' estimator (2 Pr(0) − 1), a swap test gives their square, i.e. the kernel at σ/√2 or α/2; the square root of Eq. 11 gives the kernels themselves.
-- **Corrected protocol and tuned baselines:** see "Fair Baselines" below.
-
-## Fair Baselines
-
-The paper claims that the distributed quantum kernel is *comparable* to the centralised quantum and classical kernels. It claims no advantage. Its classical column is an untuned linear SVM, evaluated with a leaky protocol, so we compare against a fair baseline under a leak-free protocol:
-
-- **Protocol:** minority oversampling and model selection stay inside the training folds (`lib/evaluation.py::corrected_cv`).
-- **Fair baseline:** RBF and polynomial SVMs tuned by inner 5-fold CV, with the grids fixed before any run.
-- **Same conditions for every system:** samples, folds, C grid and seeds 0–4.
-- **Decision rule:** two systems are equivalent when the difference is within 2 σ of the seed spread.
-
-![Fair comparison](results/fair_comparison.png)
-
-| Kernel SVM, accuracy / balanced accuracy | Wine | Parkinson's | Framingham |
-|---|---|---|---|
-| Distributed quantum kernel (paper method, simulated) | 0.890 / 0.895 | 0.782 / 0.623 | 0.846 / 0.501 |
-| Centralised quantum kernel | 0.891 / 0.896 | 0.783 / 0.622 | 0.847 / 0.501 |
-| MerLin photonic swap test (adaptation, simulated) | 0.897 / 0.901 | 0.765 / 0.617 | not run (same kernel) |
-| Linear SVM (paper's classical column), C tuned | 0.979 / 0.983 | 0.819 / 0.751 | 0.791 / 0.629 |
-| Tuned RBF SVM | 0.979 / 0.983 | 0.927 / 0.913 | 0.840 / 0.512 |
-| Tuned polynomial SVM | 0.979 / 0.983 | 0.898 / 0.887 | 0.836 / 0.535 |
-| Majority class | 0.401 / 0.333 | 0.757 / 0.500 | 0.847 / 0.500 |
-
-Full table, with seed std, resources and timing, plus the pairwise decisions: `results/fair_comparison.md`.
-
-- **Distributed vs centralised: supported.** They are equivalent everywhere, and so is the MerLin adaptation.
-- **"Comparable to classical": not supported.**
-  - A tuned classical SVM is higher beyond 2 σ on Wine (+0.089) and on Parkinson's (+0.145 accuracy, +0.29 balanced accuracy).
-  - On Framingham the quantum kernel predicts the majority class: balanced accuracy 0.50, below every classical SVM. Its higher plain accuracy is just the majority rate (0.847).
-  - Even under the paper's own protocol and baseline, the linear SVM is higher beyond 2 σ in 4 of 5 Table 1 cells.
-- **No quantum or photonic advantage is claimed or observed.**
-- **Caveats:**
-  - The classical SVMs tune kernel hyperparameters that the quantum kernel does not have.
-  - No classical *secure* baseline (secure multiparty computation, homomorphic encryption) was run, so the cost of privacy is not measured.
-  - All quantum timings come from an exact simulation. On Framingham the protocol itself would need about 4.4 × 10⁹ circuit executions per fold, against 4.3 × 10⁶ closed-form kernel evaluations for the classical SVMs.
+Without the leaks of the authors' protocol, a classical SVM is higher beyond 2 σ of the seed spread on every dataset, and on Framingham the quantum kernel only predicts the majority class (balanced accuracy 0.50). Even with the authors' protocol, the linear SVM is higher beyond 2 σ in 4 of the 5 Table 1 cells. Full comparison: `results/fair_comparison.md`.
 
 ## Photonic Assessment and MerLin Extension
 
-This is an adaptation, not the paper's method. Status: **partial MerLin translation**.
+This is an adaptation, not the paper's method: only the encoding and the swap test are translated (see "Photonic adaptation" above). It is simulated with MerLin on CPU, with ideal photon-number-resolving detectors (FOCK space; threshold detectors cannot read the parity), ideal state preparation (not deterministic with linear optics), no loss and no postselection. In every run, the photonic probability matches the swap-test law to within 2.6 × 10⁻⁸. Paper protocol, accuracy, mean ± std over seeds 0–4.
 
-- **What is translated:** the server's swap test. Its photonic counterpart is register-wise Hong–Ou–Mandel interference:
-  - each sample is amplitude-encoded into a register of m modes holding 2 photons, so 4 photons in total;
-  - one 50:50 beam splitter mixes each pair of corresponding modes;
-  - photon-number-resolving detection gives the parity of the photon number in one output group, with P(even) = ½ + ½|⟨ψ(x)|ψ(y)⟩|².
+### Table 1 settings
 
-  The code is in `lib/photonic_merlin.py`, a MerLin `QuantumLayer` in the FOCK computation space (details, and why not `merlin.FidelityKernel`: `docs/swap_test_kernel.md`). In every run, P(even) matches the swap-test law to within 2.6 × 10⁻⁸.
-- **What is not translated:**
-  - **The teleportation-based distribution.** Linear-optics Bell measurements succeed with probability at most ½, so teleporting these multi-photon register states is not deterministic. Photons travel themselves, so distribution becomes direct transmission, which changes the security argument.
-  - **The Fig. 3 noise study.** For two identical superposed registers, MerLin's distinguishability noise model gives P(even) = 0.77 at indistinguishability 0.9999 instead of about 0.9999 (1.0 without noise). This is the value an incoherent mixture of the basis states would give; identical basis states behave as expected (`utils/merlin_noise_check.py`).
-- **Result:** under the paper protocol (5 seeds; 1,024 shots, and 128 to 1,024 for Digits), the photonic kernel gives the same accuracies as the gate-model distributed kernel within 2 σ in 8 of 9 settings (`results/merlin_comparison.md`).
-  - The exception is Digits at 1,024 shots: +0.032 against a tolerance of 0.029. The two kernels are identical, so this comes from independent shot-noise draws.
-- **Hardware assumptions:**
-  - FOCK space with ideal photon-number-resolving detectors (threshold detectors cannot read the parity);
-  - 4 photons on 12, 16 or 24 modes;
-  - ideal state preparation, which linear optics cannot do deterministically;
-  - no loss, no postselection;
-  - simulation only (MerLin, CPU), with parity drawn as Binomial(1,024, P(even)).
+4 photons on 12 modes (Wine, Framingham) or 16 modes (Parkinson's); 1,024 shots per kernel entry.
 
-## Hardware-Aware Settings
+| Dataset | Method | Centralised quantum | Distributed quantum | MerLin photonic |
+|---|---|---:|---:|---:|
+| Wine | kSVM | 0.907 ± 0.019 | 0.896 ± 0.009 | 0.909 ± 0.013 |
+| Parkinson's | kSVM | 0.772 ± 0.021 | 0.756 ± 0.035 | 0.764 ± 0.019 |
+|  | kPCA | 0.703 ± 0.045 | 0.700 ± 0.047 | 0.706 ± 0.045 |
+| Framingham | kSVM | 0.634 ± 0.009 | 0.639 ± 0.010 | 0.632 ± 0.011 |
+|  | kPCA | 0.625 ± 0.000 | 0.625 ± 0.000 | 0.625 ± 0.000 |
 
-Every MerLin run (configs `accuracy_<dataset>_merlin.json`, `shots_digits_merlin.json`, `accuracy_<dataset>_merlin_corrected.json`) is a simulation; no photonic hardware was used.
+The photonic kernel matches the distributed gate-model kernel within 2 σ of the seed spread in every cell.
 
-| Field | Value |
-|---|---|
-| Computation space | `ComputationSpace.FOCK` (parity needs photon counting) |
-| Detector model | ideal photon-number-resolving detectors (no loss, no dark counts) |
-| Photon number | 4 (2 per register) |
-| Number of modes | 12 (Wine, Framingham), 16 (Parkinson's), 24 (Digits) |
-| Input state | product of two amplitude-encoded registers over the C(m, 2) collision-free 2-photon Fock states, ideal preparation |
-| Encoding | amplitude (`StateVector.from_tensor`, joint FOCK basis) |
-| Measurement strategy | `MeasurementStrategy.probs(computation_space=FOCK)`, P(even photon number in the odd output ports) |
-| Circuit | mode permutation, then one 50:50 beam splitter per mode pair; no trainable parameters |
-| Postselection | none |
-| Simulator / QPU | MerLin CPU simulator (analytic probabilities, float64) |
-| Shot count | 1,024 per kernel entry (Digits: 128, 256, 512, 1,024), parity drawn as Binomial(shots, P(even)) |
-| Wall-clock per run | paper protocol: Wine 1–2 s, Parkinson's 4–9 s, Framingham 519–551 s, Digits 140–640 s (3 parallel workers); corrected protocol: median 3.1 s (Wine) and 25.5 s (Parkinson's) for the MerLin method (4 parallel workers); 10-core macOS CPU |
-| Gradients | none: the circuit has no trainable parameters; the SVM is fitted on the kernel matrix |
-| Seeds | 0–4 |
+### Fig. 4 settings
+
+Digits: 4 photons on 24 modes; 128 to 1,024 shots per kernel entry.
+
+<img src="results/fig4_merlin.png" alt="Accuracy vs shots: gate-model distributed kernel vs MerLin photonic swap test" width="480">
+
+The two agree within 2 σ at 128, 256 and 512 shots. At 1,024 shots MerLin is higher by 0.032, just above the 2 σ tolerance (0.029); the two kernels follow the same law, so this comes from independent shot draws.
+
+### Fig. 3 settings
+
+Not run. The photonic counterpart of gate noise is photon distinguishability, but MerLin's model of it fails a basic check on our states: two identical registers should give P(even) ≈ 1 with nearly perfect photons (indistinguishability 0.9999), and MerLin gives 0.77, as if the superposition were lost (`utils/merlin_noise_check.py`). With this model, a noisy photonic run would not be meaningful.
 
 ## Limitations
 
-- The authors' Qiskit / Aer version is unknown. It decides which gates the depolarizing noise reaches, so the Fig. 3 comparison depends on it.
-- The authors' Framingham noisy values are not explained (see Fig. 3).
-- The authors' Digits evaluation script and fold assignment are not released.
-- **Security is argued, not tested.** The paper's security claim is an argument in the semi-honest model; we only check that the clients' classical messages are uniform. The experiments, like the authors', are not distributed: all parties are registers of one simulated circuit on one machine, fed from one dataset file standardised with a single scaler. In a real deployment each data holder would standardise its own data, or share its means and standard deviations, which already reveals information about its data; the paper does not address this. Our inference, not tested: the server receives about 1,024 × m copies of each encoded state (m samples), which could let it estimate the state, i.e. the standardised features up to the fixed amplitude permutation.
-- **The cost of teleportation under noise is not measured.** The paper attributes the small Table 1 gap between distributed and centralised quantum accuracy to the extra gates of teleportation (Sec. 7.1), but Table 1 is noiseless: teleportation is then exact and the gap is shot noise. With noise the extra gates do matter, yet Fig. 3 reports only the distributed circuit, and our noise sweep runs only that circuit. A noisy centralised column would measure what teleportation costs.
-- **The proposed feature maps are never used for learning.** Like the paper, we train only with amplitude encoding. Without noise the protocol is exact, so the RBF and Laplacian maps (Eqs. 4 and 8) could be tested on the Table 1 datasets with the exact simulation used here, without more qubits; with the authors' estimator (2 Pr(0) − 1), a swap test would give approximately their square, i.e. the kernel at σ/√2 or α/2, while the square root of Eq. 11 gives the kernels themselves. Not run.
+- **Proof of concept only:** simulation on one machine, amplitude encoding only (the proposed feature maps are never used for learning), and a tuned classical SVM beats the quantum kernel (Table 1 bis), although it tunes hyperparameters that the quantum kernel does not have.
+- **Security is argued, not tested:** all parties run as one simulated circuit on one standardised dataset, and we only check that the clients' messages are uniform. Our inference: the server receives about 1,024 × m copies of each encoded state, which could let it estimate the data.
+- **Side results:** the authors' Qiskit version (which decides where the Fig. 3 noise acts) and Digits evaluation script are unknown, their Framingham noisy values stay unexplained, and the cost of teleportation under noise is not measured.
 
 ## Tests
 
@@ -401,4 +319,4 @@ Code:
 }
 ```
 
-Their GitHub code is MIT-licensed and was used only as a reference: this folder re-implements the pipeline under the license of this repository. Dataset licences are listed under "Data".
+Dataset licences are listed under "Data".
