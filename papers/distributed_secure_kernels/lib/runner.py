@@ -5,10 +5,8 @@
 - ``accuracy``: Table 1 rows, the noise sweep (Fig. 3) and the shots sweep
   (Fig. 4). Every method in ``cfg["methods"]`` is evaluated on the same
   samples and folds, under ``cfg["dataset"]["protocol"]`` (``paper`` or ``corrected``).
-- ``feature_maps``: checks the identities of the proposed feature maps (Thms 1-6).
 - ``protocol``: per-shot Aer runs of the authors' circuits, compared with the
   exact probabilities used by ``accuracy`` (App. A; security check on client bits).
-- ``rff_error``: Fig. 5, RFF approximation error versus D.
 
 Method kernels (``cfg["methods"][i]["kernel"]``):
 
@@ -61,7 +59,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = PROJECT_DIR.parents[1]
-EXPERIMENT_KINDS = ("accuracy", "feature_maps", "protocol", "rff_error")
+EXPERIMENT_KINDS = ("accuracy", "protocol")
 KERNELS = (
     "linear",
     "swap_test",
@@ -374,15 +372,6 @@ def _no_dataset(
     logger.info("DATASET_READY | name=%s | %s", name, description)
 
 
-def run_feature_maps(cfg, status, run_dir):
-    from .feature_map_checks import check_feature_maps
-
-    _no_dataset(
-        status, run_dir, "random_vectors", "random test vectors drawn from cfg['seed']"
-    )
-    return check_feature_maps(cfg)
-
-
 def run_protocol(cfg, status, run_dir):
     from .protocol_checks import check_protocol
 
@@ -395,23 +384,9 @@ def run_protocol(cfg, status, run_dir):
     return check_protocol(cfg)
 
 
-def run_rff(cfg, status, run_dir):
-    from .rff_error import run_rff_error
-
-    _no_dataset(
-        status,
-        run_dir,
-        "gaussian",
-        "none: entries drawn from a standard normal distribution, as in the authors' kernel_approximation_error.py",
-    )
-    return {"errors": run_rff_error(cfg, cfg["dtype"].torch)}
-
-
 RUNNERS = {
     "accuracy": run_accuracy,
-    "feature_maps": run_feature_maps,
     "protocol": run_protocol,
-    "rff_error": run_rff,
 }
 
 

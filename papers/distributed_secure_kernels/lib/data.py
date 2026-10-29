@@ -5,11 +5,6 @@ copied under ``<data_root>/distributed_secure_kernels``: scikit-learn's bundled
 ``wine_data.csv`` and ``digits.csv.gz`` (behind ``load_wine`` / ``load_digits``),
 and the authors' copies of ``parkinsons.data`` and ``framingham.csv``.
 
-``gaussian`` is the synthetic data of the paper's Fig. 5 (random-Fourier-feature
-error, described in App. B.4): samples with entries drawn from a standard normal
-distribution, as in the authors' ``other_kernels/kernel_approximation_error.py``
-(the paper only says "simulated datasets"); it is generated, not read.
-
 Paper-faithful preprocessing (authors' ``*_Dataset_Experiments/*.py``):
 
 1. Parkinson's and Framingham: random minority oversampling to a 0.6
@@ -39,7 +34,6 @@ logger = logging.getLogger(__name__)
 
 PAPER_NAME = "distributed_secure_kernels"
 REAL_DATASETS = ("wine", "digits", "parkinsons", "framingham")
-SYNTHETIC_DATASETS = ("gaussian",)
 SPLITS = ("train", "heldout")
 # Random state of the authors' stratified train_test_split.
 AUTHORS_SPLIT_STATE = 42
@@ -176,24 +170,6 @@ def _class_counts(labels: np.ndarray) -> dict[str, int]:
     return {str(int(c)): int(n) for c, n in zip(classes, counts)}
 
 
-def _synthetic_gaussian(cfg: dict[str, Any], rng: np.random.Generator) -> DatasetSplit:
-    dataset = cfg["dataset"]
-    n_samples, n_features = int(dataset["n_samples"]), int(dataset["n_features"])
-    features = rng.standard_normal((n_samples, n_features))
-    return DatasetSplit(
-        features=features,
-        labels=np.zeros(n_samples, dtype=int),
-        metadata={
-            "name": "gaussian",
-            "kind": "synthetic",
-            "shape": [n_samples, n_features],
-            "preprocessing": [
-                "none: entries drawn from a standard normal distribution, as in the authors' kernel_approximation_error.py"
-            ],
-        },
-    )
-
-
 def build_dataset(
     cfg: dict[str, Any], split: str = "train", rng: np.random.Generator | None = None
 ) -> DatasetSplit:
@@ -209,7 +185,7 @@ def build_dataset(
         ``"train"`` (the subset the paper evaluates by cross-validation) or
         ``"heldout"`` (the part the authors discard). Default value is ``"train"``.
     rng : numpy.random.Generator | None
-        Generator for oversampling or synthetic draws. If omitted, one is seeded
+        Generator for oversampling. If omitted, one is seeded
         from ``cfg["seed"]``. Default value is None.
 
     Returns
@@ -231,9 +207,6 @@ def build_dataset(
     name = dataset["name"]
     if rng is None:
         rng = np.random.default_rng(np.random.SeedSequence([int(cfg["seed"]), 0]))
-    if name in SYNTHETIC_DATASETS:
-        return _synthetic_gaussian(cfg, rng)
-
     protocol = dataset["protocol"]
     if protocol not in ("paper", "corrected"):
         raise ValueError(f"protocol must be 'paper' or 'corrected', got {protocol!r}")

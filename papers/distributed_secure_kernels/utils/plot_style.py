@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 OURS = "#2a78d6"  # blue: this reproduction
 PAPER = "#eb6834"  # orange: paper / authors' logs
-EXACT = "#1baf7a"  # aqua: exact (infinite-shot) kernel; always with markers and legend
 REFERENCE = "#6b6b66"  # gray: classical and majority-class reference lines
 INK, MUTED, GRID = "#1f1f1d", "#6b6b66", "#e4e3de"
 RESULTS_DIR = Path(__file__).resolve().parents[1] / "results"
