@@ -41,30 +41,59 @@ Blue boxes: quantum states; white boxes: classical data; frames: where each step
 
 The server cannot read the states it receives, since a measurement destroys a state and gives a single bit; the swap test only reveals how similar the two states are. Teleportation uses Bell pairs from a third party, the helper, which never sees the data.
 
-The paper also proposes quantum feature maps for the polynomial, RBF and Laplacian kernels (Sec. 4); its experiments use amplitude encoding only. It evaluates the protocol on three public tabular datasets (accuracy with stratified 5-fold CV, Table 1), with depolarizing noise (Fig. 3), and with the number of shots on Digits images (Fig. 4). It claims accuracy comparable to centralised quantum and classical computation, and security against semi-honest parties. The paper argues security from the no-cloning theorem and destructive measurement: an eavesdropper cannot copy the quantum states without disturbing them, and the server cannot read the states it receives (Sec. 1 and 6.3).
+The paper also proposes quantum feature maps for the polynomial, RBF and Laplacian kernels (Sec. 4); its experiments use amplitude encoding only. It evaluates the protocol on three public tabular datasets (accuracy with stratified 5-fold CV, Table 1), with depolarizing noise (Fig. 3), and with the number of shots on Digits images (Fig. 4).
+
+The paper makes three claims:
+
+- **Claim 1: correct kernel.** The distributed protocol computes the same kernel as a centralised swap test (proof in App. A).
+- **Claim 2: comparable accuracy.** Distributed quantum accuracy is comparable to centralised quantum and classical accuracy (Table 1).
+- **Claim 3: security.** The protocol is secure against semi-honest parties, argued from the no-cloning theorem and destructive measurement: an eavesdropper cannot copy the quantum states without disturbing them, and the server cannot read the states it receives (Sec. 1 and 6.3).
 
 ## Reproduction Scope, Claims, and Deviations
 
-Claims tested (the paper claims "comparable", not "better" accuracy):
+Claims 1 and 2 are tested; claim 3 is an argument and is not tested (see Limitations).
 
-- the distributed protocol (Fig. 2) computes the same kernel as a centralised swap test (proof in App. A);
-- distributed quantum accuracy is comparable to centralised quantum and classical accuracy (Table 1).
+- **Claim 1: correct kernel.** Shot-by-shot Aer runs of the authors' circuits follow the swap-test law (see "Simulation setup" below).
+- **Claim 2: comparable accuracy.** Table 1 is reproduced on the authors' data files, with the paper's stratified 5-fold CV and 1,024 shots. The paper claims "comparable", not "better", accuracy.
 
-Table 1 is reproduced on the authors' data files, with the paper's stratified 5-fold CV and 1,024 shots; Fig. 3 and 4 are reproduced as side results.
+Fig. 3 and 4 are reproduced as side results.
 
 Updates and deviations:
 
-- **Simulation setup.** The authors simulate every kernel entry shot by shot with Qiskit Aer on an HPC cluster (Sec. 7): one 1,024-shot Aer run per entry, out of reach on our machine. Each shot reads 0 with probability p₀ = ½ + ½|⟨a|b⟩|² (App. A), independently of the others, so we draw the number of zeros over 1,024 shots directly from Binomial(1,024, p₀) instead of simulating the circuit. Without noise this is the same distribution, not an approximation: shot-by-shot Aer runs of the authors' circuits, distributed and centralised, follow this law (figure below; 30 random state pairs, 2 and 4 qubits per party). This is also our check of App. A. Details: `docs/swap_test_kernel.md`. All runs used a 10-core macOS CPU (Python 3.14, Qiskit 2.5.2, Aer 0.17.2).
+- **Simulation setup.**
+  - **Why:** simulating every kernel entry shot by shot, as the authors do on an HPC cluster (Sec. 7), is too costly for us.
+  - **What:** each shot reads 0 with a known probability (App. A), so we draw the 1,024 shots directly from that law: same kernel, same shot noise, at a fraction of the cost.
+  - **How:** `lib/kernels.py`; shot-by-shot Aer runs of the authors' circuits follow the same law (figure below), which also checks claim 1. Runs on a 10-core macOS CPU (Python 3.14, Qiskit 2.5.2, Aer 0.17.2). Details: `docs/swap_test_kernel.md`.
 
-  ![Per-shot Aer runs of the authors' circuits vs the swap-test law](results/protocol_check.png)
+    <img src="results/protocol_check.png" alt="Per-shot Aer runs of the authors' circuits vs the swap-test law" width="420">
 
-  Each point is one random state pair: the fraction of 0s measured on Aer against the probability the binomial shortcut uses. All points lie on the diagonal, nearly all inside the grey band (±2 standard deviations): Aer follows the law, for both circuits.
-- **Circuits.** The authors' 4n + 1-qubit circuit is ported to Qiskit 2.x (`if_test` replaces `c_if`), including their extra Hadamard before each teleportation. Their released code does not run as published.
-- **What the kernel is.** The authors' code uses 2 Pr(0) − 1, the *squared* overlap, i.e. the squared cosine similarity of the standardised features. The paper calls it the linear kernel; its Eq. 11 takes the square root, which gives the cosine without its sign. The exact cosine kernel is reported as an additional reference.
-- **Protocols.** `paper` follows the authors' pipeline: oversampling before the split and before CV, the scaler fitted on the evaluated subset, kernel PCA fitted on all samples, and the component count chosen as the best of 2–7 on the CV folds. `corrected` oversamples inside training folds only and chooses C and the component count by inner CV. For Framingham the C grid stops at 10, for runtime. Code of `paper`: `lib/data.py::build_dataset` (oversampling of the whole dataset, scaler on the subset), `lib/evaluation.py::paper_kernel_svm` and `paper_kernel_pca`; folds from `lib/evaluation.py::stratified_folds`. Code of `corrected`: `lib/evaluation.py::corrected_cv` (scaler and `oversample_indices` per training fold, inner CV for C) and `_corrected_kernel_pca_fold`.
-- **Additional baselines.** These are not in the paper: the exact infinite-shot kernel, the exact cosine kernel, a majority-class predictor, and tuned RBF and polynomial SVMs (corrected protocol).
-- **Seeds.** The authors' code seeds neither the shots nor the oversampling (`RandomOverSampler(0.6)`, re-implemented here). We repeat each run with seeds 0–4, which change only these two draws; the CV folds and the evaluated subset stay the authors' fixed ones.
-- **Photonic adaptation.** The server's swap test is also run as a MerLin photonic circuit (see "Photonic Assessment and MerLin Extension"). This is an addition, not part of the paper.
+    Each point is one random state pair: the fraction of 0s measured on Aer against the probability the binomial shortcut uses. All points lie on the diagonal, nearly all inside the grey band (±2 standard deviations): Aer follows the law, for both circuits.
+
+- **Protocols.**
+  - **Why → What:**
+    - reproduce Table 1 in the authors' conditions → `paper`, the authors' evaluation as is;
+    - keep test information out of training (oversampled copies in the test folds, component count chosen on the test folds) and tune classical baselines fairly → `corrected`, everything fitted on the training folds only.
+  - Both give the same conclusions in balanced accuracy.
+  - **How:** `lib/data.py::build_dataset` and `lib/evaluation.py` (`paper_kernel_svm`, `paper_kernel_pca`, `corrected_cv`). Details: `docs/protocols.md`.
+- **Additional baselines** (not in the paper).
+  - **Why → What:**
+    - is the quantum kernel held back by shot noise? → the exact kernel without shot noise;
+    - is it held back by the square the swap test imposes? → the exact cosine kernel (the linear kernel the paper names);
+    - is it comparable to a fair classical model, as the paper claims? → tuned RBF and polynomial SVMs;
+    - does it learn at all? → a majority-class predictor.
+  - **How:** `configs/accuracy_<dataset>_reference.json` (paper protocol), `_corrected.json` and `_fair_classical.json` (corrected protocol); results in "Fair Baselines".
+- **Seeds.**
+  - **Why:** the authors' code sets no seed for the shots or the oversampling.
+  - **What:** we repeat each run with seeds 0–4, which change only these two draws; the CV folds and the evaluated subset stay the authors' fixed ones.
+  - **How:** `--seed` drives `lib/data.py` (oversampling) and `lib/runner.py` (shots); `utils/run_sweep.py --seeds 0 1 2 3 4`.
+- **Photonic adaptation** (not in the paper).
+  - **Why:** to check whether the protocol maps onto photonic hardware.
+  - **What**, by step of the diagram:
+    1. encoding: each sample is amplitude-encoded on photons (2 photons per register of m modes) with the same amplitudes, hence the same kernel; state preparation is assumed ideal;
+    2. teleportation: not translated, it has no deterministic linear-optics counterpart;
+    3. swap test: run as a MerLin circuit (Hong–Ou–Mandel interference and a parity readout), which follows the same law;
+    4. kernel SVM or kernel PCA: unchanged.
+  - **How:** `lib/photonic_merlin.py` (MerLin `QuantumLayer`, FOCK space). Details: "Photonic Assessment and MerLin Extension" and `docs/swap_test_kernel.md`.
 
 ## Project Layout
 
