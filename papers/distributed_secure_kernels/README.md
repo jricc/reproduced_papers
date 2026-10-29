@@ -9,6 +9,15 @@
 - Original repository: https://github.com/mdppml/distributed-secure-kernel-based-QML (commit `aed2cf9` used here), archived on Zenodo as v1.0: https://doi.org/10.5281/zenodo.18743937
 - License and attribution notes: the authors' repository is MIT-licensed, like this one. This folder re-implements their pipeline; `lib/protocol.py` ports their circuits gate for gate to Qiskit 2.x.
 
+## Summary
+
+- **The paper:** two data holders can obtain a quantum kernel between their private samples without sending their data: teleportation moves the encoded states to a server, whose swap test computes the kernel (claim 1), with accuracy comparable to centralised computation (claim 2). The paper validates this as a proof of concept, in simulation and with amplitude encoding only ([protocol](#original-paper)).
+- **The reproduction:** the proof of concept holds. Shot-by-shot simulations of the authors' circuits follow the swap-test law, distributed or centralised ([check](results/protocol_check.png)), and Table 1 is reproduced, with 12 of 15 cells within the paper's fold std ([Table 1](#table-1-paper-protocol-accuracy)).
+- **MerLin:** the swap test translates exactly to photonics (register-wise Hong–Ou–Mandel interference: same law, same accuracies within 2 σ); teleportation does not translate deterministically to linear optics ([MerLin results](#table-1-settings)).
+- **Limits:**
+  - "Comparable to classical" does not hold against a fair baseline: without the leaks of the authors' protocol, a tuned classical SVM is higher on every dataset, and on Framingham the quantum kernel only predicts the majority class ([Table 1 bis](#table-1-bis-corrected-protocol-balanced-accuracy)).
+  - Security is argued, not tested: all parties run as one simulated circuit, and the server receives about 1,024 copies of each encoded state per kernel entry ([Limitations](#limitations)).
+
 ## Original Paper
 
 Two data holders want to train a kernel method on their joint data without revealing their samples. A kernel SVM never needs the samples themselves, only their pairwise similarities (the kernel matrix). The paper computes each similarity with a quantum protocol:
