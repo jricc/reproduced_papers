@@ -42,7 +42,7 @@ Updates and deviations:
   - with noise, |Δp₀| ≤ 0.004;
   - our noiseless kernel values match the distribution of the authors' logged values.
 
-  All runs used a 10-core laptop CPU (Python 3.14, Qiskit 2.5.2, Aer 0.17.2), with seeds 0–4; each gate-model sweep takes at most 11 minutes.
+  All runs used a 10-core laptop CPU (Python 3.14, Qiskit 2.5.2, Aer 0.17.2), with seeds 0–4; each gate-model sweep takes at most about 11 minutes.
 - **Circuits.** The authors' 4n + 1-qubit circuit is ported to Qiskit 2.x (`if_test` replaces `c_if`), including their extra Hadamard before each teleportation. Their released code does not run as published.
 - **What the kernel is.** The authors' code uses 2 Pr(0) − 1, the *squared* overlap, i.e. the squared cosine similarity of the standardised features. The paper calls it the linear kernel; its Eq. 11 takes the square root, which gives the cosine without its sign. The exact cosine kernel is reported as an additional reference.
 - **Protocols.** `paper` follows the authors' pipeline: oversampling before the split and before CV, the scaler fitted on the evaluated subset, kernel PCA fitted on all samples, and the component count chosen as the best of 2–7 on the CV folds. `corrected` oversamples inside training folds only and chooses C and the component count by inner CV. For Framingham the C grid stops at 10, for runtime. Code of `paper`: `lib/data.py::build_dataset` (oversampling of the whole dataset, scaler on the subset), `lib/evaluation.py::paper_kernel_svm` and `paper_kernel_pca`; folds from `lib/evaluation.py::stratified_folds`. Code of `corrected`: `lib/evaluation.py::corrected_cv` (scaler and `oversample_indices` per training fold, inner CV for C) and `_corrected_kernel_pca_fold`.
@@ -113,7 +113,7 @@ Each run writes `outdir/run_YYYYMMDD-HHMMSS/` with `run.log`, `run_status.json`,
 |---|---|
 | `accuracy_<dataset>_original.json` | Table 1, the paper's three columns, paper protocol |
 | `accuracy_<dataset>_reference.json` | exact squared-overlap and cosine kernels, majority class, paper protocol |
-| `accuracy_<dataset>_corrected.json`, `accuracy_<dataset>_classical.json` | corrected protocol; paper columns and tuned RBF / polynomial SVMs |
+| `accuracy_<dataset>_corrected.json`, `accuracy_<dataset>_classical.json` | corrected protocol; paper columns, and tuned RBF / polynomial SVMs on a first γ grid, 10× off the planned one (the fair comparison uses `accuracy_<dataset>_fair_classical.json`) |
 | `noise_<dataset>_original.json` | Fig. 3 |
 | `noise_<dataset>_decomposed_initialize.json` | diagnostic: noisy, decomposed state preparation |
 | `shots_digits_original.json` | Fig. 4 |
@@ -139,7 +139,7 @@ To recreate them, clone the authors' repository into `data/distributed_secure_ke
 Limitations:
 - Parkinson's is the UCI file the authors' code reads; the paper cites a different Parkinson's dataset (Sakar et al. 2019).
 - The Framingham file is the authors' copy. Its size differs from the file listed on Kaggle (195,955 vs 191,803 bytes); the contents were not compared because the Kaggle download needs a login.
-- Fig. 5 uses synthetic Gaussian data generated at run time, as in the paper.
+- Fig. 5 uses synthetic standard-normal data generated at run time, as in the authors' script (the paper only says "simulated datasets").
 
 ## Results Obtained and Comparison with the Paper
 
@@ -149,13 +149,13 @@ Summary per paper item. Accuracy values are stratified 5-fold CV accuracy; "metr
 
 | Paper item | Claim tested | Paper value | Reproduced value | Difference | Metric agreement | Trend agreement | Claim support | Seeds | Comment |
 |---|---|---:|---:|---:|---|---|---|---:|---|
-| Table 1 | distributed ≈ centralised; classical highest | distributed kernel SVM, Wine / Parkinson's / Framingham: 0.887 / 0.798 / 0.634 | 0.896 / 0.756 / 0.639 | +0.008 / −0.043 / +0.005 | 12 of 15 cells | yes: classical highest in 5 of 5 rows; distributed ≈ centralised | supported (both) | 5 | Framingham distributed kernel PCA equals the majority-class rate |
+| Table 1 | distributed ≈ centralised; classical highest | distributed kernel SVM, Wine / Parkinson's / Framingham: 0.887 / 0.798 / 0.634 | 0.896 / 0.756 / 0.639 | +0.008 / −0.043 / +0.005 | 12 of 15 cells | yes: classical highest in 5 of 5 rows (by mean); distributed ≈ centralised | supported (both) | 5 | Framingham distributed kernel PCA equals the majority-class rate |
 | Fig. 3 | noise lowers accuracy | kernel SVM at 0.1 % / 1 % (authors' logs): Framingham 0.581 / 0.581, Parkinson's 0.787 / 0.633 | 0.638 / 0.623, 0.764 / 0.707 | +0.058 / +0.041, −0.023 / +0.074 | 1 of 6 cells | partly: lower at 1 % on both; at 0.1 % within seed std of no noise | trend supported, magnitude not | 5 | Parkinson's matches with noisy state preparation (diagnostic); Framingham logs unexplained |
 | Fig. 4 | more shots raise accuracy | 128 / 256 / 512 / 1,024 shots: 0.71 / 0.71 / 0.74 / 0.83 | 0.760 / 0.778 / 0.788 / 0.788 | +0.050 / +0.068 / +0.048 / −0.042 | 0 of 4 cells | weak: steps below the 128-shot seed std (0.051) | not clearly reproduced | 5 | values inside the spread from the unknown fold assignment |
-| Fig. 5 | RFF error decreases as 1/√D | curves only | relative Frobenius error 0.593 / 0.113 / 0.019 at D = 32 / 1,024 / 32,768 (RBF, σ = 2, d = 10) | N/A | N/A (no printed values) | yes, and bandwidth-independent at d = 100,000 | supported | 5 repetitions | synthetic Gaussian data, as in the paper |
+| Fig. 5 | RFF error decreases as 1/√D | curves only | relative Frobenius error 0.593 / 0.113 / 0.019 at D = 32 / 1,024 / 32,768 (RBF, σ = 2, d = 10) | N/A | N/A (no printed values) | yes, and bandwidth-independent at d = 100,000 | supported | 5 repetitions | synthetic standard-normal data, as in the authors' script |
 | Theorems 1–6 | feature maps give the stated kernels | identities (proofs) | polynomial: ‖ψ‖² from 0.43 to 1,246; RBF / Laplacian inner-product error 0.0018 / 0.0020 at D = 65,536 | N/A | N/A | N/A | polynomial unsupported; RBF / Laplacian supported as inner products | N/A (random draws) | with the authors' estimator (2 Pr(0) − 1), a swap test gives the square, i.e. the kernel at σ/√2 or α/2; the square root of Eq. 11 gives the kernel itself |
 | App. A | distributed circuit = centralised swap test | proof | per-shot Aer vs the binomial law: pooled χ² p ≈ 0.14 (distributed), 0.26 (centralised); the paper's Fig. 2 built as drawn (6n + 1 qubits) follows the same law (`tests/test_protocol.py`) | N/A | N/A | N/A | supported | 30 random pairs | the authors' estimator 2 Pr(0) − 1 gives the squared overlap |
-| Sec. 6.3 | secure against semi-honest parties | argument | client bits uniform: largest deviation from ½ 0.037 (standard error 0.016) | N/A | N/A | N/A | not testable beyond this check | N/A | the server receives 1,024 copies of each encoded state |
+| Sec. 6.3 | secure against semi-honest parties | argument | client bits uniform: largest deviation from ½ 0.037 (standard error 0.016) | N/A | N/A | N/A | not testable beyond this check | N/A | the server receives 1,024 copies of each encoded state per kernel entry |
 | MerLin adaptation | photonic swap test preserves the results | our gate-model distributed kernel, 9 settings | same within 2 σ in 8 of 9 settings | largest +0.032 (Digits, 1,024 shots; tolerance 0.029) | 8 of 9 settings | yes | preserved (simulation) | 5 | 4 photons, 12–24 modes, ideal photon-number-resolving detectors; see "Hardware-Aware Settings" |
 
 Every sweep behind these numbers is complete (7 sweeps, 130 of 130 planned runs) and repeats fixed configurations over seeds, so no candidate is selected; their full tables are in `results/sweep_results.md`.
@@ -196,13 +196,14 @@ Cell by cell. Metric: stratified 5-fold CV accuracy. Ours: mean ± std over seed
 - **Table 1:** 12 of 15 cells fall within the paper's fold std. The three others:
   - Two are single-run paper values without a std, within our seed spread (Wine centralised +0.026, seed std 0.019; Parkinson's kernel PCA centralised −0.042, seed std 0.045).
   - Under our simulation, the Framingham distributed kernel PCA equals the majority-class rate (0.6249).
-  - Without noise, the distributed and centralised columns differ only by shot noise. Per-shot Aer runs confirm that they follow the same binomial law.
+- **Distributed vs centralised:** without noise, the two columns differ only by shot noise. Per-shot Aer runs confirm that they follow the same binomial law.
 
 ![Noise comparison](results/noise_comparison.png)
 
 - **Noise (Fig. 3) is not a message.** Its size depends on a simulator detail the paper does not state: with the same 1 % depolarizing rate, Parkinson's kernel SVM accuracy is 0.707 when state preparation is noiseless (Qiskit 2.5) and 0.644 when it is noisy, close to the authors' 0.633. And the paper reports noise only for the distributed circuit, so the drop cannot be attributed to teleportation, the only cost of distributing.
 - **Fig. 3:** with state preparation kept noiseless (Qiskit 2.5 keeps `initialize` native), noise degrades much less than in the authors' logs.
-  - Making state preparation noisy, a likely behaviour of the authors' older Qiskit, reproduces their Parkinson's values: 0.748 and 0.644 against 0.787 and 0.633, with kernel variance 0.0352 / 0.0019 against 0.0322 / 0.0012.
+  - The no-noise points reuse the random draw of Table 1's centralised column (same noiseless law), so they equal it (Parkinson's 0.772) rather than the distributed one (0.756).
+  - Making state preparation noisy, a likely behaviour of the authors' older Qiskit, brings Parkinson's close to their values: 0.748 and 0.644 against 0.787 and 0.633 (within their fold std at 0.1 %, just outside it at 1 %), with kernel variance 0.0352 / 0.0019 against 0.0322 / 0.0012.
   - Their Framingham noisy kernels behave like kernels without data information: variance 0.000445 at both noise levels. A fully depolarized kernel gives 0.00033 and 0.59 accuracy.
   - Their noise model cannot produce this at 0.1 %, so this gap stays unexplained.
 
@@ -248,7 +249,7 @@ Full table, with seed std, resources and timing, plus the pairwise decisions: `r
 - **"Comparable to classical": not supported.**
   - A tuned classical SVM is higher beyond 2 σ on Wine (+0.089) and on Parkinson's (+0.145 accuracy, +0.29 balanced accuracy).
   - On Framingham the quantum kernel predicts the majority class: balanced accuracy 0.50, below every classical SVM. Its higher plain accuracy is just the majority rate (0.847).
-  - Even under the paper's own protocol and baseline, the linear SVM is higher in 4 of 5 Table 1 cells.
+  - Even under the paper's own protocol and baseline, the linear SVM is higher beyond 2 σ in 4 of 5 Table 1 cells.
 - **No quantum or photonic advantage is claimed or observed.**
 - **Caveats:**
   - The classical SVMs tune kernel hyperparameters that the quantum kernel does not have.
@@ -268,7 +269,7 @@ This is an adaptation, not the paper's method. Status: **partial MerLin translat
 - **What is not translated:**
   - **The teleportation-based distribution.** Linear-optics Bell measurements succeed with probability at most ½, so teleporting these multi-photon register states is not deterministic. Photons travel themselves, so distribution becomes direct transmission, which changes the security argument.
   - **The Fig. 3 noise study.** For two identical superposed registers, MerLin's distinguishability noise model gives P(even) = 0.77 at indistinguishability 0.9999 instead of about 0.9999 (1.0 without noise). This is the value an incoherent mixture of the basis states would give; identical basis states behave as expected (`utils/merlin_noise_check.py`).
-- **Result:** under the paper protocol (5 seeds, 1,024 shots), the photonic kernel gives the same accuracies as the gate-model distributed kernel within 2 σ in 8 of 9 settings (`results/merlin_comparison.md`).
+- **Result:** under the paper protocol (5 seeds; 1,024 shots, and 128 to 1,024 for Digits), the photonic kernel gives the same accuracies as the gate-model distributed kernel within 2 σ in 8 of 9 settings (`results/merlin_comparison.md`).
   - The exception is Digits at 1,024 shots: +0.032 against a tolerance of 0.029. The two kernels are identical, so this comes from independent shot-noise draws.
 - **Hardware assumptions:**
   - FOCK space with ideal photon-number-resolving detectors (threshold detectors cannot read the parity);

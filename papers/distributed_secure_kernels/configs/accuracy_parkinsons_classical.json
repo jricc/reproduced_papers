@@ -6,7 +6,7 @@
   "logging": {
     "level": "info"
   },
-  "description": "parkinsons: corrected protocol, tuned classical RBF and polynomial SVMs (fair baselines).",
+  "description": "parkinsons: corrected protocol, tuned classical RBF and polynomial SVMs on a first gamma grid, 10x off the planned one; the fair comparison uses accuracy_parkinsons_fair_classical.json.",
   "experiment": {
     "id": "accuracy_parkinsons_classical",
     "kind": "accuracy"

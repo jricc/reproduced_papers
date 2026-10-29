@@ -1,6 +1,6 @@
 Corrected protocol (oversampling and selection inside training folds), stratified 5-fold CV, mean ± std over seeds 0-4. Accuracy is the primary metric; balanced accuracy is needed for Framingham (majority rate 0.847). Quantum values come from an exact simulation, MerLin values from MerLin simulation; nothing ran on hardware.
 
-| Dataset | Model | System | Role | Runs | Accuracy | Balanced accuracy | Resources per outer fold | Median s per run | Status |
+| Dataset | Model | System | Role | Runs | Accuracy | Balanced accuracy | Resources per outer fold | Median s per seed | Status |
 |---|---|---|---|---:|---:|---:|---|---:|---|
 | wine | kernel_svm | Distributed quantum kernel (swap test, 1,024 shots) | paper method | 5/5 | 0.8899 ± 0.0118 | 0.8954 ± 0.0098 | 9,747 kernel entries × 1,024 shots per outer fold; 17 qubits | 0.1 | COMMENSURABLE |
 | wine | kernel_svm | Centralised quantum kernel (swap test, 1,024 shots) | paper method | 5/5 | 0.8914 ± 0.0146 | 0.8963 ± 0.0143 | 9,747 kernel entries × 1,024 shots per outer fold; 9 qubits | 0.1 | COMMENSURABLE |
@@ -125,7 +125,7 @@ Pairwise decisions (rule: equivalent when |delta| <= 2 sigma_pooled (seed std, d
 | framingham | kernel_pca_nested_cv | quantum_distributed | majority_class | accuracy | +0.0000 | 0.0000 | equivalent |
 | framingham | kernel_pca_nested_cv | quantum_distributed | majority_class | balanced_accuracy | +0.0000 | 0.0000 | equivalent |
 
-Paper protocol (the paper's own comparison; protocol leaks, see LOG):
+Paper protocol (the paper's own comparison, whose protocol leaks; see the README, 'Fair Baselines'):
 
 | Dataset | Model | Linear SVM | Distributed quantum | MerLin | Quantum − linear | 2 σ pooled | Verdict |
 |---|---|---:|---:|---:|---:|---:|---|

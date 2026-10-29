@@ -1,4 +1,4 @@
-Metric: stratified 5-fold CV accuracy, mean ± std over seeds 0-4, paper protocol, 1,024 shots unless stated. Gate model: Phase 3 distributed quantum column (noiseless). MerLin: photonic swap test (adaptation). Preserved: |difference| ≤ 2 σ_pooled.
+Metric: stratified 5-fold CV accuracy, mean ± std over seeds 0-4, paper protocol, 1,024 shots unless stated. Gate model: our distributed quantum column (noiseless). MerLin: photonic swap test (adaptation). Preserved: |difference| ≤ 2 σ_pooled.
 
 | Setting | Gate model | MerLin adaptation | Difference | 2 σ pooled | Preserved |
 |---|---:|---:|---:|---:|---|

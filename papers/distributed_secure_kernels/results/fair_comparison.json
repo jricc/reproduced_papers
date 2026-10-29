@@ -16,7 +16,7 @@
       "balanced_accuracy_seed_std": 0.009828747957430013,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "9,747 kernel entries \u00d7 1,024 shots per outer fold; 17 qubits",
-      "median_seconds_per_run": 0.13279587496072054,
+      "median_seconds_per_seed": 0.13279587496072054,
       "status": "COMMENSURABLE"
     },
     {
@@ -34,7 +34,7 @@
       "balanced_accuracy_seed_std": 0.014328733713220966,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "9,747 kernel entries \u00d7 1,024 shots per outer fold; 9 qubits",
-      "median_seconds_per_run": 0.13244225003290921,
+      "median_seconds_per_seed": 0.13244225003290921,
       "status": "COMMENSURABLE"
     },
     {
@@ -52,7 +52,7 @@
       "balanced_accuracy_seed_std": 0.017873418731297122,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "9,747 kernel entries \u00d7 1,024 shots per outer fold; 4 photons, 12 modes",
-      "median_seconds_per_run": 3.1146927920053713,
+      "median_seconds_per_seed": 3.1146927920053713,
       "status": "COMMENSURABLE"
     },
     {
@@ -70,7 +70,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "9,747 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 0.1312912079738453,
+      "median_seconds_per_seed": 0.1312912079738453,
       "status": "COMMENSURABLE"
     },
     {
@@ -88,7 +88,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "9,747 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 0.1215958750108257,
+      "median_seconds_per_seed": 0.1215958750108257,
       "status": "COMMENSURABLE"
     },
     {
@@ -106,7 +106,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "9,747 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 0.12447541701840237,
+      "median_seconds_per_seed": 0.12447541701840237,
       "status": "COMMENSURABLE"
     },
     {
@@ -124,7 +124,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "9,747 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 0.5436532080057077,
+      "median_seconds_per_seed": 0.5436532080057077,
       "status": "COMMENSURABLE"
     },
     {
@@ -142,7 +142,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "9,747 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 0.43733804201474413,
+      "median_seconds_per_seed": 0.43733804201474413,
       "status": "COMMENSURABLE"
     },
     {
@@ -160,7 +160,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "none",
-      "median_seconds_per_run": 0.002590208954643458,
+      "median_seconds_per_seed": 0.002590208954643458,
       "status": "COMMENSURABLE"
     },
     {
@@ -178,7 +178,7 @@
       "balanced_accuracy_seed_std": 0.03392997594267969,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 kernel entries \u00d7 1,024 shots per outer fold; 21 qubits",
-      "median_seconds_per_run": 1.030415916990023,
+      "median_seconds_per_seed": 1.030415916990023,
       "status": "COMMENSURABLE"
     },
     {
@@ -196,7 +196,7 @@
       "balanced_accuracy_seed_std": 0.03753329244273929,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 kernel entries \u00d7 1,024 shots per outer fold; 11 qubits",
-      "median_seconds_per_run": 0.9891173749929294,
+      "median_seconds_per_seed": 0.9891173749929294,
       "status": "COMMENSURABLE"
     },
     {
@@ -214,7 +214,7 @@
       "balanced_accuracy_seed_std": 0.031064337406462493,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 kernel entries \u00d7 1,024 shots per outer fold; 4 photons, 16 modes",
-      "median_seconds_per_run": 25.511269000009634,
+      "median_seconds_per_seed": 25.511269000009634,
       "status": "COMMENSURABLE"
     },
     {
@@ -232,7 +232,7 @@
       "balanced_accuracy_seed_std": 0.020101278372288485,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 0.997664624999743,
+      "median_seconds_per_seed": 0.997664624999743,
       "status": "COMMENSURABLE"
     },
     {
@@ -250,7 +250,7 @@
       "balanced_accuracy_seed_std": 0.0165611553376825,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 0.9739525000331923,
+      "median_seconds_per_seed": 0.9739525000331923,
       "status": "COMMENSURABLE"
     },
     {
@@ -268,7 +268,7 @@
       "balanced_accuracy_seed_std": 0.01623745066918551,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 2.172449791978579,
+      "median_seconds_per_seed": 2.172449791978579,
       "status": "COMMENSURABLE"
     },
     {
@@ -286,7 +286,7 @@
       "balanced_accuracy_seed_std": 0.007836155162230586,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 1.2854555000085384,
+      "median_seconds_per_seed": 1.2854555000085384,
       "status": "COMMENSURABLE"
     },
     {
@@ -304,7 +304,7 @@
       "balanced_accuracy_seed_std": 0.006851470410171836,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 1.2833680000039749,
+      "median_seconds_per_seed": 1.2833680000039749,
       "status": "COMMENSURABLE"
     },
     {
@@ -322,7 +322,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "none",
-      "median_seconds_per_run": 0.004385000036563724,
+      "median_seconds_per_seed": 0.004385000036563724,
       "status": "COMMENSURABLE"
     },
     {
@@ -340,7 +340,7 @@
       "balanced_accuracy_seed_std": 0.03881621963459154,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 kernel entries \u00d7 1,024 shots per outer fold; 21 qubits",
-      "median_seconds_per_run": 1.030415916990023,
+      "median_seconds_per_seed": 1.030415916990023,
       "status": "COMMENSURABLE"
     },
     {
@@ -358,7 +358,7 @@
       "balanced_accuracy_seed_std": 0.021153967901777853,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 kernel entries \u00d7 1,024 shots per outer fold; 11 qubits",
-      "median_seconds_per_run": 0.9891173749929294,
+      "median_seconds_per_seed": 0.9891173749929294,
       "status": "COMMENSURABLE"
     },
     {
@@ -376,7 +376,7 @@
       "balanced_accuracy_seed_std": 0.016937971823488458,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 kernel entries \u00d7 1,024 shots per outer fold; 4 photons, 16 modes",
-      "median_seconds_per_run": 25.511269000009634,
+      "median_seconds_per_seed": 25.511269000009634,
       "status": "COMMENSURABLE"
     },
     {
@@ -394,7 +394,7 @@
       "balanced_accuracy_seed_std": 0.037611974664989764,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 0.997664624999743,
+      "median_seconds_per_seed": 0.997664624999743,
       "status": "COMMENSURABLE"
     },
     {
@@ -412,7 +412,7 @@
       "balanced_accuracy_seed_std": 0.024597446083865288,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 0.9739525000331923,
+      "median_seconds_per_seed": 0.9739525000331923,
       "status": "COMMENSURABLE"
     },
     {
@@ -430,7 +430,7 @@
       "balanced_accuracy_seed_std": 0.012380458467162637,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 2.172449791978579,
+      "median_seconds_per_seed": 2.172449791978579,
       "status": "COMMENSURABLE"
     },
     {
@@ -448,7 +448,7 @@
       "balanced_accuracy_seed_std": 0.025788883630133833,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 1.2854555000085384,
+      "median_seconds_per_seed": 1.2854555000085384,
       "status": "COMMENSURABLE"
     },
     {
@@ -466,7 +466,7 @@
       "balanced_accuracy_seed_std": 0.01453814108910283,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "11,750 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 1.2833680000039749,
+      "median_seconds_per_seed": 1.2833680000039749,
       "status": "COMMENSURABLE"
     },
     {
@@ -484,7 +484,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "none",
-      "median_seconds_per_run": 0.004385000036563724,
+      "median_seconds_per_seed": 0.004385000036563724,
       "status": "COMMENSURABLE"
     },
     {
@@ -502,7 +502,7 @@
       "balanced_accuracy_seed_std": 0.0010129525214282909,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 kernel entries \u00d7 1,024 shots per outer fold; 17 qubits",
-      "median_seconds_per_run": 54.74830729200039,
+      "median_seconds_per_seed": 54.74830729200039,
       "status": "COMMENSURABLE"
     },
     {
@@ -520,7 +520,7 @@
       "balanced_accuracy_seed_std": 0.0009643629869041521,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 kernel entries \u00d7 1,024 shots per outer fold; 9 qubits",
-      "median_seconds_per_run": 54.38846187503077,
+      "median_seconds_per_seed": 54.38846187503077,
       "status": "COMMENSURABLE"
     },
     {
@@ -546,7 +546,7 @@
       "balanced_accuracy_seed_std": 8.803417234250132e-05,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 56.004102665989194,
+      "median_seconds_per_seed": 56.004102665989194,
       "status": "COMMENSURABLE"
     },
     {
@@ -564,7 +564,7 @@
       "balanced_accuracy_seed_std": 0.00042863687838108123,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 63.399727791023906,
+      "median_seconds_per_seed": 63.399727791023906,
       "status": "COMMENSURABLE"
     },
     {
@@ -582,7 +582,7 @@
       "balanced_accuracy_seed_std": 0.0010920244312260761,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 135.6474190420122,
+      "median_seconds_per_seed": 135.6474190420122,
       "status": "COMMENSURABLE"
     },
     {
@@ -600,7 +600,7 @@
       "balanced_accuracy_seed_std": 0.0042723101529482796,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 94.57997558295028,
+      "median_seconds_per_seed": 94.57997558295028,
       "status": "COMMENSURABLE"
     },
     {
@@ -618,7 +618,7 @@
       "balanced_accuracy_seed_std": 0.003966962494371367,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 132.49197820801055,
+      "median_seconds_per_seed": 132.49197820801055,
       "status": "COMMENSURABLE"
     },
     {
@@ -636,7 +636,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "none",
-      "median_seconds_per_run": 0.0030635420116595924,
+      "median_seconds_per_seed": 0.0030635420116595924,
       "status": "COMMENSURABLE"
     },
     {
@@ -654,7 +654,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 kernel entries \u00d7 1,024 shots per outer fold; 17 qubits",
-      "median_seconds_per_run": 54.74830729200039,
+      "median_seconds_per_seed": 54.74830729200039,
       "status": "COMMENSURABLE"
     },
     {
@@ -672,7 +672,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 kernel entries \u00d7 1,024 shots per outer fold; 9 qubits",
-      "median_seconds_per_run": 54.38846187503077,
+      "median_seconds_per_seed": 54.38846187503077,
       "status": "COMMENSURABLE"
     },
     {
@@ -698,7 +698,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 56.004102665989194,
+      "median_seconds_per_seed": 56.004102665989194,
       "status": "COMMENSURABLE"
     },
     {
@@ -716,7 +716,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 63.399727791023906,
+      "median_seconds_per_seed": 63.399727791023906,
       "status": "COMMENSURABLE"
     },
     {
@@ -734,7 +734,7 @@
       "balanced_accuracy_seed_std": 0.006230261133406459,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 135.6474190420122,
+      "median_seconds_per_seed": 135.6474190420122,
       "status": "COMMENSURABLE"
     },
     {
@@ -752,7 +752,7 @@
       "balanced_accuracy_seed_std": 0.004414293351016929,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 94.57997558295028,
+      "median_seconds_per_seed": 94.57997558295028,
       "status": "COMMENSURABLE"
     },
     {
@@ -770,7 +770,7 @@
       "balanced_accuracy_seed_std": 0.0022821576075099928,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "4,318,200 closed-form kernel entries per outer fold",
-      "median_seconds_per_run": 132.49197820801055,
+      "median_seconds_per_seed": 132.49197820801055,
       "status": "COMMENSURABLE"
     },
     {
@@ -788,7 +788,7 @@
       "balanced_accuracy_seed_std": 0.0,
       "matching": "same samples, folds, preprocessing, C grid, inner CV",
       "resources": "none",
-      "median_seconds_per_run": 0.0030635420116595924,
+      "median_seconds_per_seed": 0.0030635420116595924,
       "status": "COMMENSURABLE"
     }
   ],

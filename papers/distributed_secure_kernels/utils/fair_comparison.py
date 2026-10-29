@@ -1,10 +1,10 @@
-"""Phase 5 fair comparison, generated from the sweeps' structured artifacts.
+"""Fair comparison, generated from the sweeps' structured artifacts.
 
 Reads ``summary.json`` and every run's ``metrics.json`` of:
 
 - ``table1_corrected`` (corrected protocol: quantum, exact, linear, majority),
-- ``fair_comparison`` (corrected protocol: tuned RBF / polynomial with the Phase 1
-  grids; MerLin adaptation on Wine and Parkinson's),
+- ``fair_comparison`` (corrected protocol: tuned RBF / polynomial with the grids
+  fixed before any run; MerLin adaptation on Wine and Parkinson's),
 - ``table1_original`` and ``merlin_original`` (paper protocol, for the
   paper-baseline comparison).
 
@@ -225,7 +225,9 @@ def build(paths: dict[str, Path]) -> dict:
                     "balanced_accuracy_seed_std": row["balanced_accuracy"]["seed_std"],
                     "matching": "same samples, folds, preprocessing, C grid, inner CV",
                     "resources": _resources(key, dataset),
-                    "median_seconds_per_run": _seconds(paths[sweep], candidate, method),
+                    "median_seconds_per_seed": _seconds(
+                        paths[sweep], candidate, method
+                    ),
                     "status": "COMMENSURABLE",
                 }
                 systems.append(entry)
@@ -311,7 +313,7 @@ def _markdown(report: dict) -> str:
         "Accuracy is the primary metric; balanced accuracy is needed for Framingham (majority rate 0.847). "
         "Quantum values come from an exact simulation, MerLin values from MerLin simulation; nothing ran on hardware.",
         "",
-        "| Dataset | Model | System | Role | Runs | Accuracy | Balanced accuracy | Resources per outer fold | Median s per run | Status |",
+        "| Dataset | Model | System | Role | Runs | Accuracy | Balanced accuracy | Resources per outer fold | Median s per seed | Status |",
         "|---|---|---|---|---:|---:|---:|---|---:|---|",
     ]
     for s in report["systems"]:
@@ -323,7 +325,7 @@ def _markdown(report: dict) -> str:
         lines.append(
             f"| {s['dataset']} | {s['model']} | {s['label']} | {s['role']} | {s['runs']} "
             f"| {s['accuracy']:.4f} ± {s['accuracy_seed_std']:.4f} | {s['balanced_accuracy']:.4f} ± {s['balanced_accuracy_seed_std']:.4f} "
-            f"| {s['resources']} | {s['median_seconds_per_run']:.1f} | {s['status']} |"
+            f"| {s['resources']} | {s['median_seconds_per_seed']:.1f} | {s['status']} |"
         )
     lines += [
         "",
@@ -338,7 +340,7 @@ def _markdown(report: dict) -> str:
         )
     lines += [
         "",
-        "Paper protocol (the paper's own comparison; protocol leaks, see LOG):",
+        "Paper protocol (the paper's own comparison, whose protocol leaks; see the README, 'Fair Baselines'):",
         "",
         "| Dataset | Model | Linear SVM | Distributed quantum | MerLin | Quantum − linear | 2 σ pooled | Verdict |",
         "|---|---|---:|---:|---:|---:|---:|---|",

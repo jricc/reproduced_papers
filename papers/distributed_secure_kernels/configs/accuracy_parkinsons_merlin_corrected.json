@@ -6,7 +6,7 @@
   "logging": {
     "level": "info"
   },
-  "description": "MerLin adaptation (not the paper's method), parkinsons: photonic swap test under the corrected protocol, for the Phase 5 comparison with the fair classical baseline.",
+  "description": "MerLin adaptation (not the paper's method), parkinsons: photonic swap test under the corrected protocol, for the fair comparison with the tuned classical baselines.",
   "experiment": {
     "id": "accuracy_parkinsons_merlin_corrected",
     "kind": "accuracy"

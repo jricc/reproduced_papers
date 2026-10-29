@@ -6,7 +6,7 @@
   "logging": {
     "level": "info"
   },
-  "description": "wine: corrected protocol, tuned classical RBF and polynomial SVMs (fair baselines).",
+  "description": "wine: corrected protocol, tuned classical RBF and polynomial SVMs on a first gamma grid, 10x off the planned one; the fair comparison uses accuracy_wine_fair_classical.json.",
   "experiment": {
     "id": "accuracy_wine_classical",
     "kind": "accuracy"

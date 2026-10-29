@@ -13,6 +13,7 @@ Usage::
 from __future__ import annotations
 
 import sys
+from importlib.metadata import version
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
@@ -48,7 +49,8 @@ def _swap_test_circuit(modes: int) -> pcvl.Circuit:
 def main() -> None:
     swap_test = PhotonicSwapTest(MODES)
     print(
-        f"MerLin {ml.__version__}, Perceval {pcvl.__version__}, {MODES} modes per register, 2 photons each"
+        # merlin.__version__ reports "0.4.1" in the 0.4.2 distribution, so read the installed version.
+        f"MerLin {version('merlinquantum')}, Perceval {pcvl.__version__}, {MODES} modes per register, 2 photons each"
     )
     print("indistinguishability | " + " | ".join(STATES))
     for value in INDISTINGUISHABILITY:

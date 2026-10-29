@@ -6,7 +6,7 @@
   "logging": {
     "level": "info"
   },
-  "description": "Phase 5 fair classical baseline, parkinsons: corrected protocol, tuned RBF and polynomial SVMs with the grids of the Phase 1 Fair Baseline Plan.",
+  "description": "Fair classical baseline, parkinsons: corrected protocol, tuned RBF and polynomial SVMs on the grids fixed before any run.",
   "experiment": {
     "id": "accuracy_parkinsons_fair_classical",
     "kind": "accuracy"

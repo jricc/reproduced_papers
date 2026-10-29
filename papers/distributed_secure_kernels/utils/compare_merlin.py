@@ -1,4 +1,4 @@
-"""Compare the MerLin adaptation with the Phase 3 gate-model distributed kernel (noiseless).
+"""Compare the MerLin adaptation with the gate-model distributed kernel (noiseless).
 
 Rule (frozen before the MerLin runs): the adaptation preserves the
 original behaviour when, for every setting, |delta| <= 2 sigma_pooled, with
@@ -117,7 +117,7 @@ def main(argv: list[str]) -> int:
     (results / "merlin_comparison.json").write_text(json.dumps(table, indent=2) + "\n")
     lines = [
         "Metric: stratified 5-fold CV accuracy, mean ± std over seeds 0-4, paper protocol, 1,024 shots unless stated. "
-        "Gate model: Phase 3 distributed quantum column (noiseless). MerLin: photonic swap test (adaptation). "
+        "Gate model: our distributed quantum column (noiseless). MerLin: photonic swap test (adaptation). "
         "Preserved: |difference| ≤ 2 σ_pooled.",
         "",
         "| Setting | Gate model | MerLin adaptation | Difference | 2 σ pooled | Preserved |",

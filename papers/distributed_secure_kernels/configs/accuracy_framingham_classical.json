@@ -6,7 +6,7 @@
   "logging": {
     "level": "info"
   },
-  "description": "framingham: corrected protocol, tuned classical RBF and polynomial SVMs (fair baselines).",
+  "description": "framingham: corrected protocol, tuned classical RBF and polynomial SVMs on a first gamma grid, 10x off the planned one; the fair comparison uses accuracy_framingham_fair_classical.json.",
   "experiment": {
     "id": "accuracy_framingham_classical",
     "kind": "accuracy"

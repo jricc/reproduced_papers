@@ -135,7 +135,7 @@ def main(sweep_dir: Path, variant_dir: Path | None = None) -> None:
         bbox_to_anchor=(0.5, -0.12),
     )
     title = (
-        "Noisy state preparation reproduces the authors' Parkinson's curve; their Framingham curve stays unexplained"
+        "Noisy state preparation brings the Parkinson's curve close to the authors'; their Framingham curve stays unexplained"
         if variant
         else "Noise lowers accuracy in both, but much less in our simulation than in the authors' logs"
     )
